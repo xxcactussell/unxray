@@ -82,6 +82,12 @@ Make sure to visit our [wiki](https://github.com/OpenXRay/xray-16/wiki):
 * [Build instructions for Windows](https://github.com/OpenXRay/xray-16/wiki/[EN]-How-to-build-and-setup-on-Windows).
 * [Build instructions for Linux and other platforms](https://github.com/OpenXRay/xray-16/wiki/%5BEN%5D-How-to-build-and-setup-on-Linux-and-MacOS).
 
+**Experimental Linux build using MSVC via msvc-wine:**
+You can also cross-compile the Windows binaries natively on Linux using `msvc-wine`. Make sure `msvc-wine` environment is set up and `nuget.exe` is available, then run the provided build script:
+```bash
+./build-msvc-wine.sh Release x64
+```
+
 The `dev` branch is the default and base branch for the project. It is used for development, and all pull requests should go there. But be aware that this branch sometimes may be broken, and we can only rarely do force pushes to this branch.
 
 The code base is based on X-Ray 1.6.02 that is used in S.T.A.L.K.E.R.: Call of Pripyat and it was greatly refactored.

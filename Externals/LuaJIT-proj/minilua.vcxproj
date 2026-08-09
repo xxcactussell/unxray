@@ -26,6 +26,18 @@
   <ImportGroup Label="Shared">
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;_CRT_STDIO_INLINE=__declspec(dllexport)__inline;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -37,10 +49,10 @@
     <PreBuildEvent>
       <Message>Cleaning up LuaJIT for sanity</Message>
       <Command>cd ..\LuaJIT\src
-del *.obj *.manifest minilua.exe buildvm.exe
-del host\buildvm_arch.h
-del lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h
-      </Command>
+del /f /q *.obj *.manifest minilua.exe buildvm.exe 2>nul
+del /f /q host\buildvm_arch.h 2>nul
+del /f /q lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h 2>nul
+exit /b 0</Command>
     </PreBuildEvent>
     <PostBuildEvent>
       <Message>Creating buildvm_arch.h for $(PlatformShortName)</Message>

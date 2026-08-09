@@ -1,7 +1,7 @@
 #include "stdafx.h"
 
 #include <thread>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 // Initialized on startup
 XRCORE_API Fmatrix Fidentity;
@@ -59,9 +59,9 @@ void _initialize_cpu()
     };
 
     // x86
-    listFeature("RDTSC",   SDL_HasRDTSC());
+    listFeature("RDTSC",   false);
     listFeature("MMX",     SDL_HasMMX());
-    listFeature("3DNow!",  SDL_Has3DNow());
+    listFeature("3DNow!",  false);
     listFeature("SSE",     SDL_HasSSE());
     listFeature("SSE2",    CPU::HasSSE2);
     listFeature("SSE3",    SDL_HasSSE3());

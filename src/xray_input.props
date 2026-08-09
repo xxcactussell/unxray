@@ -12,6 +12,7 @@
         $(xrExternals)luabind;
         $(xrExternals)imgui;
         $(xrExternals)tracy\public;
+        $(xrExternals)SDL3\include;
         %(AdditionalIncludeDirectories)
       </AdditionalIncludeDirectories>
     </ClCompile>
@@ -21,8 +22,10 @@
         $(xrLibDir);
         $(xrSdkDir)libraries;
         $(xrSdkDir)libraries/$(PlatformShortName);
+        $(xrExternals)SDL3\lib\$(PlatformShortName);
         %(AdditionalLibraryDirectories)
       </AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL3.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ImportLibrary>$(xrLibDir)$(TargetName).lib</ImportLibrary>
     </Link>
 
@@ -31,6 +34,7 @@
         $(xrLibDir);
         $(xrSdkDir)libraries;
         $(xrSdkDir)libraries/$(PlatformShortName);
+        $(xrExternals)SDL3\lib\$(PlatformShortName);
         %(AdditionalLibraryDirectories)
       </AdditionalLibraryDirectories>
       <OutputFile>$(xrLibDir)$(TargetName).lib</OutputFile>

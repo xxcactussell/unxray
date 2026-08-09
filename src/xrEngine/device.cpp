@@ -13,7 +13,7 @@
 
 #include "xrScriptEngine/script_space.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 ENGINE_API CRenderDevice Device;
 ENGINE_API CLoadScreenRenderer load_screen_renderer;
@@ -308,24 +308,23 @@ void CRenderDevice::ProcessEvent(const SDL_Event& event)
 
     switch (event.type)
     {
-    case SDL_DISPLAYEVENT:
+    case SDL_EVENT_DISPLAY_ORIENTATION:
+    case SDL_EVENT_DISPLAY_ADDED:
+    case SDL_EVENT_DISPLAY_REMOVED:
     {
-        switch (event.display.type)
-        {
-        case SDL_DISPLAYEVENT_ORIENTATION:
-        case SDL_DISPLAYEVENT_CONNECTED:
-        case SDL_DISPLAYEVENT_DISCONNECTED:
-            CleanupVideoModes();
-            FillVideoModes();
-            if (event.display.display == psDeviceMode.Monitor && event.display.type != SDL_DISPLAYEVENT_CONNECTED)
-                Reset();
-            else
-                UpdateWindowProps();
-            break;
-        } // switch (event.display.type)
+        CleanupVideoModes();
+        FillVideoModes();
+        if (event.display.displayID == psDeviceMode.Monitor && event.type != SDL_EVENT_DISPLAY_ADDED)
+            Reset();
+        else
+            UpdateWindowProps();
         break;
     }
-    case SDL_WINDOWEVENT:
+    case SDL_EVENT_WINDOW_MOVED:
+    case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+    case SDL_EVENT_WINDOW_RESIZED:
+    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
     {
         const auto window = SDL_GetWindowFromID(event.window.windowID);
         if (!window)
@@ -334,9 +333,9 @@ void CRenderDevice::ProcessEvent(const SDL_Event& event)
         if (!viewport)
             break;
 
-        switch (event.window.event)
+        switch (event.type)
         {
-        case SDL_WINDOWEVENT_MOVED:
+        case SDL_EVENT_WINDOW_MOVED:
         {
             if (window == m_sdlWnd)
             {
@@ -347,16 +346,16 @@ void CRenderDevice::ProcessEvent(const SDL_Event& event)
             break;
         }
 
-        case SDL_WINDOWEVENT_DISPLAY_CHANGED:
+        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
             psDeviceMode.Monitor = event.window.data1;
             break;
 
-        case SDL_WINDOWEVENT_RESIZED:
+        case SDL_EVENT_WINDOW_RESIZED:
             if (window == m_sdlWnd)
                 UpdateWindowRects();
             break;
 
-        case SDL_WINDOWEVENT_SIZE_CHANGED:
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
         {
             if (window == m_sdlWnd)
             {
@@ -377,7 +376,7 @@ void CRenderDevice::ProcessEvent(const SDL_Event& event)
             break;
         }
 
-        case SDL_WINDOWEVENT_CLOSE:
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
         {
             if (viewport)
                 viewport->PlatformRequestClose = true;
@@ -389,7 +388,8 @@ void CRenderDevice::ProcessEvent(const SDL_Event& event)
             }
             break;
         }
-        } // switch (event.window.event)
+        } // switch (event.type)
+        break;
     }
     } // switch (event.type)
 

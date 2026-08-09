@@ -3,7 +3,7 @@
 #if defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_BSD)
 #include <dlfcn.h>
 #else
-#include <SDL_loadso.h>
+#include <SDL3/SDL.h>
 #endif
 
 #include "ModuleLookup.hpp"
@@ -74,7 +74,7 @@ void ModuleHandle::Close()
 #if defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_BSD)
     dlclose(handle);
 #else
-    SDL_UnloadObject(handle);
+    SDL_UnloadObject((SDL_SharedObject*)handle);
 #endif
     handle = nullptr;
 }
@@ -97,7 +97,7 @@ void* ModuleHandle::GetProcAddress(pcstr procName) const
     if (!proc)
         error = dlerror();
 #else
-    const auto proc = SDL_LoadFunction(handle, procName);
+    const auto proc = (void*)SDL_LoadFunction((SDL_SharedObject*)handle, procName);
     if (!proc)
         error = SDL_GetError();
 #endif

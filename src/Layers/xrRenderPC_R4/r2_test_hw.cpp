@@ -10,7 +10,7 @@ class DX11TestHelper
 public:
     DX11TestHelper()
     {
-        m_window = SDL_CreateWindow("TestDX11Window", 0, 0, 1, 1, SDL_WINDOW_HIDDEN);
+        m_window = SDL_CreateWindow("TestDX11Window", 1, 1, SDL_WINDOW_HIDDEN);
         if (!m_window)
         {
             Log("~ Cannot create helper window for DirectX 11 test:", SDL_GetError());

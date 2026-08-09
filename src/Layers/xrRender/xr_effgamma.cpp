@@ -84,6 +84,6 @@ void CGammaControl::Update() const
 #endif
     u16 red[256], green[256], blue[256];
     GenLUT(red, green, blue, 256);
-    SDL_SetWindowGammaRamp(Device.m_sdlWnd, red, green, blue);
+    // SDL_SetWindowGammaRamp(Device.m_sdlWnd, red, green, blue); // Not supported in SDL3
 }
 } // namespace xray::render::RENDER_NAMESPACE

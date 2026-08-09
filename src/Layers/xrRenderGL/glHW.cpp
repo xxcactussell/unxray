@@ -25,7 +25,7 @@ void UpdateVSync()
     if (psDeviceFlags.test(rsVSync))
     {
         // Try adaptive vsync first
-        if (SDL_GL_SetSwapInterval(-1) == -1)
+        if (!SDL_GL_SetSwapInterval(-1))
             SDL_GL_SetSwapInterval(1);
     }
     else
@@ -81,11 +81,13 @@ void CHW::CreateDevice(SDL_Window* hWnd)
     R_ASSERT(m_window);
 
     // Choose the closest pixel format
+    const SDL_DisplayMode *mode_ptr = SDL_GetWindowFullscreenMode(m_window);
     SDL_DisplayMode mode;
-    SDL_GetWindowDisplayMode(m_window, &mode);
+    if (mode_ptr) mode = *mode_ptr;
+    else SDL_zerop(&mode);
     mode.format = SDL_PIXELFORMAT_RGBA8888;
     // Apply the pixel format to the device context
-    SDL_SetWindowDisplayMode(m_window, &mode);
+    SDL_SetWindowFullscreenMode(m_window, &mode);
 
     Caps.fTarget = D3DFMT_A8R8G8B8;
     Caps.fDepth = D3DFMT_D24S8;
@@ -158,7 +160,7 @@ void CHW::DestroyDevice()
     if (context == m_context)
         SDL_GL_MakeCurrent(nullptr, nullptr);
 
-    SDL_GL_DeleteContext(m_context);
+    SDL_GL_DestroyContext(m_context);
     m_context = nullptr;
 }
 

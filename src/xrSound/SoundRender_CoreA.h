@@ -72,3 +72,8 @@ public:
     void set_master_volume(float f) override;
 
 };
+
+extern LPALGENFILTERS alGenFilters_ext;
+extern LPALDELETEFILTERS alDeleteFilters_ext;
+extern LPALFILTERI alFilteri_ext;
+extern LPALFILTERF alFilterf_ext;

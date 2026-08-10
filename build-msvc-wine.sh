@@ -99,6 +99,11 @@ if [[ ${EXIT_CODE} -eq 0 ]]; then
     echo "  - Копируем исполняемые файлы..."
     rsync -a --exclude="*.pdb" "bin/${PLATFORM}/${CONFIGURATION}/" "${TARGET_DIR}/bin/"
     
+    echo "  - Подменяем старый OpenAL32.dll на OpenAL Soft (soft_oal.dll)..."
+    if [[ -f "${TARGET_DIR}/bin/soft_oal.dll" ]]; then
+        mv -f "${TARGET_DIR}/bin/soft_oal.dll" "${TARGET_DIR}/bin/OpenAL32.dll"
+    fi
+    
     echo "  - Копируем внешние зависимости (SDL3)..."
     cp "Externals/SDL3/lib/${PLATFORM}/SDL3.dll" "${TARGET_DIR}/bin/" 2>/dev/null || true
     

@@ -20,6 +20,14 @@ bool CSoundRender_TargetA::_initialize()
         A_CHK(alSourcef(pSource, AL_MAX_GAIN, 1.f));
         A_CHK(alSourcef(pSource, AL_GAIN, cache_gain));
         A_CHK(alSourcef(pSource, AL_PITCH, cache_pitch));
+
+        if (alGenFilters_ext && alFilteri_ext)
+        {
+            alGenFilters_ext(1, &alFilter);
+            alFilteri_ext(alFilter, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
+            A_CHK(alSourcei(pSource, AL_DIRECT_FILTER, alFilter));
+        }
+
         return true;
     }
     Msg("! sound: OpenAL: Can't create source. Error: %s.", static_cast<pcstr>(alGetString(error)));
@@ -31,6 +39,11 @@ void CSoundRender_TargetA::_destroy()
     // clean up target
     if (alIsSource(pSource))
         alDeleteSources(1, &pSource);
+    if (alFilter && alDeleteFilters_ext)
+    {
+        alDeleteFilters_ext(1, &alFilter);
+        alFilter = 0;
+    }
     A_CHK(alDeleteBuffers(sdef_target_count_submit, pBuffers));
 }
 
@@ -161,6 +174,15 @@ void CSoundRender_TargetA::fill_parameters()
     {
         cache_gain = _gain;
         A_CHK(alSourcef(pSource, AL_GAIN, _gain));
+    }
+
+    if (alFilter && alFilterf_ext && psSoundFlags.test(ss_EFX))
+    {
+        float hf_gain = m_pEmitter->occluder_volume;
+        clamp(hf_gain, 0.0f, 1.0f);
+        alFilterf_ext(alFilter, AL_LOWPASS_GAINHF, hf_gain);
+        alFilterf_ext(alFilter, AL_LOWPASS_GAIN, 1.0f);
+        A_CHK(alSourcei(pSource, AL_DIRECT_FILTER, alFilter));
     }
 
     float _pitch = src.freq;

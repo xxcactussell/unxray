@@ -9,6 +9,7 @@ class CSoundRender_TargetA : public CSoundRender_Target
 
     // OpenAL
     ALuint pSource{};
+    ALuint alFilter{};
     ALuint pBuffers[sdef_target_count_submit]{};
     ALuint dataFormat;
     ALsizei sampleRate;

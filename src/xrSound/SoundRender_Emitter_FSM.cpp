@@ -68,7 +68,7 @@ void CSoundRender_Emitter::update(float fTime, float dt)
         occluder_volume = scene->get_occlusion(p_source.position, .2f, occluder);
         smooth_volume = p_source.base_volume * p_source.volume *
             (owner_data->s_type == st_Effect ? psSoundVEffects * psSoundVFactor : psSoundVMusic) *
-            (b2D ? 1.f : occluder_volume);
+            (b2D ? 1.f : (psSoundFlags.test(ss_EFX) ? (0.5f + 0.5f * occluder_volume) : occluder_volume));
         e_current = e_target = *(CSoundRender_Environment*)scene->get_environment(p_source.position);
         if (update_culling(dt))
         {
@@ -97,7 +97,7 @@ void CSoundRender_Emitter::update(float fTime, float dt)
         occluder_volume = scene->get_occlusion(p_source.position, .2f, occluder);
         smooth_volume = p_source.base_volume * p_source.volume *
             (owner_data->s_type == st_Effect ? psSoundVEffects * psSoundVFactor : psSoundVMusic) *
-            (b2D ? 1.f : occluder_volume);
+            (b2D ? 1.f : (psSoundFlags.test(ss_EFX) ? (0.5f + 0.5f * occluder_volume) : occluder_volume));
         e_current = e_target = *(CSoundRender_Environment*)scene->get_environment(p_source.position);
         if (update_culling(dt))
         {
@@ -338,10 +338,11 @@ bool CSoundRender_Emitter::update_culling(float dt)
     }
     clamp(fade_volume, 0.f, 1.f);
     // Update smoothing
+    float cur_occ_vol = psSoundFlags.test(ss_EFX) ? (0.5f + 0.5f * occluder_volume) : occluder_volume;
     smooth_volume = .9f * smooth_volume +
         .1f * (p_source.base_volume * p_source.volume *
                   (owner_data->s_type == st_Effect ? psSoundVEffects * psSoundVFactor : psSoundVMusic) *
-                  occluder_volume * fade_volume);
+                  cur_occ_vol * fade_volume);
     if (smooth_volume < psSoundCull)
         return FALSE; // allow volume to go up
     // Here we has enought "PRIORITY" to be soundable

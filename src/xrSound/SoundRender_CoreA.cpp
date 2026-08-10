@@ -6,6 +6,11 @@
 #include "OpenALDeviceList.h"
 #include "SoundRender_EffectsA_EAX.h"
 
+LPALGENFILTERS alGenFilters_ext = nullptr;
+LPALDELETEFILTERS alDeleteFilters_ext = nullptr;
+LPALFILTERI alFilteri_ext = nullptr;
+LPALFILTERF alFilterf_ext = nullptr;
+
 CSoundRender_CoreA::CSoundRender_CoreA(CSoundManager& p)
     : CSoundRender_Core(p)
 {
@@ -91,6 +96,13 @@ void CSoundRender_CoreA::_initialize()
 
     supports_float_pcm &= psSoundFlags.test(ss_UseFloat32);
 
+    ALCint hrtf_state = 0;
+    alcGetIntegerv(pDevice, ALC_HRTF_SOFT, 1, &hrtf_state);
+    if (hrtf_state)
+        Log("* SOUND: OpenAL Soft HRTF: enabled");
+    else
+        Log("* SOUND: OpenAL Soft HRTF: disabled");
+
 #if defined(XR_HAS_EAX)
     // Check for EAX extension
     if (deviceDesc.props.eax && !m_effects)
@@ -103,6 +115,17 @@ void CSoundRender_CoreA::_initialize()
         }
     }
 #endif
+
+    if (deviceDesc.props.efx)
+    {
+        alGenFilters_ext = (LPALGENFILTERS)alGetProcAddress("alGenFilters");
+        alDeleteFilters_ext = (LPALDELETEFILTERS)alGetProcAddress("alDeleteFilters");
+        alFilteri_ext = (LPALFILTERI)alGetProcAddress("alFilteri");
+        alFilterf_ext = (LPALFILTERF)alGetProcAddress("alFilterf");
+        if (!alGenFilters_ext || !alDeleteFilters_ext || !alFilteri_ext || !alFilterf_ext)
+            Log("! SOUND: OpenAL: Failed to load EFX filter functions, despite EFX being supported!");
+    }
+
     inherited::_initialize();
 
     // Pre-create targets

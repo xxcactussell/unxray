@@ -151,6 +151,11 @@ target_precompile_headers(xrSound
     stdafx.h
 )
 
+target_include_directories(xrSound
+    PRIVATE
+    "${CMAKE_SOURCE_DIR}/sdk/include"
+)
+
 if (BUILD_SHARED_LIBS)
     install(TARGETS xrSound LIBRARY
         DESTINATION "${CMAKE_INSTALL_LIBDIR}"

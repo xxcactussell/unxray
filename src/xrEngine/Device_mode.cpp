@@ -52,6 +52,12 @@ void CRenderDevice::FillVideoModes()
 {
     ZoneScoped;
 
+    // In SDL3, 0 is an invalid display ID. If user.ltx didn't set a valid monitor, default to primary.
+    if (psDeviceMode.Monitor == 0)
+    {
+        psDeviceMode.Monitor = (int)SDL_GetPrimaryDisplay();
+    }
+
     int displayCount = 0;
     if (SDL_DisplayID* displays = SDL_GetDisplays(&displayCount))
     {

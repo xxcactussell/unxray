@@ -579,7 +579,6 @@
     <ClCompile Include="..\xrRender\r__sync_point.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="r2_test_hw.cpp">
       <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\xrRender_R2\r2_R_lights.cpp">

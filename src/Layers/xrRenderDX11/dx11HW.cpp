@@ -34,7 +34,6 @@ void CHW::OnAppActivate()
     if (m_pSwapChain && !m_ChainDesc.Windowed)
     {
         ShowWindow(m_ChainDesc.OutputWindow, SW_RESTORE);
-        m_pSwapChain->SetFullscreenState(ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle == rsFullscreen : false, NULL);
     }
 }
 
@@ -42,7 +41,6 @@ void CHW::OnAppDeactivate()
 {
     if (m_pSwapChain && !m_ChainDesc.Windowed)
     {
-        m_pSwapChain->SetFullscreenState(FALSE, NULL);
         if (psDeviceMode.WindowStyle == rsFullscreen || psDeviceMode.WindowStyle == rsFullscreenBorderless)
             ShowWindow(m_ChainDesc.OutputWindow, SW_MINIMIZE);
     }
@@ -209,13 +207,9 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
     if (FAILED(R))
     {
         Valid = false;
-        if (!ThisInstanceIsGlobal())
-            return;
-        // Fatal error! Cannot create rendering device AT STARTUP !!!
         Msg("Failed to initialize graphics hardware.\n"
-            "Please try to restart the game.\n"
             "CreateDevice returned 0x%08x", R);
-        xrDebug::DoExit("Failed to initialize graphics hardware.\nPlease try to restart the game.");
+        return;
     }
 
     _SHOW_REF("* CREATE: DeviceREF:", pDevice);
@@ -252,7 +246,10 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
     if (!CreateSwapChain2(hwnd))
     {
         if (!CreateSwapChain(hwnd))
+        {
+            Log("! CreateSwapChain failed");
             Valid = false;
+        }
     }
 
     // Select depth-stencil format
@@ -264,13 +261,9 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
     const DXGI_FORMAT selectedFormat = SelectFormat(D3D_FORMAT_SUPPORT_DEPTH_STENCIL, formats);
     if (selectedFormat == DXGI_FORMAT_UNKNOWN)
     {
+        Log("! Failed to select depth-stencil format");
         Valid = false;
-        if (!ThisInstanceIsGlobal())
-            return;
-        Log("Failed to initialize graphics hardware: "
-            "failed to select depth-stencil format.\n"
-            "Please try to restart the game.");
-        xrDebug::DoExit("Failed to initialize graphics hardware.\nPlease try to restart the game.");
+        return;
     }
     Caps.fDepth = dx11TextureUtils::ConvertTextureFormat(selectedFormat);
 
@@ -286,9 +279,16 @@ bool CHW::CreateSwapChain(HWND hwnd)
     DXGI_SWAP_CHAIN_DESC& sd = m_ChainDesc;
     ZeroMemory(&sd, sizeof(sd));
 
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    if (w <= 0) w = 640;
+    if (h <= 0) h = 480;
+
     // Back buffer
-    sd.BufferDesc.Width = Device.dwWidth;
-    sd.BufferDesc.Height = Device.dwHeight;
+    sd.BufferDesc.Width = Device.dwWidth ? Device.dwWidth : w;
+    sd.BufferDesc.Height = Device.dwHeight ? Device.dwHeight : h;
 
     //  TODO: DX11: implement dynamic format selection
     constexpr DXGI_FORMAT formats[] =
@@ -300,6 +300,11 @@ bool CHW::CreateSwapChain(HWND hwnd)
 
     // Select back-buffer format
     sd.BufferDesc.Format = SelectFormat(D3D_FORMAT_SUPPORT_DISPLAY, formats);
+    if (sd.BufferDesc.Format == DXGI_FORMAT_UNKNOWN)
+    {
+        Log("! SelectFormat failed to find a display format, falling back to DXGI_FORMAT_R8G8B8A8_UNORM");
+        sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    }
     Caps.fTarget = dx11TextureUtils::ConvertTextureFormat(sd.BufferDesc.Format);
 
     // Buffering
@@ -322,12 +327,23 @@ bool CHW::CreateSwapChain(HWND hwnd)
 
     sd.OutputWindow = hwnd;
 
-    sd.Windowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
+    sd.Windowed = true; // Let SDL handle fullscreen
 
     //  Additional set up
-    sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+    // Note: DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH is intentionally omitted.
+    // That flag lets DXGI intercept Alt+Enter and manage display mode switching,
+    // which conflicts with SDL3's fullscreen management on DXVK/Wayland.
+    sd.Flags = 0;
 
     const auto hr = m_pFactory->CreateSwapChain(pDevice, &sd, &m_pSwapChain);
+    if (FAILED(hr))
+    {
+        Msg("! CreateSwapChain HRESULT: 0x%08X", hr);
+        Msg("! sd.BufferDesc.Width = %d, Height = %d, Format = %d", sd.BufferDesc.Width, sd.BufferDesc.Height, sd.BufferDesc.Format);
+        Msg("! sd.SampleDesc.Count = %d, Quality = %d", sd.SampleDesc.Count, sd.SampleDesc.Quality);
+        Msg("! sd.BufferUsage = %d, BufferCount = %d", sd.BufferUsage, sd.BufferCount);
+        Msg("! sd.OutputWindow = %p, Windowed = %d, SwapEffect = %d, Flags = %d", sd.OutputWindow, sd.Windowed, sd.SwapEffect, sd.Flags);
+    }
     return SUCCEEDED(hr);
 }
 
@@ -347,9 +363,16 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     // Set up the presentation parameters
     DXGI_SWAP_CHAIN_DESC1 desc{};
 
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    if (w <= 0) w = 640;
+    if (h <= 0) h = 480;
+
     // Back buffer
-    desc.Width = Device.dwWidth;
-    desc.Height = Device.dwHeight;
+    desc.Width = Device.dwWidth ? Device.dwWidth : w;
+    desc.Height = Device.dwHeight ? Device.dwHeight : h;
 
     constexpr DXGI_FORMAT formats[] =
     {
@@ -360,6 +383,11 @@ bool CHW::CreateSwapChain2(HWND hwnd)
 
     // Select back-buffer format
     desc.Format = SelectFormat(D3D11_FORMAT_SUPPORT_DISPLAY, formats);
+    if (desc.Format == DXGI_FORMAT_UNKNOWN)
+    {
+        Log("! SelectFormat failed to find a display format, falling back to DXGI_FORMAT_R8G8B8A8_UNORM");
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    }
     Caps.fTarget = dx11TextureUtils::ConvertTextureFormat(desc.Format);
 
     // Buffering
@@ -377,10 +405,12 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     desc.Scaling = DXGI_SCALING_STRETCH;
 
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fulldesc{};
-    fulldesc.Windowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
+    fulldesc.Windowed = true; // Let SDL handle fullscreen
 
     // Additional setup
-    desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+    // Note: DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH is intentionally omitted.
+    // Fullscreen is managed by SDL3, not DXGI.
+    desc.Flags = 0;
 
     IDXGISwapChain1* swapchain{};
     const HRESULT result = pFactory2->CreateSwapChainForHwnd(pDevice, hwnd, &desc,
@@ -426,7 +456,9 @@ void CHW::DestroyDevice()
     }
     //  Must switch to windowed mode to release swap chain
     if (!m_ChainDesc.Windowed && m_pSwapChain)
-        m_pSwapChain->SetFullscreenState(FALSE, NULL);
+    {
+        // Removed SetFullscreenState(FALSE, NULL)
+    }
 #ifdef HAS_DX11_2
     _RELEASE(m_pSwapChain2);
 #endif
@@ -458,16 +490,42 @@ void CHW::Reset()
 {
     ZoneScoped;
     DXGI_SWAP_CHAIN_DESC& cd = m_ChainDesc;
-    const bool bWindowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
+    const bool bWindowed = true; // Let SDL handle fullscreen
     cd.Windowed = bWindowed;
-    m_pSwapChain->SetFullscreenState(!bWindowed, NULL);
+    // m_pSwapChain->SetFullscreenState(!bWindowed, NULL); // Removed to prevent DXVK Wayland deadlocks
     DXGI_MODE_DESC& desc = m_ChainDesc.BufferDesc;
     desc.Width = Device.dwWidth;
     desc.Height = Device.dwHeight;
 
-    CHK_DX(m_pSwapChain->ResizeTarget(&desc));
-    CHK_DX(m_pSwapChain->ResizeBuffers(
-        cd.BufferCount, desc.Width, desc.Height, desc.Format, cd.Flags));
+    for (int i = 0; i < R__NUM_CONTEXTS; ++i)
+    {
+        if (d3d_contexts_pool[i])
+        {
+            d3d_contexts_pool[i]->ClearState();
+            d3d_contexts_pool[i]->Flush();
+        }
+    }
+
+    // NOTE: ResizeTarget is intentionally omitted here.
+    // On DXVK/Wayland it attempts to change the DXGI output's display mode,
+    // which deadlocks with the compositor's surface resize protocol.
+    // SDL already manages the window geometry, so we only need ResizeBuffers
+    // to re-create the swap chain backbuffers at the new size.
+    HRESULT hrResize = m_pSwapChain->ResizeBuffers(
+        cd.BufferCount, desc.Width, desc.Height, desc.Format, cd.Flags);
+    if (FAILED(hrResize))
+    {
+        string128 buf;
+        sprintf(buf, "! ResizeBuffers failed with HRESULT: 0x%08X", hrResize);
+        Log(buf);
+        sprintf(buf, "! desc.Width = %d, desc.Height = %d, desc.Format = %d, cd.Flags = %d", desc.Width, desc.Height, desc.Format, cd.Flags);
+        Log(buf);
+        FlushLog();
+        // Skip CHK_DX to prevent crash, let it try to survive
+    }
+
+    // Update cached chain description after resize
+    m_pSwapChain->GetDesc(&m_ChainDesc);
 }
 
 void CHW::SetPrimaryAttributes(u32& /*windowFlags*/)

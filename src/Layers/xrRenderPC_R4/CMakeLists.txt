@@ -2,7 +2,7 @@ add_library(xrRenderPC_R4)
 
 target_sources(xrRenderPC_R4 PRIVATE
     packages.config
-    r2_test_hw.cpp
+    
     r4_rendertarget.h
     r4_rendertarget_accum_direct.cpp
     r4_rendertarget_build_textures.cpp

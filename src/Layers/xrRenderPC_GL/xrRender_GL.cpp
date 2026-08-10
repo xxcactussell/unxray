@@ -20,21 +20,11 @@ class RGLRendererModule final : public RendererModule
     xr_vector<std::pair<pcstr, int>> modes;
 
 public:
-    bool CheckCanAddMode() const
-    {
-        // don't duplicate
-        if (!modes.empty())
-        {
-            return false;
-        }
-        return xrRender_test_hw();
-    }
-
     const xr_vector<std::pair<pcstr, int>>& ObtainSupportedModes() override
     {
         ZoneScoped;
 
-        if (CheckCanAddMode())
+        if (modes.empty())
         {
 #ifdef XR_PLATFORM_WINDOWS
             modes.emplace_back(RENDERER_RGL_MODE, 6);

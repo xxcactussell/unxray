@@ -47,6 +47,7 @@ public:
     static constexpr auto IMM_CTX_ID = 0;
 
     CHWCaps Caps;
+    bool Valid = false;
 
     u32 BackBufferCount{};
     u32 CurrentBackBuffer{};

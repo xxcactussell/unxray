@@ -190,7 +190,7 @@ public:
 
 public:
     // Creation & Destroying
-    void Create();
+    bool Create();
     void Destroy();
 
     void Reset(bool precache = true);

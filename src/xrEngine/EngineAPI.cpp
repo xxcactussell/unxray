@@ -115,12 +115,22 @@ void CEngineAPI::Destroy()
     if (gameModule)
         gameModule->finalize();
 
+    if (selectedRenderer)
+        selectedRenderer->ClearEnv();
+
     selectedRenderer = nullptr;
 
     pCreate = nullptr;
     pDestroy = nullptr;
 
     XRC.r_clear_compact();
+}
+
+void CEngineAPI::MarkRendererFailed(pcstr mode)
+{
+    auto it = renderModes.find(mode);
+    if (it != renderModes.end())
+        renderModes.erase(it);
 }
 
 void CEngineAPI::CreateRendererList(const std::array<RendererModule*, 2>& modules)

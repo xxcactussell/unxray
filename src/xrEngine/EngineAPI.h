@@ -79,8 +79,9 @@ public:
 
     // Call it in the main thread
     void CreateRendererList(const std::array<RendererModule*, 2>& modules);
-    void Initialize(GameModule* game);
+    void Initialize(GameModule* game = nullptr);
     void Destroy();
+    void MarkRendererFailed(pcstr mode);
 };
 
 ENGINE_API bool is_enough_address_space_available();

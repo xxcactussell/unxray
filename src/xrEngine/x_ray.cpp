@@ -268,12 +268,59 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
     TaskScheduler->Wait(inputTask);
     InitConsole();
 
-    Engine.Initialize(game, modules);
-    Device.Initialize();
+    Engine.External.CreateRendererList(modules);
+
+    extern xr_vector<xr_token> VidQualityToken;
+    bool renderer_started = false;
+    while (!renderer_started && VidQualityToken.size() > 1)
+    {
+        Engine.Initialize(game, modules);
+        Device.Initialize();
+        
+        execUserScript();
+        
+        if (Device.Create())
+        {
+            renderer_started = true;
+        }
+        else
+        {
+            pcstr failed_mode = Console->GetString("renderer");
+            Msg("! Renderer [%s] failed to initialize. Falling back...", failed_mode);
+            FlushLog();
+            
+            if (Device.m_sdlWnd)
+            {
+                SDL_DestroyWindow(Device.m_sdlWnd);
+                Device.m_sdlWnd = nullptr;
+            }
+            
+            Engine.Destroy();
+            Engine.External.MarkRendererFailed(failed_mode);
+            
+            auto it = std::remove_if(VidQualityToken.begin(), VidQualityToken.end(),
+                [failed_mode](const auto& mode) {
+                    return mode.name && xr_strcmp(mode.name, failed_mode) == 0;
+                });
+            VidQualityToken.erase(it, VidQualityToken.end());
+            
+            if (VidQualityToken.size() > 1 && VidQualityToken[0].name)
+            {
+                string64 buf;
+                xr_sprintf(buf, "renderer %s", VidQualityToken[0].name);
+                Console->Execute(buf);
+            }
+        }
+    }
+
+    if (!renderer_started)
+    {
+        FlushLog();
+        xrDebug::DoExit("Failed to initialize graphics hardware.\nPlease try to restart the game.");
+    }
 
     Console->OnDeviceInitialize();
 
-    execUserScript();
     InitializeDiscord();
 
     TaskScheduler->Wait(createSoundDevicesList);
@@ -292,8 +339,6 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
     {
         LALib.OnCreate();
     });
-
-    Device.Create();
     TaskScheduler->Wait(createLightAnim);
 
     if (game)

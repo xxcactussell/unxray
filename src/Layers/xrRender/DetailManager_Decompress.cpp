@@ -171,8 +171,13 @@ void CDetailManager::cache_Decompress(Slot* S)
 #else
             u32 index = selected[0];
 #endif
-
-            CDetail* Dobj = objects[DS.r_id(index)];
+            u32 obj_id = DS.r_id(index);
+            if (obj_id >= objects.size())
+            {
+                Msg("! WARNING: Invalid detail object ID %d, skipping...", obj_id);
+                continue;
+            }
+            CDetail* Dobj = objects[obj_id];
             SlotItem* ItemP = poolSI.create();
             SlotItem& Item = *ItemP;
 

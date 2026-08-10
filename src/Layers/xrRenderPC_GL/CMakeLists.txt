@@ -8,7 +8,7 @@ target_sources(xrRender_GL PRIVATE
     gl_rendertarget_phase_flip.cpp
     gl_rendertarget_u_set_rt.cpp
     r2_R_sun.cpp
-    r2_test_hw.cpp
+    
     rgl_shaders.cpp
     stdafx.cpp
     stdafx.h

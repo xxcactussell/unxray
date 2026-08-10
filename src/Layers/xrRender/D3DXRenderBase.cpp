@@ -163,7 +163,7 @@ void D3DXRenderBase::OnDeviceCreate(const char* shName)
     }
 }
 
-void D3DXRenderBase::Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float& fWidth_2, float& fHeight_2)
+bool D3DXRenderBase::Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float& fWidth_2, float& fHeight_2)
 {
     ZoneScoped;
 
@@ -208,11 +208,15 @@ void D3DXRenderBase::Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float
 
     HW.CreateDevice(hWnd);
 
+    if (!HW.Valid)
+        return false;
+
     std::tie(dwWidth, dwHeight) = HW.GetSurfaceSize();
 
     fWidth_2 = float(dwWidth / 2);
     fHeight_2 = float(dwHeight / 2);
     Resources = xr_new<CResourceManager>();
+    return true;
 }
 
 void D3DXRenderBase::overdrawBegin()

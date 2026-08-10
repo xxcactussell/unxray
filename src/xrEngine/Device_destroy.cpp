@@ -41,6 +41,10 @@ void CRenderDevice::Reset(bool precache /*= true*/)
     m_imgui_render->OnDeviceResetBegin();
 
     UpdateWindowProps();
+
+    fWidth_2 = float(dwWidth / 2);
+    fHeight_2 = float(dwHeight / 2);
+
     GEnv.Render->Reset(m_sdlWnd, dwWidth, dwHeight, fWidth_2, fHeight_2);
 
     m_imgui_render->OnDeviceResetEnd();

@@ -90,7 +90,29 @@ ELAPSED=$(( END_TIME - START_TIME ))
 echo ""
 if [[ ${EXIT_CODE} -eq 0 ]]; then
     echo "✅ Сборка завершена успешно за ${ELAPSED}с"
-    echo "   Артефакты: bin/${PLATFORM}/${CONFIGURATION}/"
+    
+    TARGET_DIR="build/${CONFIGURATION}/${PLATFORM}"
+    echo "[INFO] Формируем релизную папку: ${TARGET_DIR}"
+    
+    mkdir -p "${TARGET_DIR}/bin"
+    
+    echo "  - Копируем исполняемые файлы..."
+    rsync -a --exclude="*.pdb" "bin/${PLATFORM}/${CONFIGURATION}/" "${TARGET_DIR}/bin/"
+    
+    echo "  - Копируем внешние зависимости (SDL3)..."
+    cp "Externals/SDL3/lib/${PLATFORM}/SDL3.dll" "${TARGET_DIR}/bin/" 2>/dev/null || true
+    
+    if [[ -d "res/gamedata" ]]; then
+        echo "  - Копируем gamedata..."
+        rsync -a "res/gamedata" "${TARGET_DIR}/"
+    fi
+    
+    if [[ -f "res/fsgame.ltx" ]]; then
+        echo "  - Копируем fsgame.ltx..."
+        cp "res/fsgame.ltx" "${TARGET_DIR}/"
+    fi
+    
+    echo "   Артефакты готовы в: ${TARGET_DIR}/"
 else
     echo "❌ Сборка завершилась с ошибкой (код ${EXIT_CODE})"
 fi

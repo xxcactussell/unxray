@@ -16,10 +16,10 @@ void CRenderDevice::SetupStates()
     GEnv.Render->SetupStates();
 }
 
-void CRenderDevice::Create()
+bool CRenderDevice::Create()
 {
     if (b_is_Ready)
-        return; // prevent double call
+        return true; // prevent double call
 
     ZoneScoped;
 
@@ -36,7 +36,11 @@ void CRenderDevice::Create()
         psDeviceMode.WindowStyle = rsWindowed;
 
     UpdateWindowProps();
-    GEnv.Render->Create(m_sdlWnd, dwWidth, dwHeight, fWidth_2, fHeight_2);
+    if (!GEnv.Render->Create(m_sdlWnd, dwWidth, dwHeight, fWidth_2, fHeight_2))
+    {
+        xr_delete(Statistic);
+        return false;
+    }
 
     Memory.mem_compact();
     b_is_Ready = true;
@@ -49,4 +53,5 @@ void CRenderDevice::Create()
     m_imgui_render->OnDeviceCreate(GetImGuiContext());
     Statistic->OnDeviceCreate();
     dwFrame = 0;
+    return true;
 }

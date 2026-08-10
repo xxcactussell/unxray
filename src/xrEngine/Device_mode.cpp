@@ -144,21 +144,32 @@ void CRenderDevice::UpdateWindowProps()
 
         SDL_SetWindowBordered(m_sdlWnd, drawBorders);
         SDL_SetWindowResizable(m_sdlWnd, !useDesktopFullscreen);
+
+        if (useDesktopFullscreen)
+            SDL_SetWindowFullscreenMode(m_sdlWnd, nullptr);
+
         SDL_SetWindowFullscreen(m_sdlWnd, useDesktopFullscreen);
     }
     else if (b_is_Ready)
     {
         SDL_SetWindowResizable(m_sdlWnd, false);
-        SDL_SetWindowFullscreen(m_sdlWnd, true);
 
+        // Use the actual current display of the window, not the cached psDeviceMode.Monitor.
+        // After moving the window to a new monitor, SDL_GetDisplayForWindow() returns the
+        // correct display ID. Using psDeviceMode.Monitor here could refer to the old display,
+        // causing DXVK to apply the mode to the wrong output.
+        const SDL_DisplayID currentDisplay = SDL_GetDisplayForWindow(m_sdlWnd);
         const SDL_DisplayMode* mode_ptr = SDL_GetWindowFullscreenMode(m_sdlWnd);
         SDL_DisplayMode mode;
         if (mode_ptr) mode = *mode_ptr;
         else SDL_zerop(&mode);
+        mode.displayID = currentDisplay;
         mode.w = psDeviceMode.Width;
         mode.h = psDeviceMode.Height;
         mode.refresh_rate = (float)psDeviceMode.RefreshRate;
         SDL_SetWindowFullscreenMode(m_sdlWnd, &mode);
+
+        SDL_SetWindowFullscreen(m_sdlWnd, true);
     }
 
     SDL_PumpEvents();
@@ -219,7 +230,7 @@ void CRenderDevice::SelectResolution(const bool windowed)
 
         if (it == modes.end()) // not found
         {
-            SDL_DisplayMode closest;
+            SDL_DisplayMode closest = {0};
             if (!SDL_GetClosestFullscreenDisplayMode(psDeviceMode.Monitor, (int)psDeviceMode.Width, (int)psDeviceMode.Height, (float)psDeviceMode.RefreshRate, false, &closest))
             {
                 const SDL_DisplayMode *curr = SDL_GetCurrentDisplayMode(psDeviceMode.Monitor);

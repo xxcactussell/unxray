@@ -102,6 +102,9 @@ StackTraceBuilder::StackTraceBuilder()
     if (!s_dbghelp)
         init_dbghelp();
 
+    if (!s_dbghelp)
+        return;
+
     u32 dwOptions = symGetOptions();
     symSetOptions(dwOptions | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
 
@@ -121,6 +124,9 @@ StackTraceBuilder::~StackTraceBuilder()
 
 bool StackTraceBuilder::GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEXT threadCtx, xr_string& frameStr)
 {
+    if (!IsInitialized)
+        return false;
+
     BOOL result = stackWalk(MACHINE_TYPE, GetCurrentProcess(), GetCurrentThread(), stackFrame, threadCtx, nullptr,
         symFunctionTableAccess, symGetModuleBase, nullptr);
 

@@ -33,7 +33,7 @@ public:
     virtual void ObtainRequiredWindowFlags(u32& /*windowFlags*/) override;
     virtual void SetupStates() override;
     virtual void OnDeviceCreate(const char* shName) override;
-    virtual void Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float& fWidth_2, float& fHeight_2) override;
+    virtual bool Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float& fWidth_2, float& fHeight_2) override;
 
     //	Overdraw
     virtual void overdrawBegin() override;

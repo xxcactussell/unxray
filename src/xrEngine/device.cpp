@@ -348,6 +348,9 @@ void CRenderDevice::ProcessEvent(const SDL_Event& event)
 
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
             psDeviceMode.Monitor = event.window.data1;
+            SDL_RaiseWindow(window);
+            if (window == m_sdlWnd)
+                Reset(); // UpdateWindowProps() inside Reset handles fullscreen transition
             break;
 
         case SDL_EVENT_WINDOW_RESIZED:
@@ -568,12 +571,13 @@ void CRenderDevice::OnWindowActivate(SDL_Window* window, bool activated)
     else
         pInput->GrabInput(false);
 
+    bool prev_active = b_is_Active;
     b_is_Active = activated || psDeviceFlags.test(rsAlwaysActive);
+    b_is_InFocus = activated;
 
-    if (activated != b_is_InFocus)
+    if (b_is_Active != prev_active)
     {
-        b_is_InFocus = activated;
-        if (b_is_InFocus)
+        if (b_is_Active)
         {
             TaskScheduler->Pause(false);
             seqAppActivate.Process();

@@ -80,14 +80,8 @@ void CHW::CreateDevice(SDL_Window* hWnd)
 
     R_ASSERT(m_window);
 
-    // Choose the closest pixel format
-    const SDL_DisplayMode *mode_ptr = SDL_GetWindowFullscreenMode(m_window);
-    SDL_DisplayMode mode;
-    if (mode_ptr) mode = *mode_ptr;
-    else SDL_zerop(&mode);
-    mode.format = SDL_PIXELFORMAT_RGBA8888;
-    // Apply the pixel format to the device context
-    SDL_SetWindowFullscreenMode(m_window, &mode);
+    // Pixel format is configured via SDL_GL attributes in SetPrimaryAttributes().
+    // Fullscreen state is managed exclusively by CRenderDevice::UpdateWindowProps().
 
     Caps.fTarget = D3DFMT_A8R8G8B8;
     Caps.fDepth = D3DFMT_D24S8;
@@ -149,6 +143,8 @@ void CHW::CreateDevice(SDL_Window* hWnd)
 
     if (glGenFramebuffers && glBindFramebuffer)
         UpdateViews();
+        
+    Valid = true;
 }
 
 void CHW::DestroyDevice()

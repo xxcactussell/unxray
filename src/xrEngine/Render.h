@@ -364,7 +364,7 @@ public:
     virtual void ObtainRequiredWindowFlags(u32& windowFlags) = 0;
     virtual void SetupStates() = 0;
     virtual void OnDeviceCreate(pcstr shName) = 0;
-    virtual void Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float& fWidth_2, float& fHeight_2) = 0;
+    virtual bool Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float& fWidth_2, float& fHeight_2) = 0;
 
     //	Overdraw
     virtual void overdrawBegin() = 0;

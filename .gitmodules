@@ -28,3 +28,6 @@
 [submodule "Externals/sse2rvv"]
 	path = Externals/sse2rvv
 	url = https://github.com/pattonkan/sse2rvv.git
+[submodule "Externals/openal-soft"]
+	path = Externals/openal-soft
+	url = https://github.com/kcat/openal-soft.git

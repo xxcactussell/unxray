@@ -162,10 +162,11 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
                         // Build matrix ( 3x4 matrix, last row - color )
                         float scale = Instance.scale_calculated;
-                        Fmatrix& M = Instance.mRotY;
-                        c_storage[base + 0].set(M._11 * scale, M._21 * scale, M._31 * scale, M._41);
-                        c_storage[base + 1].set(M._12 * scale, M._22 * scale, M._32 * scale, M._42);
-                        c_storage[base + 2].set(M._13 * scale, M._23 * scale, M._33 * scale, M._43);
+                        float sn = _sin(Instance.yaw_angle);
+                        float cs = _cos(Instance.yaw_angle);
+                        c_storage[base + 0].set(cs * scale, 0, sn * scale, Instance.pos.x);
+                        c_storage[base + 1].set(0, scale, 0, Instance.pos.y);
+                        c_storage[base + 2].set(-sn * scale, 0, cs * scale, Instance.pos.z);
                         // RCache.set_ca(&*constArray, base+0, M._11*scale,	M._21*scale,	M._31*scale,	M._41	);
                         // RCache.set_ca(&*constArray, base+1, M._12*scale,	M._22*scale,	M._32*scale,	M._42	);
                         // RCache.set_ca(&*constArray, base+2, M._13*scale,	M._23*scale,	M._33*scale,	M._43	);

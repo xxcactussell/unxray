@@ -157,10 +157,11 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list, const Fvector4& consts, 
 
                         // Build matrix ( 3x4 matrix, last row - color )
                         float scale = instance->scale_calculated;
-                        Fmatrix& M = instance->mRotY;
-                        cmd_list.set_ca(&*constArray, base + 0, M._11 * scale, M._21 * scale, M._31 * scale, M._41);
-                        cmd_list.set_ca(&*constArray, base + 1, M._12 * scale, M._22 * scale, M._32 * scale, M._42);
-                        cmd_list.set_ca(&*constArray, base + 2, M._13 * scale, M._23 * scale, M._33 * scale, M._43);
+                        float sn = _sin(instance->yaw_angle);
+                        float cs = _cos(instance->yaw_angle);
+                        cmd_list.set_ca(&*constArray, base + 0, cs * scale, 0, sn * scale, instance->pos.x);
+                        cmd_list.set_ca(&*constArray, base + 1, 0, scale, 0, instance->pos.y);
+                        cmd_list.set_ca(&*constArray, base + 2, -sn * scale, 0, cs * scale, instance->pos.z);
 
                         // Build color
                         // R2 only needs hemisphere

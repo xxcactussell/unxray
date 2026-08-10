@@ -75,9 +75,11 @@ void CDetailManager::cache_Decompress(Slot* S)
 {
     VERIFY(S);
     Slot& D = *S;
-    D.type = stReady;
     if (D.empty)
+    {
+        D.type = stReady;
         return;
+    }
 
     DetailSlot& DS = QueryDB(D.sx, D.sz);
 
@@ -232,14 +234,17 @@ void CDetailManager::cache_Decompress(Slot* S)
             Fbox ItemBB;
 
 #ifndef DBG_SWITCHOFF_RANDOMIZE
-            Item.mRotY.rotateY(r_yaw.randF(0, PI_MUL_2));
+            Item.yaw_angle = r_yaw.randF(0, PI_MUL_2);
 #else
-            Item.mRotY.rotateY(0);
+            Item.yaw_angle = 0.0f;
 #endif
 
-            Item.mRotY.translate_over(Item_P);
+            Item.pos = Item_P;
             mScale.scale(Item.scale, Item.scale, Item.scale);
-            mXform.mul_43(Item.mRotY, mScale);
+            Fmatrix mRotY;
+            mRotY.rotateY(Item.yaw_angle);
+            mRotY.translate_over(Item.pos);
+            mXform.mul_43(mRotY, mScale);
             ItemBB.xform(Dobj->bv_bb, mXform);
             Bounds.merge(ItemBB);
 
@@ -305,5 +310,6 @@ gray255[3]						=	255.f*float(c_pal->a3)/15.f;
     D.vis.clear();
     D.vis.box.set(Bounds);
     D.vis.box.getsphere(D.vis.sphere.P, D.vis.sphere.R);
+    D.type = stReady;
 }
 } // namespace xray::render::RENDER_NAMESPACE

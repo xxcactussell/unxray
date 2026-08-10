@@ -57,7 +57,8 @@ public:
     { // один кустик
         float scale;
         float scale_calculated;
-        Fmatrix mRotY;
+        float yaw_angle;
+        Fvector pos;
         u32 vis_ID; // индекс в visibility списке он же тип [не качается, качается1, качается2]
         float c_hemi;
         float c_sun;

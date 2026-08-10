@@ -101,55 +101,14 @@ CDetailManager::CDetailManager() : xrc("detail manager")
     m_time_pos = 0;
     m_global_time_old = 0;
 
-    // KD: variable detail radius
-    dm_size = dm_current_size;
-    dm_cache_line = dm_current_cache_line;
-    dm_cache1_line = dm_current_cache1_line;
-    dm_cache_size = dm_current_cache_size;
-    dm_fade = dm_current_fade;
-    ps_r__Detail_density = ps_current_detail_density;
-    ps_current_detail_height = ps_r__Detail_height;
-    cache_level1 = (CacheSlot1**)xr_malloc(dm_cache1_line * sizeof(CacheSlot1*));
-    for (u32 i = 0; i < dm_cache1_line; ++i)
-    {
-        cache_level1[i] = (CacheSlot1*)xr_malloc(dm_cache1_line * sizeof(CacheSlot1));
-        for (u32 j = 0; j < dm_cache1_line; ++j)
-            new(&cache_level1[i][j]) CacheSlot1();
-    }
-    cache = (Slot***)xr_malloc(dm_cache_line * sizeof(Slot**));
-    for (u32 i = 0; i < dm_cache_line; ++i)
-        cache[i] = (Slot**)xr_malloc(dm_cache_line * sizeof(Slot*));
-
-    cache_pool = (Slot *)xr_malloc(dm_cache_size * sizeof(Slot));
-
-    for (u32 i = 0; i < dm_cache_size; ++i)
-        new(&cache_pool[i]) Slot();
-    /*
-    CacheSlot1 cache_level1[dm_cache1_line][dm_cache1_line];
-    Slot* cache [dm_cache_line][dm_cache_line]; // grid-cache itself
-    Slot cache_pool [dm_cache_size]; // just memory for slots
-    */
+    m_time_pos = 0;
+    m_global_time_old = 0;
 }
 
 CDetailManager::~CDetailManager()
 {
     ZoneScoped;
 
-    for (u32 i = 0; i < dm_cache_size; ++i)
-        cache_pool[i].~Slot();
-    xr_free(cache_pool);
-
-    for (u32 i = 0; i < dm_cache_line; ++i)
-        xr_free(cache[i]);
-    xr_free(cache);
-
-    for (u32 i = 0; i < dm_cache1_line; ++i)
-    {
-        for (u32 j = 0; j < dm_cache1_line; ++j)
-            cache_level1[i][j].~CacheSlot1();
-        xr_free(cache_level1[i]);
-    }
-    xr_free(cache_level1);
 }
 
 #ifndef _EDITOR
@@ -166,6 +125,30 @@ void dump(CDetailManager::vis_list& lst)
 void CDetailManager::Load()
 {
     ZoneScoped;
+
+    // KD: variable detail radius
+    dm_size = dm_current_size;
+    dm_cache_line = dm_current_cache_line;
+    dm_cache1_line = dm_current_cache1_line;
+    dm_cache_size = dm_current_cache_size;
+    dm_fade = dm_current_fade;
+    ps_r__Detail_density = ps_current_detail_density;
+    ps_current_detail_height = ps_r__Detail_height;
+
+    cache_level1 = (CacheSlot1**)xr_malloc(dm_cache1_line * sizeof(CacheSlot1*));
+    for (u32 i = 0; i < dm_cache1_line; ++i)
+    {
+        cache_level1[i] = (CacheSlot1*)xr_malloc(dm_cache1_line * sizeof(CacheSlot1));
+        for (u32 j = 0; j < dm_cache1_line; ++j)
+            new(&cache_level1[i][j]) CacheSlot1();
+    }
+    cache = (Slot***)xr_malloc(dm_cache_line * sizeof(Slot**));
+    for (u32 i = 0; i < dm_cache_line; ++i)
+        cache[i] = (Slot**)xr_malloc(dm_cache_line * sizeof(Slot*));
+
+    cache_pool = (Slot*)xr_malloc(dm_cache_size * sizeof(Slot));
+    for (u32 i = 0; i < dm_cache_size; ++i)
+        new(&cache_pool[i]) Slot();
 
     // Open file stream
     if (!FS.exist("$level$", "level.details"))
@@ -233,6 +216,13 @@ void CDetailManager::Load()
 void CDetailManager::Unload()
 {
     ZoneScoped;
+
+    if (m_calc_task)
+    {
+        TaskScheduler->Wait(*m_calc_task);
+        m_calc_task = nullptr;
+    }
+
     if (UseVS())
         hw_Unload();
     else
@@ -249,6 +239,25 @@ void CDetailManager::Unload()
     m_visibles[1].clear();
     m_visibles[2].clear();
     FS.r_close(dtFS);
+
+    for (u32 i = 0; i < dm_cache_size; ++i)
+        cache_pool[i].~Slot();
+    xr_free(cache_pool);
+
+    for (u32 i = 0; i < dm_cache_line; ++i)
+        xr_free(cache[i]);
+    xr_free(cache);
+
+    for (u32 i = 0; i < dm_cache1_line; ++i)
+    {
+        for (u32 j = 0; j < dm_cache1_line; ++j)
+            cache_level1[i][j].~CacheSlot1();
+        xr_free(cache_level1[i]);
+    }
+    xr_free(cache_level1);
+
+    cache_task.clear();
+    poolSI.clear();
 }
 
 extern ECORE_API float r_ssaDISCARD;
@@ -301,8 +310,8 @@ void CDetailManager::UpdateVisibleM()
                 //if (_i+1<dwCC);
                 //    _mm_prefetch((char*)*MS.slots[_i+1], _MM_HINT_T1);
 
-                // if slot empty - continue
-                if (S.empty)
+                // if slot empty or not ready - continue
+                if (S.empty || S.type != stReady)
                 {
                     continue;
                 }
@@ -407,7 +416,11 @@ void CDetailManager::Render(CBackend& cmd_list)
 
     ZoneScoped;
 
-    TaskScheduler->Wait(*m_calc_task);
+    if (m_calc_task)
+    {
+        TaskScheduler->Wait(*m_calc_task);
+        m_calc_task = nullptr;
+    }
 
     RImplementation.BasicStats.DetailRender.Begin();
     g_pGamePersistent->m_pGShaderConstants->m_blender_mode.w = 1.0f; //--#SM+#-- Флаг начала рендера травы [begin of grass render]
@@ -433,6 +446,9 @@ void CDetailManager::Render(CBackend& cmd_list)
 
 void CDetailManager::DispatchMTCalc()
 {
+    if (m_calc_task)
+        return; // task already in flight
+
     m_calc_task = &TaskScheduler->AddTask([this]
     {
 #ifndef _EDITOR

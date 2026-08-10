@@ -81,24 +81,25 @@ void CDetailManager::soft_Render()
                 {
                     SlotItem& Instance = *items->at(item_idx);
                     float scale = Instance.scale_calculated;
+                    float sn = _sin(Instance.yaw_angle);
+                    float cs = _cos(Instance.yaw_angle);
 
                     // Build matrix
-                    Fmatrix& M = Instance.mRotY;
-                    mXform._11 = M._11 * scale;
-                    mXform._12 = M._12 * scale;
-                    mXform._13 = M._13 * scale;
-                    mXform._14 = M._14;
-                    mXform._21 = M._21 * scale;
-                    mXform._22 = M._22 * scale;
-                    mXform._23 = M._23 * scale;
-                    mXform._24 = M._24;
-                    mXform._31 = M._31 * scale;
-                    mXform._32 = M._32 * scale;
-                    mXform._33 = M._33 * scale;
-                    mXform._34 = M._34;
-                    mXform._41 = M._41;
-                    mXform._42 = M._42;
-                    mXform._43 = M._43;
+                    mXform._11 = cs * scale;
+                    mXform._12 = 0;
+                    mXform._13 = -sn * scale;
+                    mXform._14 = 0;
+                    mXform._21 = 0;
+                    mXform._22 = scale;
+                    mXform._23 = 0;
+                    mXform._24 = 0;
+                    mXform._31 = sn * scale;
+                    mXform._32 = 0;
+                    mXform._33 = cs * scale;
+                    mXform._34 = 0;
+                    mXform._41 = Instance.pos.x;
+                    mXform._42 = Instance.pos.y;
+                    mXform._43 = Instance.pos.z;
                     mXform._44 = 1;
 
                     // Transfer vertices

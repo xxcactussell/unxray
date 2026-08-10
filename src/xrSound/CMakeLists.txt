@@ -131,7 +131,7 @@ target_link_libraries(xrSound
     xrAPI
     xrCDB
     xrMaterialSystem
-    OpenAL::OpenAL
+    OpenAL
     Ogg::Ogg
     Vorbis::Vorbis
     Vorbis::VorbisFile

@@ -9,6 +9,11 @@ add_subdirectory(xrLuaFix)
 add_subdirectory(OPCODE)
 add_subdirectory(ode)
 
+set(ALSOFT_UTILS OFF CACHE BOOL "Disable openal-soft utils" FORCE)
+set(ALSOFT_EXAMPLES OFF CACHE BOOL "Disable openal-soft examples" FORCE)
+set(ALSOFT_TESTS OFF CACHE BOOL "Disable openal-soft tests" FORCE)
+add_subdirectory(openal-soft)
+
 # Silence all warnings for external libraries
 add_compile_options(${XRAY_DISABLE_WARNINGS})
 

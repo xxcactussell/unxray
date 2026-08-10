@@ -28,6 +28,7 @@ XRSOUND_API float psSoundVFactor = 1.0f;
 
 XRSOUND_API float psSoundVMusic = 1.f;
 XRSOUND_API int psSoundCacheSizeMB = 32;
+XRSOUND_API int psSoundHrtf = 0;
 
 CSoundRender_Core* SoundRender = nullptr;
 

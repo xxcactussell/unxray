@@ -57,7 +57,12 @@ void CSoundRender_CoreA::_initialize()
     //const ALCchar* deviceSpecifier = alcGetString(pDevice, ALC_DEVICE_SPECIFIER);
 
     // Create context
-    pContext = alcCreateContext(pDevice, nullptr);
+    ALCint attribs[] = {
+        ALC_HRTF_SOFT, (psSoundHrtf) ? ALC_TRUE : ALC_FALSE,
+        0
+    };
+
+    pContext = alcCreateContext(pDevice, alcIsExtensionPresent(pDevice, "ALC_SOFT_HRTF") ? attribs : nullptr);
     if (!pContext)
     {
         Log("! SOUND: OpenAL: Failed to create context.");

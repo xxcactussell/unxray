@@ -802,6 +802,7 @@ void CCC_Register()
 
     // Sound
     CMD2(CCC_Float, "snd_volume_eff", &psSoundVEffects);
+    CMD4(CCC_Integer, "snd_hrtf", &psSoundHrtf, 0, 1);
     CMD2(CCC_Float, "snd_volume_music", &psSoundVMusic);
     CMD1(CCC_SND_Restart, "snd_restart");
     CMD3(CCC_Mask, "snd_acceleration", &psSoundFlags, ss_Hardware);

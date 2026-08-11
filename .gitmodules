@@ -31,3 +31,6 @@
 [submodule "Externals/openal-soft"]
 	path = Externals/openal-soft
 	url = https://github.com/kcat/openal-soft.git
+[submodule "Externals/JoltPhysics"]
+	path = Externals/JoltPhysics
+	url = https://github.com/jrouwe/JoltPhysics.git

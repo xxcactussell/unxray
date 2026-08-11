@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ImportGroup Label="PropertySheets">
     <Import Project="..\xray_project_configurations.props" />
@@ -22,7 +22,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_USRDLL;XRPHYSICS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(xrExternals)ode/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(xrExternals)ode/include;$(xrExternals)JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <FloatingPointModel Condition="'$(Platform)'=='x64'">Precise</FloatingPointModel>
       <DisableSpecificWarnings Condition="'$(PlatformShortName)'=='x86'">4756;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
@@ -217,6 +217,9 @@
     </ProjectReference>
     <ProjectReference Include="$(xrExternals)ODE.vcxproj">
       <Project>{1bf75feb-87dd-486c-880b-227987d191c2}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Externals\Jolt.vcxproj">
+      <Project>{A3D739AE-4E46-4C5C-A77E-93C0A040B480}</Project>
     </ProjectReference>
     <ProjectReference Include="$(SolutionDir)xrEngine\xrEngine.vcxproj">
       <Project>{2578c6d8-660d-48ae-9322-7422f8664f06}</Project>

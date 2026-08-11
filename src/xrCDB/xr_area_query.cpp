@@ -3,8 +3,37 @@
 #include "Frustum.h"
 
 #include "xrCore/_vector3d_ext.h"
+#include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/CollisionDispatch.h>
+#include "xrCDB.h"
 
 using namespace collide;
+
+class XRCDB_OBBCollector : public JPH::CollideShapeCollector
+{
+public:
+    xr_vector<Fvector>* out_tris;
+    const CDB::MODEL* m_def;
+    bool has_hit;
+
+    XRCDB_OBBCollector(xr_vector<Fvector>* tris, const CDB::MODEL* M)
+        : out_tris(tris), m_def(M), has_hit(false)
+    {
+    }
+
+    virtual void AddHit(const JPH::CollideShapeResult &inResult) override
+    {
+        has_hit = true;
+        if (out_tris)
+        {
+            const JPH::MeshShape* meshShape = static_cast<const JPH::MeshShape*>(m_def->get_shape());
+            u32 prim = meshShape->GetTriangleUserData(inResult.mSubShapeID2);
+            out_tris->push_back(m_def->get_verts()[m_def->get_tris()[prim].verts[0]]);
+            out_tris->push_back(m_def->get_verts()[m_def->get_tris()[prim].verts[1]]);
+            out_tris->push_back(m_def->get_verts()[m_def->get_tris()[prim].verts[2]]);
+        }
+    }
+};
 
 bool CObjectSpace::BoxQuery(Fvector const& box_center, Fvector const& box_z_axis, Fvector const& box_y_axis,
     Fvector const& box_sizes, xr_vector<Fvector>* out_tris)
@@ -18,83 +47,32 @@ bool CObjectSpace::BoxQuery(Fvector const& box_center, Fvector const& box_z_axis
     Fvector x_axis;
     x_axis.crossproduct(box_y_axis, box_z_axis).normalize();
 
-    Fplane planes[6];
-    enum
-    {
-        left_plane,
-        right_plane,
-        top_plane,
-        bottom_plane,
-        front_plane,
-        near_plane
-    };
+    if (!Static.get_shape())
+        return false;
 
-    planes[left_plane].build(box_center - (x_axis * (box_sizes.x * 0.5f)), -x_axis);
-    planes[right_plane].build(box_center + (x_axis * (box_sizes.x * 0.5f)), x_axis);
-    planes[top_plane].build(box_center + (y_axis * (box_sizes.y * 0.5f)), y_axis);
-    planes[bottom_plane].build(box_center - (y_axis * (box_sizes.y * 0.5f)), -y_axis);
-    planes[front_plane].build(box_center - (z_axis * (box_sizes.z * 0.5f)), -z_axis);
-    planes[near_plane].build(box_center + (z_axis * (box_sizes.z * 0.5f)), z_axis);
+    // Construct Jolt BoxShape
+    JPH::BoxShape box(JPH::Vec3(box_sizes.x * 0.5f, box_sizes.y * 0.5f, box_sizes.z * 0.5f));
+    
+    // Rotation matrix from axis
+    JPH::Mat44 rot(
+        JPH::Vec4(x_axis.x, x_axis.y, x_axis.z, 0.0f),
+        JPH::Vec4(y_axis.x, y_axis.y, y_axis.z, 0.0f),
+        JPH::Vec4(z_axis.x, z_axis.y, z_axis.z, 0.0f),
+        JPH::Vec4(box_center.x, box_center.y, box_center.z, 1.0f)
+    );
 
-    CFrustum frustum;
-    frustum.CreateFromPlanes(planes, sizeof(planes) / sizeof(planes[0]));
+    JPH::CollideShapeSettings settings;
+    settings.mBackFaceMode = JPH::EBackFaceMode::CollideWithBackFaces;
 
-    xrc.frustum_query(CDB::OPT_FULL_TEST, &Static, frustum);
+    XRCDB_OBBCollector collector(out_tris, &Static);
 
-    if (out_tris)
-    {
-        for (auto &result : *xrc.r_get())
-        {
-            out_tris->push_back(result.verts[0]);
-            out_tris->push_back(result.verts[1]);
-            out_tris->push_back(result.verts[2]);
-        }
-    }
+    JPH::CollisionDispatch::sCollideShapeVsShape(
+        &box, Static.get_shape(), 
+        JPH::Vec3::sReplicate(1.0f), JPH::Vec3::sReplicate(1.0f), 
+        rot, JPH::Mat44::sIdentity(), 
+        JPH::SubShapeIDCreator(), JPH::SubShapeIDCreator(), 
+        settings, collector, JPH::ShapeFilter()
+    );
 
-    return !!xrc.r_count();
+    return collector.has_hit;
 }
-
-/*
-const u32	clStatic		= clQUERY_STATIC+clGET_TRIS;
-
-void CObjectSpace::BoxQuery	(collide::rq_results& r_dest, const Fbox& B, const Fmatrix& M, u32 flags)
-{
-    Fvector		bc,bd;
-    Fbox		xf;
-    xf.xform	(B,M);
-    xf.get_CD	(bc,bd);
-
-    q_result.Clear	();
-    xrc.box_options	(
-        (flags&clCOARSE?0:CDB::OPT_FULL_TEST)|
-        (flags&clQUERY_ONLYFIRST?CDB::OPT_ONLYFIRST:0)
-        );
-
-    if ((flags&clStatic) == clStatic)
-    {
-        xrc.box_query	(&Static, bc, bd);
-        if (xrc.r_count())
-        {
-            CDB::RESULT* it	=xrc.r_begin();
-            CDB::RESULT* end=xrc.r_end	();
-            for (; it!=end; it++)
-                q_result.AddTri(&Static.get_tris() [it->id],Static.get_verts());
-        }
-    };
-
-    if (flags&clQUERY_DYNAMIC)
-    {
-        // Traverse object database
-        g_pGamePersistent->SpatialSpace.q_box	(r_spatial,0,STYPE_COLLIDEABLE,bc,bd);
-
-        // Determine visibility for dynamic part of scene
-        for (u32 o_it=0; o_it<r_spatial.size(); o_it++)
-        {
-            ISpatial*	spatial						= r_spatial[o_it];
-            IGameObject*	collidable					= spatial->dcast_GameObject	();
-            if			(0==collidable)				continue;
-            collidable->collidable.model->_BoxQuery	(B,M,flags);
-        }
-    };
-}
-*/

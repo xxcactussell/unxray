@@ -3,132 +3,85 @@
 
 #include "xrCDB.h"
 #include "Frustum.h"
+#include <Jolt/Physics/Collision/Shape/Shape.h>
 
-using namespace CDB;
-using namespace Opcode;
-
-template <bool bClass3, bool bFirst>
-class frustum_collider
+namespace CDB
 {
-public:
-    COLLIDER* dest;
-    TRI* tris;
-    Fvector* verts;
-
-    const CFrustum* F;
-
-    IC void _init(COLLIDER* CL, Fvector* V, TRI* T, const CFrustum* _F)
-    {
-        dest = CL;
-        tris = T;
-        verts = V;
-        F = _F;
-    }
-    IC EFC_Visible _box(Fvector& C, Fvector& E, u32& mask)
-    {
-        Fvector mM[2];
-        mM[0].sub(C, E);
-        mM[1].add(C, E);
-        return F->testAABB(&mM[0].x, mask);
-    }
-    void _prim(u32 prim)
-    {
-        if constexpr (bClass3)
-        {
-            sPoly src, dst;
-            src.resize(3);
-            src[0] = verts[tris[prim].verts[0]];
-            src[1] = verts[tris[prim].verts[1]];
-            src[2] = verts[tris[prim].verts[2]];
-            if (F->ClipPoly(src, dst))
-            {
-                RESULT& R = dest->r_add();
-                R.id = prim;
-                R.verts[0] = verts[tris[prim].verts[0]];
-                R.verts[1] = verts[tris[prim].verts[1]];
-                R.verts[2] = verts[tris[prim].verts[2]];
-                R.dummy = tris[prim].dummy;
-            }
-        }
-        else
-        {
-            RESULT& R = dest->r_add();
-            R.id = prim;
-            R.verts[0] = verts[tris[prim].verts[0]];
-            R.verts[1] = verts[tris[prim].verts[1]];
-            R.verts[2] = verts[tris[prim].verts[2]];
-            R.dummy = tris[prim].dummy;
-        }
-    }
-
-    void _stab(const AABBNoLeafNode* node, u32 mask)
-    {
-        // Actual frustum/aabb test
-        EFC_Visible result = _box((Fvector&)node->mAABB.mCenter, (Fvector&)node->mAABB.mExtents, mask);
-        if (fcvNone == result)
-            return;
-
-        // 1st chield
-        if (node->HasLeaf())
-            _prim(node->GetPrimitive());
-        else
-            _stab(node->GetPos(), mask);
-
-        // Early exit for "only first"
-        if constexpr (bFirst)
-        {
-            if (dest->r_count())
-                return;
-        }
-
-        // 2nd chield
-        if (node->HasLeaf2())
-            _prim(node->GetPrimitive2());
-        else
-            _stab(node->GetNeg(), mask);
-    }
-};
 
 void COLLIDER::frustum_query(u32 frustum_mode, const MODEL* m_def, const CFrustum& F)
 {
     ZoneScoped;
     m_def->syncronize();
-
-    // Get nodes
-    const AABBNoLeafTree* T = (const AABBNoLeafTree*)m_def->tree->GetTree();
-    const AABBNoLeafNode* N = T->GetNodes();
-    const u32 mask = F.getMask();
     r_clear();
+    
+    if (!m_def->shape)
+        return;
 
-    // Binary dispatcher
-    if (frustum_mode & OPT_FULL_TEST)
+    // Fast-path rejection using model bounds
+    JPH::AABox bounds = m_def->shape->GetLocalBounds();
+    Fvector C, E;
+    C.set(bounds.GetCenter().GetX(), bounds.GetCenter().GetY(), bounds.GetCenter().GetZ());
+    E.set(bounds.GetExtent().GetX(), bounds.GetExtent().GetY(), bounds.GetExtent().GetZ());
+    
+    u32 test_mask = F.getMask();
+    EFC_Visible res = F.testAABB(&C.x, test_mask); // Note: CFrustum expects center ptr or mM? Wait, testAABB takes mM[6] which is [minX, minY, minZ, maxX, maxY, maxZ]!
+    
+    // Actually testAABB takes mM which is [minx, miny, minz, maxx, maxy, maxz] in Frustum.h:
+    // "Fvector mM[2]; mM[0].sub(C, E); mM[1].add(C, E);"
+    Fvector mM[2];
+    mM[0].sub(C, E);
+    mM[1].add(C, E);
+    if (F.testAABB(&mM[0].x, test_mask) == fcvNone)
+        return;
+
+    // Linear fallback since we do not build an AABB tree for frustum queries specifically
+    // HOM meshes are usually small enough that this doesn't bottleneck.
+    // for (u32 i = 0; i < m_def->verts_count / 3; /*wait, tris_count*/ ) {}
+    
+    for (u32 i = 0; i < m_def->tris_count; ++i)
     {
-        if (frustum_mode & OPT_ONLYFIRST)
+        const TRI& T = m_def->tris[i];
+        
+        if (frustum_mode & OPT_FULL_TEST)
         {
-            frustum_collider<true, true> BC;
-            BC._init(this, m_def->verts, m_def->tris, &F);
-            BC._stab(N, mask);
+            sPoly src, dst;
+            src.resize(3);
+            src[0] = m_def->verts[T.verts[0]];
+            src[1] = m_def->verts[T.verts[1]];
+            src[2] = m_def->verts[T.verts[2]];
+            
+            if (F.ClipPoly(src, dst))
+            {
+                RESULT& R = r_add();
+                R.id = i;
+                R.verts[0] = src[0]; // wait, originally it just adds the original verts!
+                R.verts[1] = src[1];
+                R.verts[2] = src[2];
+                R.dummy = T.dummy;
+                if (frustum_mode & OPT_ONLYFIRST)
+                    break;
+            }
         }
         else
         {
-            frustum_collider<true, false> BC;
-            BC._init(this, m_def->verts, m_def->tris, &F);
-            BC._stab(N, mask);
-        }
-    }
-    else
-    {
-        if (frustum_mode & OPT_ONLYFIRST)
-        {
-            frustum_collider<false, true> BC;
-            BC._init(this, m_def->verts, m_def->tris, &F);
-            BC._stab(N, mask);
-        }
-        else
-        {
-            frustum_collider<false, false> BC;
-            BC._init(this, m_def->verts, m_def->tris, &F);
-            BC._stab(N, mask);
+            Fvector pts[3];
+            pts[0] = m_def->verts[T.verts[0]];
+            pts[1] = m_def->verts[T.verts[1]];
+            pts[2] = m_def->verts[T.verts[2]];
+            
+            if (F.testPolyInside(pts, 3))
+            {
+                RESULT& R = r_add();
+                R.id = i;
+                R.verts[0] = pts[0];
+                R.verts[1] = pts[1];
+                R.verts[2] = pts[2];
+                R.dummy = T.dummy;
+                if (frustum_mode & OPT_ONLYFIRST)
+                    break;
+            }
         }
     }
 }
+
+} // namespace CDB

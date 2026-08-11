@@ -6,13 +6,7 @@
 #include "xrCDB.h"
 #include "xrCore/Threading/Lock.hpp"
 
-namespace Opcode
-{
-#include "OPCODE/OPC_TreeBuilders.h"
-} // namespace Opcode
-
 using namespace CDB;
-using namespace Opcode;
 
 // Model building
 MODEL::MODEL() :
@@ -24,11 +18,44 @@ MODEL::MODEL() :
 {
 }
 
+
+static void JoltTraceImpl(const char* inFMT, ...)
+{
+    va_list list;
+    va_start(list, inFMT);
+    char buffer[4096];
+    vsnprintf(buffer, sizeof(buffer), inFMT, list);
+    va_end(list);
+
+    Msg("[Jolt] %s", buffer);
+}
+
+#ifdef JPH_ENABLE_ASSERTS
+
+static bool JoltAssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile, uint32 inLine)
+{
+    Msg("! [Jolt ASSERT] %s:%u (%s) - %s", inFile, inLine, inExpression, inMessage ? inMessage : "no message");
+    return true; 
+}
+#endif
+
+static std::once_flag g_JoltInitFlag;
+
+static void InitializeJoltOnce()
+{
+    JPH::RegisterDefaultAllocator();
+
+    JPH::Factory::sInstance = new JPH::Factory();
+
+    JPH::RegisterTypes();
+}
+
 MODEL::~MODEL()
 {
     syncronize(); // maybe model still in building
     status = S_INIT;
-    xr_delete(tree);
+    if (shape)
+        shape->Release();
     xr_free(tris);
     tris_count = 0;
     xr_free(verts);
@@ -81,9 +108,15 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
 {
     ZoneScoped;
 
+    std::call_once(g_JoltInitFlag, InitializeJoltOnce);
+
     xr_free(verts);
     xr_free(tris);
-    xr_delete(tree);
+    if (shape)
+    {
+        shape->Release();
+        shape = nullptr;
+    }
 
     // verts
     verts_count = Vcnt;
@@ -102,43 +135,47 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
     // Release data pointers
     status = S_BUILD;
 
-    // Allocate temporary "OPCODE" tris + convert tris to 'pointer' form
-    u32* temp_tris = xr_alloc<u32>(tris_count * 3);
-    if (0 == temp_tris)
+    // Jolt integration: Create MeshShape from vertices and indices
+    try
+    {
+        JPH::VertexList vertices;
+        vertices.reserve(verts_count);
+        for (u32 i = 0; i < verts_count; ++i)
+        {
+            vertices.push_back(JPH::Float3(verts[i].x, verts[i].y, verts[i].z));
+        }
+
+        JPH::IndexedTriangleList indices;
+        indices.reserve(tris_count);
+        for (u32 i = 0; i < tris_count; ++i)
+        {
+            // Pass `i` as userData so we can map hit results back to original X-Ray tris
+            indices.push_back(JPH::IndexedTriangle(tris[i].verts[0], tris[i].verts[1], tris[i].verts[2], 0, i));
+        }
+
+        JPH::MeshShapeSettings settings(vertices, indices);
+        settings.mPerTriangleUserData = true; // IMPORTANT for fetching original tri index
+        
+        JPH::ShapeSettings::ShapeResult result = settings.Create();
+        if (result.IsValid())
+        {
+            shape = result.Get().GetPtr();
+            shape->AddRef();
+        }
+        else
+        {
+            Msg("! Jolt MeshShape build failed: %s", result.GetError().c_str());
+            xr_free(verts);
+            xr_free(tris);
+            return;
+        }
+    }
+    catch (...)
     {
         xr_free(verts);
         xr_free(tris);
         return;
     }
-    u32* temp_ptr = temp_tris;
-    for (u32 i = 0; i < tris_count; i++)
-    {
-        *temp_ptr++ = tris[i].verts[0];
-        *temp_ptr++ = tris[i].verts[1];
-        *temp_ptr++ = tris[i].verts[2];
-    }
-
-    // Build a non quantized no-leaf tree
-    OPCODECREATE OPCC;
-    OPCC.NbTris = tris_count;
-    OPCC.NbVerts = verts_count;
-    OPCC.Tris = (unsigned*)temp_tris;
-    OPCC.Verts = (Point*)verts;
-    OPCC.Rules = SPLIT_COMPLETE | SPLIT_SPLATTERPOINTS | SPLIT_GEOMCENTER;
-    OPCC.NoLeaf = true;
-    OPCC.Quantized = false;
-
-    tree = xr_new<OPCODE_Model>();
-    if (!tree->Build(OPCC))
-    {
-        xr_free(verts);
-        xr_free(tris);
-        xr_free(temp_tris);
-        return;
-    };
-
-    // Free temporary tris
-    xr_free(temp_tris);
 }
 
 void MODEL::load_geom(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt)
@@ -167,8 +204,8 @@ void MODEL::load_geom(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt)
     [u32] vertex count
     [u32] index count
     [...] vertices themselves
+    [...] vertices themselves
     [...] indices themselves
-    [...] OPCODE tree
 */
 bool MODEL::serialize(pcstr fileName, serialize_callback callback /*= nullptr*/) const
 {
@@ -197,9 +234,7 @@ bool MODEL::serialize(pcstr fileName, serialize_callback callback /*= nullptr*/)
     wstream->w(verts, sizeof(Fvector) * verts_count);
     wstream->w(tris, sizeof(TRI) * tris_count);
 
-    // 4. OPCODE tree
-    if (tree)
-        tree->Save(wstream);
+    // 4. We do not write Jolt shape data here, it's rebuilt on deserialize.
 
     FS.w_close(wstream);
     return true;
@@ -208,6 +243,8 @@ bool MODEL::serialize(pcstr fileName, serialize_callback callback /*= nullptr*/)
 bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deserialize_callback callback /*= nullptr*/)
 {
     ZoneScoped;
+
+    std::call_once(g_JoltInitFlag, InitializeJoltOnce);
 
     IReader* rstream = FS.r_open(fileName);
     if (!rstream)
@@ -252,11 +289,14 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
 
     xr_free(verts);
     xr_free(tris);
-    xr_delete(tree);
+    if (shape)
+    {
+        shape->Release();
+        shape = nullptr;
+    }
 
     verts = xr_alloc<Fvector>(verts_count);
     tris = xr_alloc<TRI>(tris_count);
-    tree = xr_new<OPCODE_Model>();
 
     CopyMemory(verts, rstream->pointer(), vertsSize);
     rstream->advance(vertsSize);
@@ -264,27 +304,44 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
     CopyMemory(tris, rstream->pointer(), trisSize);
     rstream->advance(trisSize);
 
-    // 4. Load the OPCODE tree
-    const bool success = tree->Load(rstream);
-    if (success)
-        status = S_READY;
+    // Rebuild Jolt Shape from loaded data
+    JPH::VertexList jvertices;
+    jvertices.reserve(verts_count);
+    for (u32 i = 0; i < verts_count; ++i)
+        jvertices.push_back(JPH::Float3(verts[i].x, verts[i].y, verts[i].z));
+
+    JPH::IndexedTriangleList jindices;
+    jindices.reserve(tris_count);
+    for (u32 i = 0; i < tris_count; ++i)
+        jindices.push_back(JPH::IndexedTriangle(tris[i].verts[0], tris[i].verts[1], tris[i].verts[2], 0, i));
+
+    JPH::MeshShapeSettings settings(jvertices, jindices);
+    settings.mPerTriangleUserData = true;
+    JPH::ShapeSettings::ShapeResult result = settings.Create();
+    if (result.IsValid())
+    {
+        shape = result.Get().GetPtr();
+        shape->AddRef();
+    }
+    
+    status = S_READY;
 
     FS.r_close(rstream);
-    return success;
+    return true;
 }
 
 void MODEL::deserialize_tree(IReader* rstream)
 {
     R_ASSERT(rstream);
 
-    xr_delete(tree);
+    if (shape)
+    {
+        shape->Release();
+        shape = nullptr;
+    }
 
-    tree = xr_new<OPCODE_Model>();
-
-    // Load the OPCODE tree
-    const bool success = tree->Load(rstream, true, false);
-    if (success)
-        status = S_READY;
+    // We don't read Jolt tree from stream, it's handled in deserialize().
+    status = S_READY;
 }
 
 size_t MODEL::memory()
@@ -296,7 +353,8 @@ size_t MODEL::memory()
     }
     size_t V = static_cast<size_t>(verts_count) * sizeof(Fvector);
     size_t T = static_cast<size_t>(tris_count) * sizeof(TRI);
-    return tree->GetUsedBytes() + V + T + sizeof(*this) + sizeof(*tree);
+    size_t S = (shape) ? sizeof(*shape) : 0;
+    return S + V + T + sizeof(*this);
 }
 
 COLLIDER::~COLLIDER() { r_free(); }

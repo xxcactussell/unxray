@@ -18,10 +18,10 @@
 
 // forward declarations
 class CFrustum;
-namespace Opcode
+namespace Opcode {}
+namespace JPH
 {
-class OPCODE_Model;
-class AABBNoLeafNode;
+    class Shape;
 };
 
 struct Fbox3;
@@ -76,7 +76,7 @@ class XRCDB_API MODEL : Noncopyable
 
 private:
     Lock* pcs;
-    Opcode::OPCODE_Model* tree{};
+    const JPH::Shape* shape{};
     volatile u32 status{ S_INIT }; // 0=ready, 1=init, 2=building
     u32 model_crc32{};
 
@@ -89,6 +89,7 @@ private:
 public:
     MODEL();
     ~MODEL();
+    const JPH::Shape* get_shape() const { return shape; }
 
     [[nodiscard]]
     auto get_verts_count() const { return verts_count; }

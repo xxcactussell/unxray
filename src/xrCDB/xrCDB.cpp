@@ -18,37 +18,7 @@ MODEL::MODEL() :
 {
 }
 
-
-static void JoltTraceImpl(const char* inFMT, ...)
-{
-    va_list list;
-    va_start(list, inFMT);
-    char buffer[4096];
-    vsnprintf(buffer, sizeof(buffer), inFMT, list);
-    va_end(list);
-
-    Msg("[Jolt] %s", buffer);
-}
-
-#ifdef JPH_ENABLE_ASSERTS
-
-static bool JoltAssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile, uint32 inLine)
-{
-    Msg("! [Jolt ASSERT] %s:%u (%s) - %s", inFile, inLine, inExpression, inMessage ? inMessage : "no message");
-    return true; 
-}
-#endif
-
-static std::once_flag g_JoltInitFlag;
-
-static void InitializeJoltOnce()
-{
-    JPH::RegisterDefaultAllocator();
-
-    JPH::Factory::sInstance = new JPH::Factory();
-
-    JPH::RegisterTypes();
-}
+#include "xrPhysicsCore/xrPhysicsCore.h"
 
 MODEL::~MODEL()
 {
@@ -108,8 +78,6 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
 {
     ZoneScoped;
 
-    std::call_once(g_JoltInitFlag, InitializeJoltOnce);
-
     xr_free(verts);
     xr_free(tris);
     if (shape)
@@ -136,41 +104,8 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
     status = S_BUILD;
 
     // Jolt integration: Create MeshShape from vertices and indices
-    try
-    {
-        JPH::VertexList vertices;
-        vertices.reserve(verts_count);
-        for (u32 i = 0; i < verts_count; ++i)
-        {
-            vertices.push_back(JPH::Float3(verts[i].x, verts[i].y, verts[i].z));
-        }
-
-        JPH::IndexedTriangleList indices;
-        indices.reserve(tris_count);
-        for (u32 i = 0; i < tris_count; ++i)
-        {
-            // Pass `i` as userData so we can map hit results back to original X-Ray tris
-            indices.push_back(JPH::IndexedTriangle(tris[i].verts[0], tris[i].verts[1], tris[i].verts[2], 0, i));
-        }
-
-        JPH::MeshShapeSettings settings(vertices, indices);
-        settings.mPerTriangleUserData = true; // IMPORTANT for fetching original tri index
-        
-        JPH::ShapeSettings::ShapeResult result = settings.Create();
-        if (result.IsValid())
-        {
-            shape = result.Get().GetPtr();
-            shape->AddRef();
-        }
-        else
-        {
-            Msg("! Jolt MeshShape build failed: %s", result.GetError().c_str());
-            xr_free(verts);
-            xr_free(tris);
-            return;
-        }
-    }
-    catch (...)
+    shape = xrPhysicsCore::CreateMeshShape(verts, verts_count, tris, tris_count);
+    if (!shape)
     {
         xr_free(verts);
         xr_free(tris);
@@ -244,8 +179,6 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
 {
     ZoneScoped;
 
-    std::call_once(g_JoltInitFlag, InitializeJoltOnce);
-
     IReader* rstream = FS.r_open(fileName);
     if (!rstream)
         return false;
@@ -305,25 +238,13 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
     rstream->advance(trisSize);
 
     // Rebuild Jolt Shape from loaded data
-    JPH::VertexList jvertices;
-    jvertices.reserve(verts_count);
-    for (u32 i = 0; i < verts_count; ++i)
-        jvertices.push_back(JPH::Float3(verts[i].x, verts[i].y, verts[i].z));
-
-    JPH::IndexedTriangleList jindices;
-    jindices.reserve(tris_count);
-    for (u32 i = 0; i < tris_count; ++i)
-        jindices.push_back(JPH::IndexedTriangle(tris[i].verts[0], tris[i].verts[1], tris[i].verts[2], 0, i));
-
-    JPH::MeshShapeSettings settings(jvertices, jindices);
-    settings.mPerTriangleUserData = true;
-    JPH::ShapeSettings::ShapeResult result = settings.Create();
-    if (result.IsValid())
+    shape = xrPhysicsCore::CreateMeshShape(verts, verts_count, tris, tris_count);
+    if (!shape)
     {
-        shape = result.Get().GetPtr();
-        shape->AddRef();
+        FS.r_close(rstream);
+        return false;
     }
-    
+
     status = S_READY;
 
     FS.r_close(rstream);

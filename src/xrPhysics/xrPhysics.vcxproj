@@ -218,8 +218,8 @@
     <ProjectReference Include="$(xrExternals)ODE.vcxproj">
       <Project>{1bf75feb-87dd-486c-880b-227987d191c2}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Externals\Jolt.vcxproj">
-      <Project>{A3D739AE-4E46-4C5C-A77E-93C0A040B480}</Project>
+    <ProjectReference Include="$(SolutionDir)xrPhysicsCore\xrPhysicsCore.vcxproj">
+      <Project>{D998578B-020F-4626-85EE-D69D54A56812}</Project>
     </ProjectReference>
     <ProjectReference Include="$(SolutionDir)xrEngine\xrEngine.vcxproj">
       <Project>{2578c6d8-660d-48ae-9322-7422f8664f06}</Project>

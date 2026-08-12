@@ -24,7 +24,7 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(xrExternals)sse2neon\include;$(xrExternals)JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions Condition="$(Configuration.Contains('Master Gold'))">%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions>_USRDLL;XRCDB_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_USRDLL;XRCDB_EXPORTS;JPH_SHARED_LIBRARY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <FloatingPointModel Condition="'$(Platform)'=='x64'">Precise</FloatingPointModel>
     </ClCompile>
   </ItemDefinitionGroup>
@@ -76,8 +76,11 @@
     <ProjectReference Include="$(SolutionDir)xrCore\xrCore.vcxproj">
       <Project>{a0f7d1fb-59a7-4717-a7e4-96f37e91998e}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\Externals\Jolt.vcxproj">
+    <ProjectReference Include="$(SolutionDir)..\Externals\Jolt.vcxproj">
       <Project>{A3D739AE-4E46-4C5C-A77E-93C0A040B480}</Project>
+    </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)xrPhysicsCore\xrPhysicsCore.vcxproj">
+      <Project>{D998578B-020F-4626-85EE-D69D54A56812}</Project>
     </ProjectReference>
     <ProjectReference Include="$(SolutionDir)utils\xrMiscMath\xrMiscMath.vcxproj">
       <Project>{7885cf3c-ee04-4c67-9467-1fbf9a36b037}</Project>

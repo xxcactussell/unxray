@@ -42,17 +42,11 @@ void SJointIKData::Export(IWriter& F)
     F.w_u32(type);
     for (SJointLimit& joint_limit : limits)
     {
-        // Kostya Slipchenko say:
-        // направление вращения в ОДЕ отличается от направления вращение в X-Ray
-        // поэтому меняем знак у лимитов
-        // F.w_float (std::min(-joint_limit.limit.x,-joint_limit.limit.y)); // min (swap special for ODE)
-        // F.w_float (std::max(-joint_limit.limit.x,-joint_limit.limit.y)); // max (swap special for ODE)
-
         VERIFY(std::min(-joint_limit.limit.x, -joint_limit.limit.y) == -joint_limit.limit.y);
         VERIFY(std::max(-joint_limit.limit.x, -joint_limit.limit.y) == -joint_limit.limit.x);
 
-        F.w_float(-joint_limit.limit.y); // min (swap special for ODE)
-        F.w_float(-joint_limit.limit.x); // max (swap special for ODE)
+        F.w_float(-joint_limit.limit.y);
+        F.w_float(-joint_limit.limit.x);
 
         F.w_float(joint_limit.spring_factor);
         F.w_float(joint_limit.damping_factor);

@@ -76,9 +76,6 @@
     <ProjectReference Include="$(SolutionDir)xrCore\xrCore.vcxproj">
       <Project>{a0f7d1fb-59a7-4717-a7e4-96f37e91998e}</Project>
     </ProjectReference>
-    <ProjectReference Include="$(SolutionDir)..\Externals\Jolt.vcxproj">
-      <Project>{A3D739AE-4E46-4C5C-A77E-93C0A040B480}</Project>
-    </ProjectReference>
     <ProjectReference Include="$(SolutionDir)xrPhysicsCore\xrPhysicsCore.vcxproj">
       <Project>{D998578B-020F-4626-85EE-D69D54A56812}</Project>
     </ProjectReference>

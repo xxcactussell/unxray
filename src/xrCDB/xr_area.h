@@ -7,6 +7,8 @@
 #include "xrCDB.h"
 #include "xrCore/_fbox.h"
 
+class xrXRC;
+
 // fwd. decl.
 class ISpatial;
 class ISpatial_DB;

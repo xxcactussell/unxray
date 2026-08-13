@@ -5,6 +5,7 @@
 #include "PHDefs.h"
 #include "PHShellSplitter.h"
 #include "PHMoveStorage.h"
+#include "xrPhysicsCore/IPhysicsCore.h" // Подключаем наше ядро
 
 class CPHShellSplitterHolder;
 class CPhysicsShellAnimator;
@@ -32,9 +33,6 @@ private:
     virtual IPhysicsShellHolder* ref_object() { return PhysicsRefObject(); }
 #endif
 
-protected:
-    dSpaceID m_space;
-
 public:
     Fmatrix m_object_in_root;
     CPHShell();
@@ -57,7 +55,9 @@ public:
     void SetPhObjectInElements();
     virtual void EnableObject(CPHObject* obj);
     virtual void DisableObject();
-    virtual void SetAirResistance(dReal linear = default_k_l, dReal angular = default_k_w)
+    
+    // dReal -> float
+    virtual void SetAirResistance(float linear = default_k_l, float angular = default_k_w)
     {
         for (auto& it : elements)
             it->SetAirResistance(linear, angular);
@@ -66,9 +66,8 @@ public:
     {
         elements.front()->GetAirResistance(linear, angular);
     }
+    
     virtual void add_Joint(CPhysicsJoint* J);
-
-    virtual CPHIsland* PIsland() { return &Island(); };
     virtual void applyImpulseTrace(const Fvector& pos, const Fvector& dir, float val);
 
     virtual void Update();
@@ -111,9 +110,11 @@ public:
     virtual void setMass(float M);
 
     virtual void setMass1(float M);
-    virtual void setEquelInertiaForEls(const dMass& M);
-    virtual void addEquelInertiaToEls(const dMass& M);
+    
+    virtual void setEquelInertiaForEls(float M);
+    virtual void addEquelInertiaToEls(float M);
     virtual void MassAddBox(float mass, const Fvector& full_size);
+    
     virtual float getMass();
     virtual void setDensity(float M);
     virtual float getDensity();
@@ -131,7 +132,6 @@ public:
         {
             it->SetForce(force);
             it->SetVelocity();
-            //it->SetForceAndVelocity(force);
         }
     }
     virtual void set_DynamicLimits(float l_limit = default_l_limit, float w_limit = default_w_limit);
@@ -145,7 +145,7 @@ public:
     virtual void* get_CallbackData();
     virtual void set_PhysicsRefObject(IPhysicsShellHolder* ref_object);
     IPhysicsShellHolder* PhysicsRefObject() { return (*elements.begin())->PhysicsRefObject(); }
-    // breakbable interface
+    
     virtual bool isBreakable();
     virtual bool isFractured();
     virtual CPHShellSplitterHolder* SplitterHolder() { return m_spliter_holder; }
@@ -163,7 +163,7 @@ public:
             m_spliter_holder->SetBreakable();
     }
     virtual bool IsBreakingBlocked() { return m_spliter_holder && m_spliter_holder->IsUnbreakable(); }
-    ///////	////////////////////////////////////////////////////////////////////////////////////////////
+
     virtual void get_LinearVel(Fvector& velocity) const;
     virtual void get_AngularVel(Fvector& velocity) const;
     virtual void set_LinearVel(const Fvector& velocity);
@@ -204,21 +204,21 @@ public:
     virtual bool isFullActive() const { return isActive() && !m_flags.test(flActivating); }
     void SetNotActivating() { m_flags.set(flActivating, FALSE); }
     IC void SetObjVsShellTransform(const Fmatrix& root_transform);
-    // CPHObject
+    
     virtual void vis_update_activate();
     virtual void vis_update_deactivate();
     virtual void PureStep(float step);
     virtual void CollideAll();
-    virtual void PhDataUpdate(dReal step);
-    virtual void PhTune(dReal step);
-    virtual void InitContact(dContact* c, bool& do_collide, u16 /*material_idx_1*/, u16 /*material_idx_2*/){};
+    virtual void PhDataUpdate(float step); // dReal -> float
+    virtual void PhTune(float step);       // dReal -> float
+    virtual void InitContact(void* c, bool& do_collide, u16 /*material_idx_1*/, u16 /*material_idx_2*/){}; // dContact -> void*
     virtual void FreezeContent();
     virtual void UnFreezeContent();
     virtual void Freeze();
     virtual void UnFreeze();
     virtual void NetInterpolationModeON() { CPHObject::NetInterpolationON(); }
     virtual void NetInterpolationModeOFF() { CPHObject::NetInterpolationOFF(); }
-    virtual void StepFrameUpdate(dReal step){};
+    virtual void StepFrameUpdate(float step){}; // dReal -> float
     virtual CPHMoveStorage* MoveStorage() { return &m_traced_geoms; }
     virtual void build_FromKinematics(IKinematics* K, BONE_P_MAP* p_geting_map = NULL);
     virtual void preBuild_FromKinematics(IKinematics* K, BONE_P_MAP* p_geting_map);
@@ -238,7 +238,7 @@ public:
     virtual void GetGlobalPositionDynamic(Fvector* v);
     virtual Fmatrix& ObjectInRoot() { return m_object_in_root; }
     virtual void ObjectToRootForm(const Fmatrix& form);
-    virtual dSpaceID dSpace() { return m_space; }
+    
     virtual void SetTransform(const Fmatrix& m0, motion_history_state history_state);
 
     virtual void AddTracedGeom(u16 element = 0, u16 geom = 0);
@@ -250,28 +250,26 @@ public:
     virtual bool HasTracedGeoms() { return !m_traced_geoms.empty(); }
     virtual void SetPrefereExactIntegration();
     virtual void CutVelocity(float l_limit, float a_limit);
-    ///////////	//////////////////////////////////////////////////////////////////////////////////////////
-    void CreateSpace();
+
     void PassEndElements(u16 from, u16 to, CPHShell* dest);
     void PassEndJoints(u16 from, u16 to, CPHShell* dest);
     void DeleteElement(u16 element);
     void DeleteJoint(u16 joint);
     u16 BoneIdToRootGeom(u16 id);
-    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    
 protected:
     virtual void get_spatial_params();
-    virtual dGeomID dSpacedGeom() { return (dGeomID)m_space; }
+    virtual PhysicsShapeHandle dSpacedGeom() { return nullptr; } 
     virtual void ClearRecentlyDeactivated();
     void ClearCashedTries();
 
 private:
-    // breakable
     void setEndElementSplitter();
     void setElementSplitter(u16 element_number, u16 splitter_position);
     void setEndJointSplitter();
     void AddSplitter(CPHShellSplitter::EType type, u16 element, u16 joint);
     void AddSplitter(CPHShellSplitter::EType type, u16 element, u16 joint, u16 position);
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
     void AddElementRecursive(
         CPhysicsElement* root_e, u16 id, Fmatrix global_parent, u16 element_number, bool* vis_check);
     void PlaceBindToElFormsRecursive(Fmatrix parent, u16 id, u16 element, Flags64& mask);

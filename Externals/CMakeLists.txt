@@ -6,8 +6,6 @@ endif()
 
 add_subdirectory(luabind)
 add_subdirectory(xrLuaFix)
-add_subdirectory(OPCODE)
-add_subdirectory(ode)
 
 set(ALSOFT_UTILS OFF CACHE BOOL "Disable openal-soft utils" FORCE)
 set(ALSOFT_EXAMPLES OFF CACHE BOOL "Disable openal-soft examples" FORCE)

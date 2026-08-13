@@ -22,7 +22,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_USRDLL;XRPHYSICS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(xrExternals)ode/include;$(xrExternals)JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(xrExternals)JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <FloatingPointModel Condition="'$(Platform)'=='x64'">Precise</FloatingPointModel>
       <DisableSpecificWarnings Condition="'$(PlatformShortName)'=='x86'">4756;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
@@ -214,9 +214,6 @@
     </ProjectReference>
     <ProjectReference Include="$(SolutionDir)xrScriptEngine\xrScriptEngine.vcxproj">
       <Project>{132c62de-de85-4978-9675-c78ed4da46f0}</Project>
-    </ProjectReference>
-    <ProjectReference Include="$(xrExternals)ODE.vcxproj">
-      <Project>{1bf75feb-87dd-486c-880b-227987d191c2}</Project>
     </ProjectReference>
     <ProjectReference Include="$(SolutionDir)xrPhysicsCore\xrPhysicsCore.vcxproj">
       <Project>{D998578B-020F-4626-85EE-D69D54A56812}</Project>

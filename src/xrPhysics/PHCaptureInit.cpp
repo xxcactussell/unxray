@@ -80,7 +80,6 @@ u32					m_capture_time;
 u32					m_time_start;
 CBoneInstance		*m_capture_bone;
 dBodyID				m_body;
-CPHIsland			m_island;
 //bool				b_failed;
 bool				b_collide;
 bool				b_disabled;
@@ -96,7 +95,6 @@ CPHCapture::CPHCapture(
       // dJointFeedback		m_joint_feedback;								,
       m_capture_pos(Fvector().set(0, 0, 0)), m_back_force(0), m_pull_force(0), m_capture_force(0),
       m_capture_distance(0), m_capture_time(0), m_time_start(0), m_capture_bone(0),
-      // CPHIsland			m_island;
       b_collide(false)
 
 {
@@ -124,7 +122,6 @@ CPHCapture::CPHCapture(CPHCharacter* a_character, IPhysicsShellHolder* a_taget_o
       // dJointFeedback		m_joint_feedback;								,
       m_capture_pos(Fvector().set(0, 0, 0)), m_back_force(0), m_pull_force(0), m_capture_force(0),
       m_capture_distance(0), m_capture_time(0), m_time_start(0), m_capture_bone(0),
-      // CPHIsland			m_island;
       b_collide(false)
 
 {

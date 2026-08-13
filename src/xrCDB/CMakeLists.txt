@@ -47,7 +47,7 @@ target_link_libraries(xrCDB
     PRIVATE
     xrCore
     xrMiscMath
-    xrOPCODE
+    xrPhysicsCore
     xrAPI
 )
 

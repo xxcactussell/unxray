@@ -2476,7 +2476,6 @@ target_include_directories(xrGame
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/src/xrServerEntities"
     "${CMAKE_SOURCE_DIR}/Externals/GameSpy/src"
-    "${CMAKE_SOURCE_DIR}/Externals/ode/include"
     "${CMAKE_SOURCE_DIR}/Externals/OpenAutomate/inc"
     "${CMAKE_SOURCE_DIR}/sdk/include"
 )

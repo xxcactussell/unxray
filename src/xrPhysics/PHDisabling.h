@@ -1,7 +1,6 @@
 #pragma once
 
 #include "DisablingParams.h"
-#include <ode/common.h>
 
 struct SDisableVector
 {

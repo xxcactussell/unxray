@@ -1,7 +1,3 @@
-/////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-///////////////////////////Implemetation//for//CPhysicsElement//////////////////
-////////////////////////////////////////////////////////////////////////////////
 #pragma once
 
 #include "Geometry.h"
@@ -25,27 +21,24 @@ class CPHElement : public CPhysicsElement,
 {
     friend class CPHFracturesHolder;
 
-    // float						m_start_time;				//uu ->to shell ??	//aux
-    dMass m_mass; // e ??				//bl
-    dBodyID m_body; // e					//st
-    dReal m_l_scale; // ->to shell ??	//bl
-    dReal m_w_scale; // ->to shell ??	//bl
-    CPHElement* m_parent_element; // bool !			//bl
-    CPHShell* m_shell; // e					//bl
-    CPHInterpolation m_body_interpolation; // e					//bl
-    CPHFracturesHolder* m_fratures_holder; // e					//bl
+    float m_mass;
+    BodyHandle m_body;
 
-    dReal m_w_limit; //->to shell ??		//bl
-    dReal m_l_limit; //->to shell ??		//bl
-    //	dVector3					m_safe_position;			//e					//st
-    //	dQuaternion					m_safe_quaternion;
-    //	dVector3					m_safe_velocity;			//e					//st
-    //	Fmatrix						m_inverse_local_transform;	//e				//bt
-    dReal k_w; //->to shell ??		//st
-    dReal k_l; //->to shell ??		//st
-    // ObjectContactCallbackFun*	temp_for_push_out;			//->to shell ??		//aux
-    // u32							push_untill;				//->to shell ??		//st
-    Flags8 m_flags; //
+    float m_l_scale;
+    float m_w_scale;
+
+    CPHElement* m_parent_element; 
+    CPHShell* m_shell; 
+    CPHInterpolation m_body_interpolation; 
+    CPHFracturesHolder* m_fratures_holder; 
+
+    float m_w_limit;
+    float m_l_limit;
+    
+    float k_w;
+    float k_l;
+
+    Flags8 m_flags; 
     enum
     {
         flActive = 1 << 0,
@@ -56,9 +49,6 @@ class CPHElement : public CPhysicsElement,
         flFixed = 1 << 5,
         flAnimated = 1 << 6
     };
-    //	bool						was_enabled_before_freeze;
-    //	bool						bUpdate;					//->to shell ??		//st
-    //	bool						b_enabled_onstep;
 private:
     ////////////////////////////////////////////Interpolation/////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -125,14 +115,13 @@ public: //
     virtual void setMassMC(float M, const Fvector& mass_center); // aux
     virtual void setDensityMC(float M, const Fvector& mass_center); // aux
     virtual void set_local_mass_center(const Fvector& mc);
-    virtual void setInertia(const dMass& M); // aux
-    virtual void addInertia(const dMass& M);
+    virtual void setInertia(float M); 
+    virtual void addInertia(float M);
     virtual void add_Mass(const SBoneShape& shape, const Fmatrix& offset, const Fvector& mass_center, float mass,
         CPHFracture* fracture = NULL); // aux
     virtual void set_BoxMass(const Fobb& box, float mass); // aux
     virtual void setMass(float M); // aux
     virtual float getMass() { return m_mass.mass; } // aux
-    virtual dMass* getMassTensor(); // aux
     void ReAdjustMassPositions(const Fmatrix& shift_pivot, float density); // aux
     void ResetMass(float density); // aux
     void CutVelocity(float l_limit, float a_limit);
@@ -170,16 +159,16 @@ public: //
     void SetBoneCallbackOverwrite(bool v);
     void BonesCallBack(CBoneInstance* B); // called from updateCL visual influent
     void StataticRootBonesCallBack(CBoneInstance* B);
-    void PhDataUpdate(dReal step); // ph update
-    void PhTune(dReal step); // ph update
+    void PhDataUpdate(float step); 
+    void PhTune(float step);
     virtual void Update(); // called update CL visual influence
     //////////////////////////////////////////////////Dynamics////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    virtual void SetAirResistance(dReal linear = default_k_l, dReal angular = default_k_w) // aux (may not be)
-    { //
-        k_w = angular; //
-        k_l = linear; //
-    } //
+    virtual void SetAirResistance(float linear = default_k_l, float angular = default_k_w) 
+    { 
+        k_w = angular; 
+        k_l = linear; 
+    }
     virtual void GetAirResistance(float& linear, float& angular) //
     { //
         linear = k_l; //
@@ -244,8 +233,8 @@ public: //
     CPhysicsElement* parent_element() { return m_parent_element; }
 #endif
     void SetShell(CPHShell* p); // aux
-    virtual dBodyID get_body() { return m_body; } // aux
-    virtual const dBodyID get_bodyConst() const { return m_body; } // aux
+    virtual BodyHandle get_body() { return m_body; } 
+    virtual const BodyHandle get_bodyConst() const { return m_body; }
     //////////////////////////////////////////////////////Breakable//////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     IC CPHFracturesHolder* FracturesHolder() { return m_fratures_holder; } // aux

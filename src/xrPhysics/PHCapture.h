@@ -2,8 +2,6 @@
 
 #include "PHUpdateObject.h"
 
-#include "PHIsland.h"
-#include <ode/common.h>
 #include "IPHCapture.h"
 class IPhysicsShellHolder;
 class CPHCharacter;
@@ -37,8 +35,6 @@ protected:
     u32 m_time_start;
     CBoneInstance* m_capture_bone;
     dBodyID m_body;
-    CPHIsland m_island;
-    // bool				b_failed;
     bool b_collide;
     bool b_disabled;
     bool b_character_feedback;

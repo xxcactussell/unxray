@@ -23,19 +23,21 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir)xrCDB;$(xrExternals)JoltPhysics;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>XRPHYSICSCORE_EXPORTS;JPH_SHARED_LIBRARY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_USRDLL;XRPHYSICSCORE_EXPORTS;JPH_SHARED_LIBRARY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <FloatingPointModel Condition="'$(Platform)'=='x64'">Precise</FloatingPointModel>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="StdAfx.cpp">
+    <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="xrPhysicsCore.cpp" />
+    <ClCompile Include="JoltPhysicsCore.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="StdAfx.h" />
-    <ClInclude Include="xrPhysicsCore.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="IPhysicsCore.h" />
+    <ClInclude Include="JoltPhysicsCore.h" />
+    <ClInclude Include="JoltLayers.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$(SolutionDir)xrCore\xrCore.vcxproj">

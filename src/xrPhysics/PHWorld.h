@@ -1,16 +1,13 @@
 #pragma once
 
 #include "Common/Noncopyable.hpp"
-
 #include "xrEngine/pure.h"
-
 #include "Physics.h"
 #include "PHUpdateObject.h"
 #include "IPHWorld.h"
-
 #include "xrScriptEngine/ScriptExporter.hpp"
+#include "xrPhysicsCore/IPhysicsCore.h" // Наш интерфейс Jolt
 
-// refs
 struct SGameMtlPair;
 class CPHCommander;
 class CPHCondition;
@@ -21,18 +18,16 @@ typedef xr_vector<std::pair<CPHSynchronize*, SPHNetState>> V_PH_WORLD_STATE;
 
 class CPHMesh
 {
-    dGeomID Geom;
+    PhysicsShapeHandle m_mesh_handle = nullptr;
 
 public:
-    dGeomID GetGeom() { return Geom; }
-    void Create(dSpaceID space, dWorldID world);
+    PhysicsShapeHandle GetGeom() { return m_mesh_handle; }
+    void Create();
     void Destroy();
 };
 
 #define PHWORLD_SOUND_CACHE_SIZE 8
 
-////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////
 class CObjectSpace;
 class CObjectList;
 class CPHWorld final : public IPHWorld,
@@ -54,7 +49,6 @@ private:
     bool b_processing;
     bool b_exist;
     static const u32 update_delay = 1;
-    ///	dSpaceID					Space														;
 
     CPHMesh Mesh;
     PH_OBJECT_STORAGE m_objects;
@@ -62,7 +56,7 @@ private:
     PH_OBJECT_STORAGE m_recently_disabled_objects;
     PH_UPDATE_OBJECT_STORAGE m_update_objects;
     PH_UPDATE_OBJECT_STORAGE m_freezed_update_objects;
-    dGeomID m_motion_ray;
+    
     CPHCommander* m_commander;
     CObjectSpace* m_object_space;
     CObjectList* m_level_objects;
@@ -78,9 +72,9 @@ private:
 
 public:
     double m_frame_sum;
-    dReal m_previous_frame_time;
+    float m_previous_frame_time;
     bool b_frame_mark;
-    dReal m_frame_time;
+    float m_frame_time;
     float m_update_time;
     u16 disable_count;
     float m_gravity;
@@ -93,7 +87,6 @@ private:
 public:
     CPHWorld();
 
-    // IC	dSpaceID					GetSpace						()			{return Space;}	;
     IC bool Exist() { return b_exist; }
     void Create(bool mt, CObjectSpace* os, CObjectList* lo);
     void SetGravity(float g);
@@ -104,12 +97,13 @@ public:
     void RemoveFromRecentlyDisabled(PH_OBJECT_I i);
     void RemoveObject(PH_OBJECT_I i);
     void RemoveUpdateObject(PH_UPDATE_OBJECT_I i);
-    dGeomID GetMeshGeom() { return Mesh.GetGeom(); }
-    IC dGeomID GetMotionRayGeom() { return m_motion_ray; }
+    
+    PhysicsShapeHandle GetMeshGeom() { return Mesh.GetGeom(); }
+    
     void SetStep(float s);
     void Destroy();
     IC float FrameTime(bool frame_mark) { return b_frame_mark == frame_mark ? m_frame_time : m_previous_frame_time; }
-    void FrameStep(dReal step = 0.025f);
+    void FrameStep(float step = 0.025f);
     void Step();
     void StepTouch();
     void CutVelocity(float l_limit, float a_limit);
@@ -142,7 +136,7 @@ public:
         return *m_level_objects;
     }
 
-	void AddCall(CPHCondition* c, CPHAction* a) override;
+    void AddCall(CPHCondition* c, CPHAction* a) override;
 
 #ifdef DEBUG
     virtual void OnRender();

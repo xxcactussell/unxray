@@ -1,6 +1,5 @@
 #pragma once
-
-#include "xrCore/Threading/Lock.hpp" // XXX: Remove from header. Put in .cpp.
+#include "xrCore/Threading/Lock.hpp"
 #include "Common/Noncopyable.hpp"
 #include "xrCore/math_constants.h"
 #include "xrCore/_vector3d.h"
@@ -19,10 +18,8 @@
 // forward declarations
 class CFrustum;
 namespace Opcode {}
-namespace JPH
-{
-    class Shape;
-};
+
+typedef void* PhysicsShapeHandle;
 
 struct Fbox3;
 using Fbox = Fbox3;
@@ -76,7 +73,7 @@ class XRCDB_API MODEL : Noncopyable
 
 private:
     Lock* pcs;
-    const JPH::Shape* shape{};
+    PhysicsShapeHandle shape_handle{}; // Заменили JPH::Shape* на абстрактный хэндл
     volatile u32 status{ S_INIT }; // 0=ready, 1=init, 2=building
     u32 model_crc32{};
 
@@ -89,7 +86,7 @@ private:
 public:
     MODEL();
     ~MODEL();
-    const JPH::Shape* get_shape() const { return shape; }
+    PhysicsShapeHandle get_shape_handle() const { return shape_handle; } // Обновленный геттер
 
     [[nodiscard]]
     auto get_verts_count() const { return verts_count; }

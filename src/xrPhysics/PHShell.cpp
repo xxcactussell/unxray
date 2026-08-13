@@ -44,18 +44,16 @@ CPHShell::~CPHShell()
 }
 CPHShell::CPHShell()
 {
-    // bActive=false;
-    // bActivating=false;
     m_flags.assign(0);
     m_flags.set(flActivating, false);
     m_flags.set(flActive, false);
-    m_space = nullptr;
     m_pKinematics = nullptr;
     m_spliter_holder = nullptr;
     m_object_in_root.identity();
     m_active_count = 0;
     m_pPhysicsShellAnimatorC = nullptr;
 }
+
 
 void CPHShell::EnableObject(CPHObject* obj)
 {
@@ -143,8 +141,6 @@ void CPHShell::setMass1(float M)
 
 void CPHShell::MassAddBox(float mass, const Fvector& full_size)
 {
-    dMass m;
-    dMassSetBox(&m, mass, full_size.x, full_size.y, full_size.z); // mass = m_Shell->getMass()/100.f, full_size (1,1,1)
     addEquelInertiaToEls(m);
 }
 
@@ -160,28 +156,26 @@ float CPHShell::getMass()
 
 void CPHShell::get_spatial_params()
 {
-    spatialParsFromDGeom((dGeomID)m_space, spatial.sphere.P, AABB, spatial.sphere.R);
-}
-
-float CPHShell::getVolume()
-{
-    float v = 0.f;
-
-    for (auto& it : elements)
-        v += it->getVolume();
-
-    return v;
+    if (elements.empty() || elements.front()->get_body() == INVALID_BODY_HANDLE) 
+        return;
+    
+    Fvector center, extents;
+    GetPhysicsCore()->GetBodyAABB(elements.front()->get_body(), center, extents);
+    
+    spatial.sphere.P = center;
+    AABB = extents;
+    spatial.sphere.R = extents.magnitude();
 }
 
 float CPHShell::getDensity() { return getMass() / getVolume(); }
-void CPHShell::PhDataUpdate(dReal step)
+void CPHShell::PhDataUpdate(float step)
 {
     bool disable = true;
     for (auto& it : elements)
     {
         it->PhDataUpdate(step);
-        const dBodyID body = it->get_body();
-        if (body && disable && dBodyIsEnabled(body))
+        const BodyHandle body = it->get_body();
+        if (body != INVALID_BODY_HANDLE && disable && GetPhysicsCore()->IsBodyActive(body))
             disable = false;
     }
     if (disable)
@@ -191,18 +185,25 @@ void CPHShell::PhDataUpdate(dReal step)
     }
     else
         ReanableObject();
+
 #if 0
     DBG_OpenCashedDraw();
     dbg_draw_velocity   ( 0.1f, color_xrgb( 255, 0, 0 ) );
     dbg_draw_force      ( 0.1f, color_xrgb( 0, 0, 255 ) );
     DBG_ClosedCashedDraw( 10000 );
-    //dbg_draw_geometry
 #endif
-    if (PhOutOfBoundaries(cast_fv(dBodyGetPosition(elements.front()->get_body()))))
-        Disable();
+
+    // Получаем позицию через ядро для проверки выхода за границы карты
+    if (!elements.empty() && elements.front()->get_body() != INVALID_BODY_HANDLE)
+    {
+        Fmatrix transform;
+        GetPhysicsCore()->GetBodyTransform(elements.front()->get_body(), transform);
+        if (PhOutOfBoundaries(transform.c))
+            Disable();
+    }
 }
 
-void CPHShell::PhTune(dReal step)
+void CPHShell::PhTune(float step)
 {
     for (auto& it : elements)
         it->PhTune(step);
@@ -503,44 +504,21 @@ void CPHShell::SetGlTransformDynamic(const Fmatrix& form)
 }
 void CPHShell::SmoothElementsInertia(float k)
 {
-    dMass m_avrg;
-    dReal krc = 1.f - k;
-    dMassSetZero(&m_avrg);
-
-    for (auto& it : elements)
-        dMassAdd(&m_avrg, it->getMassTensor());
-
-    int n = (int)elements.size();
-    m_avrg.mass *= k / float(n);
-    for (int j = 0; j < 4 * 3; ++j)
-        m_avrg.I[j] *= k / float(n);
-
-    for (auto& it : elements)
-    {
-        dVector3 tmp;
-        dMass* m = it->getMassTensor();
-        dVectorSet(tmp, m->c);
-
-        m->mass *= krc;
-        for (int j = 0; j < 4 * 3; ++j)
-            m->I[j] *= krc;
-        dMassAdd(m, &m_avrg);
-
-        dVectorSet(m->c, tmp);
-    }
+    
 }
 
-void CPHShell::setEquelInertiaForEls(const dMass& M)
+void CPHShell::setEquelInertiaForEls(float M)
 {
     for (auto& it : elements)
         it->setInertia(M);
 }
 
-void CPHShell::addEquelInertiaToEls(const dMass& M)
+void CPHShell::addEquelInertiaToEls(float M)
 {
     for (auto& it : elements)
         it->addInertia(M);
 }
+
 static BONE_P_MAP* spGetingMap = nullptr;
 void CPHShell::build_FromKinematics(IKinematics* K, BONE_P_MAP* p_geting_map)
 {
@@ -1090,14 +1068,7 @@ CPhysicsElement* CPHShell::NearestToPoint(const Fvector& point, NearestToPointCa
     }
     return nearest_element;
 }
-void CPHShell::CreateSpace()
-{
-    if (!m_space)
-    {
-        m_space = dSimpleSpaceCreate(nullptr);
-        dSpaceSetCleanup(m_space, 0);
-    }
-}
+
 void CPHShell::PassEndElements(u16 from, u16 to, CPHShell* dest)
 {
     auto i_from = elements.begin() + from, e = elements.begin() + to;
@@ -1110,12 +1081,6 @@ void CPHShell::PassEndElements(u16 from, u16 to, CPHShell* dest)
     }
     for (auto i = i_from; i != e; ++i)
     {
-        dGeomID spaced_geom = (*i)->dSpacedGeometry();
-        if (spaced_geom) // for active elems
-        {
-            dSpaceRemove(m_space, spaced_geom);
-            dSpaceAdd(dest->m_space, spaced_geom);
-        }
         VERIFY(_valid(dest->mXFORM));
         (*i)->SetShell(dest);
     }

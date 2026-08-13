@@ -182,7 +182,6 @@ void CCustomRocket::create_physic_shell()
 
 #pragma warning(push)
 
-// XXX: maybe update ODE to a newer version
 // The warning happens on line 241: l_pMYU->last_pos[0] != -dInfinity
 #pragma warning(disable : 4756)
 

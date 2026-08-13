@@ -8,6 +8,8 @@
 
 using namespace CDB;
 
+PhysicsShapeHandle shape;
+
 // Model building
 MODEL::MODEL() :
 #ifdef CONFIG_PROFILE_LOCKS
@@ -18,14 +20,12 @@ MODEL::MODEL() :
 {
 }
 
-#include "xrPhysicsCore/xrPhysicsCore.h"
-
 MODEL::~MODEL()
 {
     syncronize(); // maybe model still in building
     status = S_INIT;
     if (shape)
-        shape->Release();
+        GetPhysicsCore()->DestroyCDBModel(shape);
     xr_free(tris);
     tris_count = 0;
     xr_free(verts);
@@ -82,7 +82,7 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
     xr_free(tris);
     if (shape)
     {
-        shape->Release();
+        GetPhysicsCore()->DestroyCDBModel(shape);
         shape = nullptr;
     }
 
@@ -104,7 +104,7 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
     status = S_BUILD;
 
     // Jolt integration: Create MeshShape from vertices and indices
-    shape = xrPhysicsCore::CreateMeshShape(verts, verts_count, tris, tris_count);
+    shape = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count);
     if (!shape)
     {
         xr_free(verts);
@@ -224,7 +224,7 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
     xr_free(tris);
     if (shape)
     {
-        shape->Release();
+        GetPhysicsCore()->DestroyCDBModel(shape);
         shape = nullptr;
     }
 
@@ -237,8 +237,7 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
     CopyMemory(tris, rstream->pointer(), trisSize);
     rstream->advance(trisSize);
 
-    // Rebuild Jolt Shape from loaded data
-    shape = xrPhysicsCore::CreateMeshShape(verts, verts_count, tris, tris_count);
+    shape = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count);
     if (!shape)
     {
         FS.r_close(rstream);
@@ -257,11 +256,10 @@ void MODEL::deserialize_tree(IReader* rstream)
 
     if (shape)
     {
-        shape->Release();
+        GetPhysicsCore()->DestroyCDBModel(shape);
         shape = nullptr;
     }
 
-    // We don't read Jolt tree from stream, it's handled in deserialize().
     status = S_READY;
 }
 
@@ -274,7 +272,7 @@ size_t MODEL::memory()
     }
     size_t V = static_cast<size_t>(verts_count) * sizeof(Fvector);
     size_t T = static_cast<size_t>(tris_count) * sizeof(TRI);
-    size_t S = (shape) ? sizeof(*shape) : 0;
+    size_t S = GetPhysicsCore()->GetShapeMemoryUsage(shape);
     return S + V + T + sizeof(*this);
 }
 

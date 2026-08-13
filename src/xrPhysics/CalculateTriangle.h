@@ -6,7 +6,6 @@
 #include "Geometry.h"
 #include "tri-colliderknoopc/dTriColliderMath.h"
 
-#include "ode_redefine.h"
 #include "xrCDB/xr_area.h"
 
 #pragma warning(push)

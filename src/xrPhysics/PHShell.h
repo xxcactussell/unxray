@@ -4,8 +4,8 @@
 #include "PHElement.h"
 #include "PHDefs.h"
 #include "PHShellSplitter.h"
-#include "PHMoveStorage.h"
-#include "xrPhysicsCore/IPhysicsCore.h" // Подключаем наше ядро
+#include "xrPhysicsCore/IPhysicsCore.h"
+#include "PHObject.h"
 
 class CPHShellSplitterHolder;
 class CPhysicsShellAnimator;
@@ -24,7 +24,6 @@ class CPHShell : public CPhysicsShell, public CPHObject
     ELEMENT_STORAGE elements;
     JOINT_STORAGE joints;
     CPHShellSplitterHolder* m_spliter_holder;
-    CPHMoveStorage m_traced_geoms;
 
     CPhysicsShellAnimator* m_pPhysicsShellAnimatorC;
 
@@ -56,7 +55,6 @@ public:
     virtual void EnableObject(CPHObject* obj);
     virtual void DisableObject();
     
-    // dReal -> float
     virtual void SetAirResistance(float linear = default_k_l, float angular = default_k_w)
     {
         for (auto& it : elements)
@@ -79,6 +77,10 @@ public:
     virtual void Activate(const Fmatrix& start_from, bool disable = false){};
 
     virtual CPhysicsShellAnimator* PPhysicsShellAnimator() { return m_pPhysicsShellAnimatorC; };
+
+    virtual CPHIsland* PIsland() override { return nullptr; }
+    virtual bool HasTracedGeoms() override { return false; }
+
 private:
     void activate(bool disable);
 
@@ -136,7 +138,7 @@ public:
     }
     virtual void set_DynamicLimits(float l_limit = default_l_limit, float w_limit = default_w_limit);
     virtual void set_DynamicScales(float l_scale = default_l_scale, float w_scale = default_w_scale);
-    virtual void set_ContactCallback(ContactCallbackFun* callback);
+    virtual void set_ContactCallback(ObjectContactCallbackFun* callback);
     virtual void set_ObjectContactCallback(ObjectContactCallbackFun* callback);
     virtual void SetAnimated(bool v);
     virtual void add_ObjectContactCallback(ObjectContactCallbackFun* callback);
@@ -191,7 +193,8 @@ public:
     virtual CPhysicsJoint* get_Joint(LPCSTR bone_name);
     virtual CPhysicsJoint* get_JointByStoreOrder(u16 num);
     virtual u16 get_JointsNumber();
-    virtual CODEGeom* get_GeomByID(u16 bone_id);
+    
+    virtual CPhysicsGeom* get_GeomByID(u16 bone_id);
 
     virtual void Enable();
     virtual void Disable();
@@ -209,17 +212,17 @@ public:
     virtual void vis_update_deactivate();
     virtual void PureStep(float step);
     virtual void CollideAll();
-    virtual void PhDataUpdate(float step); // dReal -> float
-    virtual void PhTune(float step);       // dReal -> float
-    virtual void InitContact(void* c, bool& do_collide, u16 /*material_idx_1*/, u16 /*material_idx_2*/){}; // dContact -> void*
+    virtual void PhDataUpdate(float step); 
+    virtual void PhTune(float step);       
+    
+    virtual void InitContact(bool& do_collide, bool bo1, float depth, CPhysicsGeom* my_geom, CPhysicsGeom* oposite_geom, u16 material_idx_1, u16 material_idx_2) override;
     virtual void FreezeContent();
     virtual void UnFreezeContent();
     virtual void Freeze();
     virtual void UnFreeze();
     virtual void NetInterpolationModeON() { CPHObject::NetInterpolationON(); }
     virtual void NetInterpolationModeOFF() { CPHObject::NetInterpolationOFF(); }
-    virtual void StepFrameUpdate(float step){}; // dReal -> float
-    virtual CPHMoveStorage* MoveStorage() { return &m_traced_geoms; }
+    virtual void StepFrameUpdate(float step){}; 
     virtual void build_FromKinematics(IKinematics* K, BONE_P_MAP* p_geting_map = NULL);
     virtual void preBuild_FromKinematics(IKinematics* K, BONE_P_MAP* p_geting_map);
     virtual void ActivatingBonePoses(IKinematics& K);
@@ -247,7 +250,6 @@ public:
     virtual void ClearTracedGeoms();
     virtual void DisableGeomTrace();
     virtual void EnableGeomTrace();
-    virtual bool HasTracedGeoms() { return !m_traced_geoms.empty(); }
     virtual void SetPrefereExactIntegration();
     virtual void CutVelocity(float l_limit, float a_limit);
 

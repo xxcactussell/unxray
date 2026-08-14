@@ -15,6 +15,9 @@ constexpr BodyHandle INVALID_BODY_HANDLE = 0xFFFFFFFF;
 
 typedef void* PhysicsShapeHandle;
 
+typedef uint32_t JointHandle;
+constexpr JointHandle INVALID_JOINT_HANDLE = 0xFFFFFFFF;
+
 struct CDBRaycastHit {
     float range;
     u32 tri_index;
@@ -25,6 +28,8 @@ enum class CDBRayMode {
     Nearest,
     First
 };
+
+struct SPhysicsJointFeedback;
 
 class IPhysicsCore {
 public:
@@ -59,11 +64,71 @@ public:
     virtual BodyHandle CreateBox(const Fvector& half_extents, const Fvector& position, float mass) = 0;
     virtual void DestroyBody(BodyHandle body) = 0;
     
+    virtual BodyHandle CreateSphere(float radius, const Fvector& position, float mass) = 0;
+    virtual BodyHandle CreateCylinder(float radius, float half_height, const Fvector& position, float mass) = 0;
+
+    virtual void GetBoxExtents(BodyHandle body, Fvector& out_extents) const = 0;
+    virtual void SetBoxExtents(BodyHandle body, const Fvector& extents) = 0;
+
     virtual void GetBodyTransform(BodyHandle body, Fmatrix& out_matrix) const = 0;
     virtual void SetBodyTransform(BodyHandle body, const Fmatrix& matrix) = 0;
     virtual void GetBodyAABB(BodyHandle body, Fvector& center, Fvector& half_extents) const = 0;
 
     virtual void GetCDBModelBounds(PhysicsShapeHandle handle, Fvector& out_center, Fvector& out_extents) const = 0;
+    
+    // type: 0=Ball, 1=Hinge, 2=Hinge2, 3=FullControl, 4=Slider (соответствует X-Ray CPhysicsJoint::enumType)
+    // Замени старый CreateJoint на этот:
+    virtual JointHandle CreateJoint(int type, BodyHandle b1, BodyHandle b2, 
+                                    const Fvector& anchor, 
+                                    const Fvector& axis0, const Fvector& axis1, const Fvector& axis2, 
+                                    const Fvector& limits_lo, const Fvector& limits_hi) = 0;
+    virtual void DestroyJoint(JointHandle joint) = 0;
+
+    virtual void SetJointLimits(JointHandle joint, int axis_num, float lo, float hi) = 0;
+    virtual void SetJointMotor(JointHandle joint, int axis_num, float force, float velocity) = 0;
+    virtual void SetJointSpringDamping(JointHandle joint, int axis_num, float erp, float cfm) = 0;
+    virtual void SetJointAxisDir(JointHandle joint, int axis_num, const Fvector& axis) = 0;
+    virtual void SetJointFudgeFactor(JointHandle joint, float factor) = 0;
+    virtual void SetJointFeedback(JointHandle joint, SPhysicsJointFeedback* feedback) = 0;
+
+    virtual void GetJointAxisDir(JointHandle joint, int axis_num, Fvector& axis) const = 0;
+    virtual void GetJointAnchor(JointHandle joint, Fvector& anchor) const = 0;
+    virtual float GetJointAxisAngle(JointHandle joint, int axis_num) const = 0;
+    virtual float GetJointAxisAngleRate(JointHandle joint, int axis_num) const = 0;
+
+    virtual void GetBodyLinearVelocity(BodyHandle body, Fvector& out_vel) const = 0;
+    virtual void SetBodyLinearVelocity(BodyHandle body, const Fvector& vel) = 0;
+    
+    virtual void GetBodyAngularVelocity(BodyHandle body, Fvector& out_vel) const = 0;
+    virtual void SetBodyAngularVelocity(BodyHandle body, const Fvector& vel) = 0;
+
+    virtual void SetBodyGravityFactor(BodyHandle body, float factor) = 0;
+
+    virtual void ApplyLinearImpulse(BodyHandle body, const Fvector& impulse) = 0;
+    virtual void ApplyPointImpulse(BodyHandle body, const Fvector& impulse, const Fvector& point) = 0;
+    virtual void ApplyForce(BodyHandle body, const Fvector& force) = 0;
+    virtual void ApplyTorque(BodyHandle body, const Fvector& torque) = 0;
+
+    virtual bool IsBodyActive(BodyHandle body) const = 0;
+    virtual void ActivateBody(BodyHandle body) = 0;
+    virtual void DeactivateBody(BodyHandle body) = 0;
+
+    virtual float GetBodyMass(BodyHandle body) const = 0;
+
+    virtual void GetBodyPointVelocity(BodyHandle body, const Fvector& point, Fvector& velocity) const = 0;
+
+    virtual void SetBodyIgnoreStatic(BodyHandle body) = 0;
+    
+    virtual void GetBodyPosition(BodyHandle body, Fvector& position) const = 0;
+    virtual void SetBodyPosition(BodyHandle body, const Fvector& position) = 0;
+
+    virtual void GetBodyForce(BodyHandle body, Fvector& force) const = 0;
+    virtual void SetBodyForce(BodyHandle body, const Fvector& force) = 0;
+
+    virtual float GetBodyGravityFactor(BodyHandle body) const = 0;
+
+    virtual void* GetBodyUserData(BodyHandle body) const = 0;
+    virtual void SetBodyUserData(BodyHandle body, void* data) = 0;
 };
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore();

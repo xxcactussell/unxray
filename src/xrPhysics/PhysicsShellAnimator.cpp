@@ -3,10 +3,11 @@
 #include "PhysicsShellAnimatorBoneData.h"
 #include "Include/xrRender/KinematicsAnimated.h"
 #include "Include/xrRender/Kinematics.h"
-#include "PHDynamicData.h"
-
+#include "PHElement.h"
+#include "PHShell.h"
 #include "IPhysicsShellHolder.h"
 #include "xrCore/Animation/Bone.hpp"
+#include "xrPhysicsCore/IPhysicsCore.h"
 
 CPhysicsShellAnimator::CPhysicsShellAnimator(CPhysicsShell* _pPhysicsShell, CInifile const* ini, LPCSTR section)
     : m_pPhysicsShell(_pPhysicsShell)
@@ -24,8 +25,10 @@ CPhysicsShellAnimator::CPhysicsShellAnimator(CPhysicsShell* _pPhysicsShell, CIni
     }
 
     if (all_bones)
+    {
         for (auto& it : m_pPhysicsShell->Elements())
-            CreateJoint(it);
+            CreateJoint(smart_cast<CPHElement*>(it));
+    }
 
     if (ini->line_exist(section, "leave_joints") && xr_strcmp(ini->r_string(section, "leave_joints"), "all") == 0)
         return;
@@ -40,10 +43,15 @@ CPhysicsShellAnimator::~CPhysicsShellAnimator()
 {
     for (auto& it : m_bones_data)
     {
-        ((CPHShell*)(m_pPhysicsShell))->Island().DActiveIsland()->RemoveJoint(it.m_anim_fixed_dJointID);
-        dJointDestroy(it.m_anim_fixed_dJointID);
+        if (it.m_anim_fixed_joint != INVALID_JOINT_HANDLE)
+        {
+            GetPhysicsCore()->DestroyJoint(it.m_anim_fixed_joint);
+            it.m_anim_fixed_joint = INVALID_JOINT_HANDLE;
+        }
     }
+    m_bones_data.clear();
 }
+
 void CPhysicsShellAnimator::CreateJoints(LPCSTR controled)
 {
     [[maybe_unused]] IPhysicsShellHolder* obj = (*(m_pPhysicsShell->Elements().begin()))->PhysicsRefObject();
@@ -62,44 +70,39 @@ void CPhysicsShellAnimator::CreateJoints(LPCSTR controled)
         CreateJoint(e);
     }
 }
+
 void CPhysicsShellAnimator::CreateJoint(CPHElement* e)
 {
-    CPhysicsShellAnimatorBoneData PhysicsShellAnimatorBoneDataC;
-    PhysicsShellAnimatorBoneDataC.m_element = e;
-    PhysicsShellAnimatorBoneDataC.m_anim_fixed_dJointID = dJointCreateFixed(0, 0);
-    ((CPHShell*)(m_pPhysicsShell))
-        ->Island()
-        .DActiveIsland()
-        ->AddJoint(PhysicsShellAnimatorBoneDataC.m_anim_fixed_dJointID);
-    dJointAttach(
-        PhysicsShellAnimatorBoneDataC.m_anim_fixed_dJointID, PhysicsShellAnimatorBoneDataC.m_element->get_body(), 0);
-    dJointSetFixed(PhysicsShellAnimatorBoneDataC.m_anim_fixed_dJointID);
-    m_bones_data.push_back(PhysicsShellAnimatorBoneDataC);
+    if (!e) return;
+    
+    CPhysicsShellAnimatorBoneData data;
+    data.m_element = e;
+    data.m_anim_fixed_joint = INVALID_JOINT_HANDLE;
+    m_bones_data.push_back(data);
 }
+
 void CPhysicsShellAnimator::OnFrame()
 {
     m_pPhysicsShell->Enable();
 
-    for (auto it : m_bones_data)
+    for (auto& it : m_bones_data)
     {
+        if (!it.m_element) continue;
+
         Fmatrix target_obj_posFmatrixS;
         CBoneInstance& B = m_pPhysicsShell->PKinematics()->LL_GetBoneInstance(it.m_element->m_SelfID);
-// B.Callback_overwrite = FALSE;
-// B.Callback = 0;
-#pragma todo("reset callback?")
+
         B.set_callback(B.callback_type(), nullptr, B.callback_param(), false);
 
         m_pPhysicsShell->PKinematics()->CalculateBones_Invalidate();
         m_pPhysicsShell->PKinematics()->CalculateBones(true);
 
         target_obj_posFmatrixS.mul_43(m_StartXFORM, B.mTransform);
-        dQuaternion target_obj_quat_dQuaternionS;
-        dMatrix3 ph_mat;
-        PHDynamicData::FMXtoDMX(target_obj_posFmatrixS, ph_mat);
-        dQfromR(target_obj_quat_dQuaternionS, ph_mat);
+        
         Fvector mc;
         it.m_element->CPHGeometryOwner::get_mc_vs_transform(mc, target_obj_posFmatrixS);
-        dJointSetFixedQuaternionPos(it.m_anim_fixed_dJointID, target_obj_quat_dQuaternionS, &mc.x);
+        target_obj_posFmatrixS.c = mc;
+
+        it.m_element->SetTransform(target_obj_posFmatrixS, mh_unspecified);
     }
-    //(*(m_pPhysicsShell->Elements().begin()))->PhysicsRefObject()->XFORM().set(m_pPhysicsShell->mXFORM);
 }

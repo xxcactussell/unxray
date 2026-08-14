@@ -4,6 +4,9 @@
 #include "Physics.h"
 #include "IPhysicsShellHolder.h"
 #include "PHCollideValidator.h"
+#include "xrPhysicsCore/IPhysicsCore.h"
+#include <cmath>
+
 void ActivateShapeExplosive(IPhysicsShellHolder* self_obj, const Fvector& size, Fvector& out_size, Fvector& in_out_pos)
 {
     //////////////
@@ -12,7 +15,9 @@ void ActivateShapeExplosive(IPhysicsShellHolder* self_obj, const Fvector& size, 
 
     CPHCollideValidator::SetCharacterClassNotCollide(activation_shape);
 
-    dBodySetGravityMode(activation_shape.ODEBody(), 0);
+    // Отключаем гравитацию для формы активации через новое физическое ядро
+    GetPhysicsCore()->SetBodyGravityFactor(activation_shape.GetBodyHandle(), 0.0f);
+    
     activation_shape.Activate(size, 1, 1.f, float(M_PI) / 8.f);
     in_out_pos.set(activation_shape.Position());
     activation_shape.Size(out_size);
@@ -26,6 +31,7 @@ void ActivateShapePhysShellHolder(
     CPHActivationShape activation_shape;
     activation_shape.Create(in_pos, in_size, obj);
     activation_shape.set_rotation(in_xform);
+    
     if (obj->ObjectPPhysicsShell())
     {
         activation_shape.collide_bits() = obj->ObjectPPhysicsShell()->collide_bits();
@@ -40,11 +46,11 @@ void ActivateShapePhysShellHolder(
 #ifdef DEBUG
     if (!valid_pos(out_pos, phBoundaries))
     {
-        Msg("not valid position	%f,%f,%f", out_pos.x, out_pos.y, out_pos.z);
-        Msg("size	%f,%f,%f", in_size.x, in_size.y, in_size.z);
+        Msg("not valid position %f,%f,%f", out_pos.x, out_pos.y, out_pos.z);
+        Msg("size   %f,%f,%f", in_size.x, in_size.y, in_size.z);
         Msg("Object: %s", obj->ObjectName());
         Msg("Visual: %s", obj->ObjectNameVisual());
-        // Msg("Object	pos	%f,%f,%f",Position().x,Position().y,Position().z);
+        // Msg("Object  pos %f,%f,%f",Position().x,Position().y,Position().z);
     }
 #endif // DEBUG
 }
@@ -60,8 +66,10 @@ bool ActivateShapeCharacterPhysicsSupport(Fvector& out_pos, const Fvector& vbox,
     }
     if (set_rotation)
         activation_shape.set_rotation(mXFORM);
+        
     bool ret = activation_shape.Activate(vbox, 1, 1.f, float(M_PI) / 8.f);
     out_pos.set(activation_shape.Position());
     activation_shape.Destroy();
+    
     return ret;
 }

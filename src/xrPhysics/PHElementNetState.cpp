@@ -5,6 +5,7 @@
 #include "PHObject.h"
 #include "PHWorld.h"
 #include "PHShell.h"
+#include "xrPhysicsCore/IPhysicsCore.h"
 
 void CPHElement::get_State(SPHNetState& state)
 {
@@ -16,13 +17,18 @@ void CPHElement::get_State(SPHNetState& state)
     get_AngularVel(state.angular_vel);
     getForce(state.force);
     getTorque(state.torque);
-    if (!isActive())
+    
+    // Добавили безопасную проверку m_body
+    if (!isActive() || m_body == INVALID_BODY_HANDLE)
     {
         state.enabled = false;
         return;
     }
-    state.enabled = !!dBodyIsEnabled(m_body);
+    
+    // Заменили dBodyIsEnabled
+    state.enabled = GetPhysicsCore()->IsBodyActive(m_body);
 }
+
 void CPHElement::set_State(const SPHNetState& state)
 {
     // bUpdate=true;
@@ -37,20 +43,30 @@ void CPHElement::set_State(const SPHNetState& state)
     set_AngularVel(state.angular_vel);
     setForce(state.force);
     setTorque(state.torque);
+    
     if (!isActive())
         return;
+        
 #if 1
-    if (state.enabled && !dBodyIsEnabled(m_body))
+    if (m_body != INVALID_BODY_HANDLE)
     {
-        dBodyEnable(m_body);
-        m_shell->EnableObject(0);
-    }
-    if (!state.enabled && dBodyIsEnabled(m_body))
-    {
-        m_shell->DisableObject();
-        Disable();
+        bool is_active = GetPhysicsCore()->IsBodyActive(m_body);
+        
+        // Заменили dBodyEnable
+        if (state.enabled && !is_active)
+        {
+            GetPhysicsCore()->ActivateBody(m_body);
+            m_shell->EnableObject(0);
+        }
+        // Заменили dBodyIsEnabled
+        if (!state.enabled && is_active)
+        {
+            m_shell->DisableObject();
+            Disable();
+        }
     }
 #endif
+
     CPHDisablingFull::Reinit();
     m_flags.set(flUpdate, TRUE);
 }

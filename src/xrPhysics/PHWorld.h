@@ -6,7 +6,7 @@
 #include "PHUpdateObject.h"
 #include "IPHWorld.h"
 #include "xrScriptEngine/ScriptExporter.hpp"
-#include "xrPhysicsCore/IPhysicsCore.h" // Наш интерфейс Jolt
+#include "xrPhysicsCore/IPhysicsCore.h"
 
 struct SGameMtlPair;
 class CPHCommander;
@@ -80,8 +80,8 @@ public:
     float m_gravity;
 
 private:
-    ContactCallbackFun* m_default_contact_shotmark;
-    ContactCallbackFun* m_default_character_contact_shotmark;
+    ObjectContactCallbackFun* m_default_contact_shotmark;
+    ObjectContactCallbackFun* m_default_character_contact_shotmark;
     PhysicsStepTimeCallback* physics_step_time_callback;
 
 public:
@@ -120,10 +120,10 @@ public:
     IC u16 StepsShortCnt() { return m_steps_short_num; }
     u64& StepsNum() { return m_steps_num; }
     float FrameTime() { return m_frame_time; }
-    ContactCallbackFun* default_contact_shotmark() { return m_default_contact_shotmark; }
-    ContactCallbackFun* default_character_contact_shotmark() { return m_default_character_contact_shotmark; }
-    void set_default_contact_shotmark(ContactCallbackFun* f) { m_default_contact_shotmark = f; }
-    void set_default_character_contact_shotmark(ContactCallbackFun* f) { m_default_character_contact_shotmark = f; }
+    ObjectContactCallbackFun* default_contact_shotmark() { return m_default_contact_shotmark; }
+    ObjectContactCallbackFun* default_character_contact_shotmark() { return m_default_character_contact_shotmark; }
+    void set_default_contact_shotmark(ObjectContactCallbackFun* f) { m_default_contact_shotmark = f; }
+    void set_default_character_contact_shotmark(ObjectContactCallbackFun* f) { m_default_character_contact_shotmark = f; }
     void NetRelcase(CPhysicsShell* s);
     CObjectSpace& ObjectSpace()
     {

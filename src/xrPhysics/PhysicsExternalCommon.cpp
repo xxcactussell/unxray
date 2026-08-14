@@ -1,29 +1,36 @@
 #include "StdAfx.h"
 #include "PhysicsExternalCommon.h"
 #include "ExtendedGeom.h"
-#include "MathUtilsOde.h"
-bool ContactShotMarkGetEffectPars(dContactGeom* c, dxGeomUserData*& data, float& vel_cret, bool& b_invert_normal)
-{
-    dBodyID b = dGeomGetBody(c->g1);
+#include "Geometry.h"
+#include "xrPhysicsCore/IPhysicsCore.h"
 
+bool ContactShotMarkGetEffectPars(const Fvector& pos, const Fvector& normal, CPhysicsGeom* g1, CPhysicsGeom* g2, CPhysicsGeom*& data, float& vel_cret, bool& b_invert_normal)
+{
+    if (!g1 || !g2) return false;
+
+    BodyHandle b = g1->get_body();
     b_invert_normal = false;
-    if (!b)
+    
+    if (b == INVALID_BODY_HANDLE)
     {
-        b = dGeomGetBody(c->g2);
-        data = dGeomGetUserData(c->g2);
+        b = g2->get_body();
+        data = g2;
         b_invert_normal = true;
     }
     else
     {
-        data = dGeomGetUserData(c->g1);
+        data = g1;
     }
-    if (!b)
+    
+    if (b == INVALID_BODY_HANDLE)
         return false;
 
-    dVector3 vel;
-    dMass m;
-    dBodyGetMass(b, &m);
-    dBodyGetPointVel(b, c->pos[0], c->pos[1], c->pos[2], vel);
-    vel_cret = _abs(dDOT(vel, c->normal)) * _sqrt(m.mass);
+    Fvector vel;
+    float mass = GetPhysicsCore()->GetBodyMass(b);
+    
+    // Получаем скорость тела в конкретной точке контакта
+    GetPhysicsCore()->GetBodyPointVelocity(b, pos, vel);
+    
+    vel_cret = _abs(vel.dotproduct(normal)) * _sqrt(mass);
     return true;
 }

@@ -5,6 +5,8 @@
 #include "xrCore/_vector3d.h"
 #include "xrCommon/xr_vector.h"
 
+#include "xrPhysicsCore/IPhysicsCore.h" 
+
 #ifdef XRAY_STATIC_BUILD
 #   define XRCDB_API
 #else
@@ -17,9 +19,6 @@
 
 // forward declarations
 class CFrustum;
-namespace Opcode {}
-
-typedef void* PhysicsShapeHandle;
 
 struct Fbox3;
 using Fbox = Fbox3;

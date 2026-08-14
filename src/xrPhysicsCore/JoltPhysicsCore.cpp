@@ -7,16 +7,24 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/Shape/Shape.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Collision/CollisionDispatch.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
+#include <Jolt/Physics/Body/BodyLockMulti.h>
+
+#include <Jolt/Physics/Constraints/PointConstraint.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <Jolt/Physics/Constraints/SliderConstraint.h>
+#include <Jolt/Physics/Constraints/SixDOFConstraint.h>
 
 #ifdef _MSC_VER
 #   define PHYSICS_CORE_API __declspec(dllexport)
 #else
 #   define PHYSICS_CORE_API __attribute__((visibility("default")))
 #endif
-
 
 JoltPhysicsCore::~JoltPhysicsCore() 
 {
@@ -38,7 +46,6 @@ void JoltPhysicsCore::Initialize()
     const uint32_t cMaxBodyPairs = 10240;
     const uint32_t cMaxContactConstraints = 10240;
 
-    // Убрали разыменование (*), так как фильтры теперь являются значениями, а не указателями
     m_physics_system->Init(cMaxBodies, cNumBodyMutexes, cMaxBodyPairs, cMaxContactConstraints,
         m_broad_phase_layer_interface,
         m_object_vs_broadphase_layer_filter,
@@ -53,6 +60,13 @@ void JoltPhysicsCore::Step(float delta_time)
 
 void JoltPhysicsCore::Destroy() 
 {
+    for (auto& pair : m_constraints) {
+        if (m_physics_system && pair.second) {
+            m_physics_system->RemoveConstraint(pair.second);
+        }
+    }
+    m_constraints.clear();
+
     if (m_physics_system) {
         delete m_physics_system;
         m_physics_system = nullptr;
@@ -70,7 +84,6 @@ void JoltPhysicsCore::Destroy()
         JPH::Factory::sInstance = nullptr;
     }
 }
-
 
 struct CDB_TRI_Mock {
     u32 verts[3];
@@ -216,6 +229,76 @@ BodyHandle JoltPhysicsCore::CreateBox(const Fvector& half_extents, const Fvector
     body_interface.AddBody(body->GetID(), JPH::EActivation::Activate);
     
     return body->GetID().GetIndexAndSequenceNumber();
+}
+
+BodyHandle JoltPhysicsCore::CreateSphere(float radius, const Fvector& position, float mass) {
+    if (!m_physics_system) return INVALID_BODY_HANDLE;
+
+    JPH::SphereShapeSettings shape_settings(radius);
+    JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
+    
+    JPH::BodyCreationSettings body_settings(
+        shape_result.Get(), 
+        JPH::Vec3(position.x, position.y, position.z), 
+        JPH::Quat::sIdentity(), 
+        JPH::EMotionType::Dynamic, 
+        Layers::MOVING
+    );
+
+    body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+    body_settings.mMassPropertiesOverride.mMass = mass;
+
+    JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
+    m_physics_system->GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);
+    
+    return body->GetID().GetIndexAndSequenceNumber();
+}
+
+BodyHandle JoltPhysicsCore::CreateCylinder(float radius, float half_height, const Fvector& position, float mass) {
+    if (!m_physics_system) return INVALID_BODY_HANDLE;
+
+    JPH::CylinderShapeSettings shape_settings(half_height, radius);
+    JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
+    
+    JPH::BodyCreationSettings body_settings(
+        shape_result.Get(), 
+        JPH::Vec3(position.x, position.y, position.z), 
+        JPH::Quat::sIdentity(), 
+        JPH::EMotionType::Dynamic, 
+        Layers::MOVING
+    );
+
+    body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+    body_settings.mMassPropertiesOverride.mMass = mass;
+
+    JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
+    m_physics_system->GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);
+    
+    return body->GetID().GetIndexAndSequenceNumber();
+}
+
+void JoltPhysicsCore::GetBoxExtents(BodyHandle body_handle, Fvector& out_extents) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    const JPH::Shape* shape = m_physics_system->GetBodyInterface().GetShape(id).GetPtr();
+    if (shape->GetSubType() == JPH::EShapeSubType::Box) {
+        const JPH::BoxShape* box = static_cast<const JPH::BoxShape*>(shape);
+        JPH::Vec3 extents = box->GetHalfExtent();
+        out_extents.set(extents.GetX(), extents.GetY(), extents.GetZ());
+    }
+}
+
+void JoltPhysicsCore::SetBoxExtents(BodyHandle body_handle, const Fvector& extents) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    JPH::BoxShapeSettings shape_settings(JPH::Vec3(extents.x, extents.y, extents.z));
+    JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
+    
+    if (shape_result.IsValid()) {
+        m_physics_system->GetBodyInterface().SetShape(id, shape_result.Get(), false, JPH::EActivation::Activate);
+    }
 }
 
 void JoltPhysicsCore::DestroyBody(BodyHandle body_handle) {
@@ -387,8 +470,380 @@ void JoltPhysicsCore::GetCDBModelBounds(PhysicsShapeHandle handle, Fvector& out_
     out_extents.set(bounds.GetExtent().GetX(), bounds.GetExtent().GetY(), bounds.GetExtent().GetZ());
 }
 
+// ============================================================================
+// JOINT IMPLEMENTATIONS (NEW UNIVERSAL)
+// ============================================================================
+
+JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle body2, const Fvector& anchor, const Fvector& axis0, const Fvector& axis1, const Fvector& axis2, const Fvector& limits_lo, const Fvector& limits_hi) 
+{
+    if (!m_physics_system) return INVALID_JOINT_HANDLE;
+
+    JPH::BodyLockRead lock1(m_physics_system->GetBodyLockInterface(), JPH::BodyID(body1));
+    JPH::BodyLockRead lock2(m_physics_system->GetBodyLockInterface(), JPH::BodyID(body2));
+    
+    const JPH::Body* b1 = (body1 == INVALID_BODY_HANDLE) ? &JPH::Body::sFixedToWorld : (lock1.Succeeded() ? &lock1.GetBody() : nullptr);
+    const JPH::Body* b2 = (body2 == INVALID_BODY_HANDLE) ? &JPH::Body::sFixedToWorld : (lock2.Succeeded() ? &lock2.GetBody() : nullptr);
+
+    if (!b1 || !b2) return INVALID_JOINT_HANDLE;
+
+    JPH::Vec3 j_anchor(anchor.x, anchor.y, anchor.z);
+    JPH::Constraint* constraint = nullptr;
+
+    switch (type) {
+        case 0: { // ball
+            JPH::PointConstraintSettings settings;
+            settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+            settings.mPoint1 = settings.mPoint2 = j_anchor;
+            constraint = settings.Create(*const_cast<JPH::Body*>(b1), *const_cast<JPH::Body*>(b2));
+            break;
+        }
+        case 1: { // hinge
+            JPH::HingeConstraintSettings settings;
+            settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+            settings.mPoint1 = settings.mPoint2 = j_anchor;
+            
+            JPH::Vec3 j_axis(axis0.x, axis0.y, axis0.z);
+            settings.mHingeAxis1 = settings.mHingeAxis2 = j_axis.Normalized();
+            settings.mNormalAxis1 = settings.mNormalAxis2 = settings.mHingeAxis1.GetNormalizedPerpendicular();
+            
+            settings.mLimitsMin = limits_lo.x;
+            settings.mLimitsMax = limits_hi.x;
+            
+            constraint = settings.Create(*const_cast<JPH::Body*>(b1), *const_cast<JPH::Body*>(b2));
+            break;
+        }
+        case 4: { // slider
+            JPH::SliderConstraintSettings settings;
+            settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+            settings.mPoint1 = settings.mPoint2 = j_anchor;
+            
+            JPH::Vec3 j_axis(axis0.x, axis0.y, axis0.z);
+            settings.mSliderAxis1 = settings.mSliderAxis2 = j_axis.Normalized();
+            settings.mNormalAxis1 = settings.mNormalAxis2 = settings.mSliderAxis1.GetNormalizedPerpendicular();
+            
+            settings.mLimitsMin = limits_lo.x;
+            settings.mLimitsMax = limits_hi.x;
+            
+            constraint = settings.Create(*const_cast<JPH::Body*>(b1), *const_cast<JPH::Body*>(b2));
+            break;
+        }
+        case 2: // hinge2
+        case 3: // full_control
+        { 
+            JPH::SixDOFConstraintSettings settings;
+            settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+            settings.mPosition1 = settings.mPosition2 = j_anchor;
+            
+            JPH::Vec3 j_axis0 = JPH::Vec3(axis0.x, axis0.y, axis0.z).Normalized();
+            JPH::Vec3 j_axis1(axis1.x, axis1.y, axis1.z);
+            j_axis1 = (j_axis1.LengthSq() > 0.001f) ? j_axis1.Normalized() : j_axis0.GetNormalizedPerpendicular();
+
+            settings.mAxisX1 = settings.mAxisX2 = j_axis0;
+            settings.mAxisY1 = settings.mAxisY2 = j_axis1;
+            
+            // Лямбда для безопасного назначения лимитов SixDOF осей
+            auto apply_limit = [&](JPH::SixDOFConstraintSettings::EAxis axis, float lo, float hi) {
+                if (lo <= -M_PI && hi >= M_PI) {
+                    settings.MakeFreeAxis(axis);
+                } else if (lo == hi || lo > hi) {
+                    settings.MakeFixedAxis(axis);
+                } else {
+                    settings.mLimitMin[(int)axis] = lo;
+                    settings.mLimitMax[(int)axis] = hi;
+                }
+            };
+
+            apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationX, limits_lo.x, limits_hi.x);
+            apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationY, limits_lo.y, limits_hi.y);
+            
+            if (type == 3) {
+                apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationZ, limits_lo.z, limits_hi.z);
+            } else {
+                settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::RotationZ);
+            }
+
+            constraint = settings.Create(*const_cast<JPH::Body*>(b1), *const_cast<JPH::Body*>(b2));
+            break;
+        }
+    }
+
+    if (constraint) {
+        m_physics_system->AddConstraint(constraint);
+        JointHandle handle = m_next_joint_handle++;
+        m_constraints[handle] = constraint;
+        return handle;
+    }
+
+    return INVALID_JOINT_HANDLE;
+}
+
+void JoltPhysicsCore::DestroyJoint(JointHandle joint) 
+{
+    if (!m_physics_system) return;
+
+    auto it = m_constraints.find(joint);
+    if (it != m_constraints.end()) {
+        m_physics_system->RemoveConstraint(it->second);
+        m_constraints.erase(it);
+    }
+}
+
+void JoltPhysicsCore::SetJointLimits(JointHandle joint, int axis_num, float lo, float hi) 
+{
+    auto it = m_constraints.find(joint);
+    if (it == m_constraints.end()) return;
+
+    JPH::Constraint* c = it->second.GetPtr();
+    if (c->GetSubType() == JPH::EConstraintSubType::Hinge) {
+        static_cast<JPH::HingeConstraint*>(c)->SetLimits(lo, hi);
+    } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {
+        static_cast<JPH::SliderConstraint*>(c)->SetLimits(lo, hi);
+    } else if (c->GetSubType() == JPH::EConstraintSubType::SixDOF) {
+        // 
+    }
+}
+
+void JoltPhysicsCore::SetJointMotor(JointHandle joint, int axis_num, float force, float velocity) 
+{
+    auto it = m_constraints.find(joint);
+    if (it == m_constraints.end()) return;
+
+    JPH::Constraint* c = it->second.GetPtr();
+    bool active = (force > 0.0f || velocity > 0.0f);
+
+    if (c->GetSubType() == JPH::EConstraintSubType::Hinge) {
+        auto* hinge = static_cast<JPH::HingeConstraint*>(c);
+        hinge->SetMotorState(active ? JPH::EMotorState::Velocity : JPH::EMotorState::Off);
+        if (active) hinge->SetTargetAngularVelocity(velocity);
+    } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {
+        auto* slider = static_cast<JPH::SliderConstraint*>(c);
+        slider->SetMotorState(active ? JPH::EMotorState::Velocity : JPH::EMotorState::Off);
+        if (active) slider->SetTargetVelocity(velocity);
+    } else if (c->GetSubType() == JPH::EConstraintSubType::SixDOF) {
+        auto* six = static_cast<JPH::SixDOFConstraint*>(c);
+        auto axis = (axis_num == 0) ? JPH::SixDOFConstraintSettings::EAxis::RotationX :
+                    (axis_num == 1) ? JPH::SixDOFConstraintSettings::EAxis::RotationY :
+                                      JPH::SixDOFConstraintSettings::EAxis::RotationZ;
+        six->SetMotorState(axis, active ? JPH::EMotorState::Velocity : JPH::EMotorState::Off);
+    }
+}
+
+void JoltPhysicsCore::SetJointSpringDamping(JointHandle joint, int axis_num, float erp, float cfm) {
+    // В Jolt упругость задается через SpringSettings (Frequency/Damping) 
+    // Заглушка, если потребуется тонкая настройка для специфических суставов машин.
+}
+
+void JoltPhysicsCore::SetJointAxisDir(JointHandle joint, int axis_num, const Fvector& axis) {}
+void JoltPhysicsCore::SetJointFudgeFactor(JointHandle joint, float factor) {}
+void JoltPhysicsCore::SetJointFeedback(JointHandle joint, SPhysicsJointFeedback* feedback) {}
+
+void JoltPhysicsCore::GetJointAxisDir(JointHandle joint, int axis_num, Fvector& axis) const { axis.set(0, 1, 0); }
+void JoltPhysicsCore::GetJointAnchor(JointHandle joint, Fvector& anchor) const { anchor.set(0, 0, 0); }
+
+float JoltPhysicsCore::GetJointAxisAngle(JointHandle joint, int axis_num) const {
+    auto it = m_constraints.find(joint);
+    if (it == m_constraints.end()) return 0.0f;
+    
+    JPH::Constraint* c = it->second.GetPtr();
+    if (c->GetSubType() == JPH::EConstraintSubType::Hinge) {
+        return static_cast<JPH::HingeConstraint*>(c)->GetCurrentAngle();
+    } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {
+        return static_cast<JPH::SliderConstraint*>(c)->GetCurrentPosition();
+    }
+    return 0.0f;
+}
+
+float JoltPhysicsCore::GetJointAxisAngleRate(JointHandle joint, int axis_num) const {
+    return 0.0f;
+}
+void JoltPhysicsCore::GetBodyLinearVelocity(BodyHandle body_handle, Fvector& out_vel) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
+    
+    JPH::Vec3 vel = body_interface.GetLinearVelocity(id);
+    out_vel.set(vel.GetX(), vel.GetY(), vel.GetZ());
+}
+
+void JoltPhysicsCore::SetBodyLinearVelocity(BodyHandle body_handle, const Fvector& vel) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
+    
+    body_interface.SetLinearVelocity(id, JPH::Vec3(vel.x, vel.y, vel.z));
+}
+
+void JoltPhysicsCore::GetBodyAngularVelocity(BodyHandle body_handle, Fvector& out_vel) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
+    
+    JPH::Vec3 vel = body_interface.GetAngularVelocity(id);
+    out_vel.set(vel.GetX(), vel.GetY(), vel.GetZ());
+}
+
+void JoltPhysicsCore::SetBodyAngularVelocity(BodyHandle body_handle, const Fvector& vel) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
+    
+    body_interface.SetAngularVelocity(id, JPH::Vec3(vel.x, vel.y, vel.z));
+}
+
+void JoltPhysicsCore::SetBodyGravityFactor(BodyHandle body_handle, float factor) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().SetGravityFactor(id, factor);
+}
+
+void JoltPhysicsCore::ApplyLinearImpulse(BodyHandle body_handle, const Fvector& impulse) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().AddImpulse(id, JPH::Vec3(impulse.x, impulse.y, impulse.z));
+}
+
+void JoltPhysicsCore::ApplyPointImpulse(BodyHandle body_handle, const Fvector& impulse, const Fvector& point) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().AddImpulse(id, 
+        JPH::Vec3(impulse.x, impulse.y, impulse.z), 
+        JPH::Vec3(point.x, point.y, point.z));
+}
+
+void JoltPhysicsCore::ApplyForce(BodyHandle body_handle, const Fvector& force) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().AddForce(id, JPH::Vec3(force.x, force.y, force.z));
+}
+
+void JoltPhysicsCore::ApplyTorque(BodyHandle body_handle, const Fvector& torque) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().AddTorque(id, JPH::Vec3(torque.x, torque.y, torque.z));
+}
+
+bool JoltPhysicsCore::IsBodyActive(BodyHandle body_handle) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return false;
+    JPH::BodyID id(body_handle);
+    return m_physics_system->GetBodyInterface().IsActive(id);
+}
+
+void JoltPhysicsCore::ActivateBody(BodyHandle body_handle) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().ActivateBody(id);
+}
+
+void JoltPhysicsCore::DeactivateBody(BodyHandle body_handle) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().DeactivateBody(id);
+}
+
+float JoltPhysicsCore::GetBodyMass(BodyHandle body_handle) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return 1.0f;
+    
+    JPH::BodyID id(body_handle);
+    return m_physics_system->GetBodyInterface().GetShape(id)->GetMassProperties().mMass;
+}
+
+void JoltPhysicsCore::GetBodyPointVelocity(BodyHandle body_handle, const Fvector& point, Fvector& velocity) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) {
+        velocity.set(0.f, 0.f, 0.f);
+        return;
+    }
+    
+    JPH::BodyID id(body_handle);
+    JPH::Vec3 jolt_pos(point.x, point.y, point.z);
+    
+    JPH::Vec3 jolt_vel = m_physics_system->GetBodyInterface().GetPointVelocity(id, jolt_pos);
+    
+    velocity.set(jolt_vel.GetX(), jolt_vel.GetY(), jolt_vel.GetZ());
+}
+
+void JoltPhysicsCore::SetBodyIgnoreStatic(BodyHandle body_handle) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    
+    m_physics_system->GetBodyInterface().SetObjectLayer(id, Layers::NON_MOVING);
+}
+
+void JoltPhysicsCore::GetBodyPosition(BodyHandle body_handle, Fvector& position) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) {
+        position.set(0.f, 0.f, 0.f);
+        return;
+    }
+    
+    JPH::BodyID id(body_handle);
+    JPH::Vec3 jolt_pos = m_physics_system->GetBodyInterface().GetPosition(id);
+    
+    position.set(jolt_pos.GetX(), jolt_pos.GetY(), jolt_pos.GetZ());
+}
+
+void JoltPhysicsCore::SetBodyPosition(BodyHandle body_handle, const Fvector& position) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().SetPosition(id, JPH::Vec3(position.x, position.y, position.z), JPH::EActivation::Activate);
+}
+
+void JoltPhysicsCore::GetBodyForce(BodyHandle body_handle, Fvector& force) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) {
+        force.set(0.f, 0.f, 0.f);
+        return;
+    }
+    force.set(0.f, 0.f, 0.f);
+}
+
+void JoltPhysicsCore::SetBodyForce(BodyHandle body_handle, const Fvector& force) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+
+    JPH::BodyID id(body_handle);
+    
+    JPH::Vec3 jolt_force(force.x, force.y, force.z);
+    m_physics_system->GetBodyInterface().AddForce(id, jolt_force);
+}
+
+float JoltPhysicsCore::GetBodyGravityFactor(BodyHandle body_handle) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return 1.0f;
+    JPH::BodyID id(body_handle);
+    return m_physics_system->GetBodyInterface().GetGravityFactor(id);
+}
+
+void* JoltPhysicsCore::GetBodyUserData(BodyHandle body_handle) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return nullptr;
+    
+    JPH::BodyID id(body_handle);
+    JPH::uint64 user_data = m_physics_system->GetBodyInterface().GetUserData(id);
+    
+    return reinterpret_cast<void*>(user_data);
+}
+
+void JoltPhysicsCore::SetBodyUserData(BodyHandle body_handle, void* data) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    JPH::BodyLockWrite lock(m_physics_system->GetBodyLockInterface(), id);
+    if (lock.Succeeded()) {
+        lock.GetBody().SetUserData(reinterpret_cast<JPH::uint64>(data));
+    }
+}
+
 static JoltPhysicsCore g_physics_core;
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore() {
-    return &g_physics_core;
+    static JoltPhysicsCore* g_physics_core = nullptr;
+    
+    if (!g_physics_core) {
+        g_physics_core = new JoltPhysicsCore();
+        g_physics_core->Initialize(); 
+    }
+    
+    return g_physics_core;
 }

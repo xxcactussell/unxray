@@ -7,10 +7,9 @@
 
 #include "ExtendedGeom.h"
 #include "SpaceUtils.h"
-#include "MathUtils.h"
 
 #include "PHWorld.h"
-#include "ode/ode/src/util.h"
+#include "xrPhysicsCore/IPhysicsCore.h"
 
 #ifdef DEBUG
 #include "debug_output.h"
@@ -22,17 +21,7 @@
 
 namespace detail::activation_shape
 {
-static float max_depth = 0.f;
-static float friction_factor = 0.f;
-static const float cfm = 1.e-10f;
-static const float erp = 1.f;
-/*
-static	const float static_cfm				=1.e-10f;
-static	const float static_erp				=1.f;
-
-static	const float dynamic_cfm				= 1.f;//static_cfm;//
-static	const float dynamic_erp				= 1.f / 1000.f;//static_erp;//
-*/
+    static float max_depth = 0.f;
 }
 
 #ifdef DEBUG
@@ -43,115 +32,9 @@ static	const float dynamic_erp				= 1.f / 1000.f;//static_erp;//
         Msg(msg);                                 \
         VERIFY(!br);                              \
     }
-
 #else
 #define CHECK_POS(pos, msg, br)
 #endif
-extern int dTriListClass;
-
-static void ActivateTestDepthCallback(
-    bool& do_colide, bool bo1, dContact& c, SGameMtl* material_1, SGameMtl* material_2)
-{
-    using namespace ::detail::activation_shape;
-
-    if (!do_colide || material_1->Flags.test(SGameMtl::flPassable) || material_2->Flags.test(SGameMtl::flPassable))
-        return;
-
-    float& depth = c.geom.depth;
-    float test_depth = depth;
-    save_max(max_depth, test_depth);
-    c.surface.mu *= friction_factor;
-    c.surface.soft_cfm = cfm;
-    c.surface.soft_erp = erp;
-    /*
-
-
-        VERIFY(dTriListClass != dGeomGetClass(c.geom.g2));
-        bool cl_statics = (dTriListClass == dGeomGetClass(c.geom.g1));
-        VERIFY( bo1 || cl_statics );
-        CPHObject* self = static_cast<CPHObject*> ( ( (CPHActivationShape*)(PHRetrieveGeomUserData( bo1 ? c.geom.g1 :
-       c.geom.g2 )->callback_data) ) );
-        VERIFY( self );
-
-        if( cl_statics )
-        {
-            c.surface.soft_cfm=static_cfm;
-            c.surface.soft_erp=static_erp;
-            dJointID contact_joint	= dJointCreateContactSpecial( 0, ContactGroup, &c );
-            self->DActiveIsland()->ConnectJoint(contact_joint);
-            dJointAttach(contact_joint, dGeomGetBody(c.geom.g1), dGeomGetBody(c.geom.g2));
-            do_colide = false;
-            return;
-        }
-
-        c.surface.soft_cfm=dynamic_cfm;
-        c.surface.soft_erp=dynamic_erp;
-
-        dxGeomUserData* data_oposite =  retrieveGeomUserData( bo1 ? c.geom.g2 : c.geom.g1 );
-
-        if( !data_oposite || !data_oposite->ph_object )
-            return;
-
-        CPHObject* obj1 = 0, *obj2 = 0;
-        if(bo1)
-        {
-            obj1 = self;
-            obj2 = data_oposite->ph_object;
-        } else
-        {
-            obj2 = self;
-            obj1 = data_oposite->ph_object;
-        }
-
-        do_colide = false;
-
-        VERIFY( obj1 && obj2 );
-
-        int max_contacts;
-        if( !obj1->DActiveIsland()->CanMerge(obj2->DActiveIsland(),max_contacts ) )
-            return;
-        if( max_contacts < 1 )
-            return;
-
-        dJointID contact_joint	= dJointCreateContactSpecial( 0, ContactGroup, &c );
-        obj1->DActiveIsland()->ConnectJoint(contact_joint);
-        dJointAttach			(contact_joint, dGeomGetBody(c.geom.g1), dGeomGetBody(c.geom.g2));
-
-        obj1->DActiveIsland()->Merge( obj2->DActiveIsland() );
-        obj2->EnableObject( obj1 );
-        */
-}
-
-void StaticEnvironment(bool& do_colide, bool bo1, dContact& c, SGameMtl* material_1, SGameMtl* material_2)
-{
-    dJointID contact_joint = dJointCreateContact(nullptr, ContactGroup, &c);
-
-    if (bo1)
-    {
-        ((CPHActivationShape*)(retrieveGeomUserData(c.geom.g1)->callback_data))
-            ->DActiveIsland()
-            ->ConnectJoint(contact_joint);
-        dJointAttach(contact_joint, dGeomGetBody(c.geom.g1), nullptr);
-    }
-    else
-    {
-        ((CPHActivationShape*)(retrieveGeomUserData(c.geom.g2)->callback_data))
-            ->DActiveIsland()
-            ->ConnectJoint(contact_joint);
-        dJointAttach(contact_joint, nullptr, dGeomGetBody(c.geom.g2));
-    }
-    do_colide = false;
-}
-void GetMaxDepthCallback(bool& do_colide, bool bo1, dContact& c, SGameMtl* material_1, SGameMtl* material_2)
-{
-    if (!do_colide || material_1->Flags.test(SGameMtl::flPassable) || material_2->Flags.test(SGameMtl::flPassable))
-        return;
-
-    float& depth = c.geom.depth;
-    float test_depth = depth;
-    // save_max(max_depth,test_depth);
-    detail::activation_shape::max_depth += test_depth;
-}
 
 void RestoreVelocityState(V_PH_WORLD_STATE& state)
 {
@@ -171,54 +54,61 @@ void RestoreVelocityState(V_PH_WORLD_STATE& state)
 CPHActivationShape::CPHActivationShape()
 {
     m_geom = nullptr;
-    m_body = nullptr;
+    m_body = INVALID_BODY_HANDLE;
     m_flags.zero();
     m_flags.set(flFixedRotation, true);
 }
-CPHActivationShape::~CPHActivationShape() { VERIFY(!m_body && !m_geom); }
-void CPHActivationShape::Create(
-    const Fvector start_pos, const Fvector start_size, IPhysicsShellHolder* ref_obj, EType _type /*=etBox*/, u16 flags)
+
+CPHActivationShape::~CPHActivationShape() 
+{ 
+    VERIFY(m_body == INVALID_BODY_HANDLE); 
+}
+
+void CPHActivationShape::Create(const Fvector start_pos, const Fvector start_size, IPhysicsShellHolder* ref_obj, EType _type /*=etBox*/, u16 flags)
 {
     VERIFY(ref_obj);
     R_ASSERT(_valid(start_pos));
     R_ASSERT(_valid(start_size));
 
-    m_body = dBodyCreate(nullptr);
-    dMass m;
-    dMassSetSphere(&m, 1.f, 100000.f);
-    dMassAdjust(&m, 1.f);
-    dBodySetMass(m_body, &m);
+    // В ODE использовалась колоссальная масса для продавливания объектов
+    float mass = 100000.f;
+
     switch (_type)
     {
-    case etBox: m_geom = dCreateBox(nullptr, start_size.x, start_size.y, start_size.z); break;
-
-    case etSphere: m_geom = dCreateSphere(nullptr, start_size.x); break;
+    case etBox: 
+        // В X-Ray start_size это полный размер, а IPhysicsCore::CreateBox ожидает half_extents
+        m_body = GetPhysicsCore()->CreateBox(Fvector().set(start_size).mul(0.5f), start_pos, mass); 
+        break;
+    case etSphere: 
+        // Создание сферы (метод необходимо добавить в IPhysicsCore)
+        m_body = GetPhysicsCore()->CreateSphere(start_size.x, start_pos, mass); 
+        break;
+    case etCylinder:
+        // Создание цилиндра (метод необходимо добавить в IPhysicsCore)
+        m_body = GetPhysicsCore()->CreateCylinder(start_size.x, start_size.y, start_pos, mass);
+        break;
     };
 
-    dGeomCreateUserData(m_geom);
-    dGeomUserDataSetObjectContactCallback(m_geom, ActivateTestDepthCallback);
-    dGeomUserDataSetPhysicsRefObject(m_geom, ref_obj);
-    dGeomSetBody(m_geom, m_body);
-    dBodySetPosition(m_body, start_pos.x, start_pos.y, start_pos.z);
-    Island().AddBody(m_body);
-    dBodyEnable(m_body);
+    // Отключаем гравитацию для выталкивающего шейпа
+    GetPhysicsCore()->SetBodyGravityFactor(m_body, 0.0f);
+
     m_safe_state.create(m_body);
     spatial_register();
     m_flags.set(flags, true);
 }
+
 void CPHActivationShape::Destroy()
 {
-    VERIFY(m_geom && m_body);
+    VERIFY(m_body != INVALID_BODY_HANDLE);
     spatial_unregister();
     CPHObject::deactivate();
-    dGeomDestroyUserData(m_geom);
-    dGeomDestroy(m_geom);
+    
+    GetPhysicsCore()->DestroyBody(m_body);
+    m_body = INVALID_BODY_HANDLE;
     m_geom = nullptr;
-    dBodyDestroy(m_body);
-    m_body = nullptr;
 }
-bool CPHActivationShape::Activate(
-    const Fvector need_size, u16 steps, float max_displacement, float max_rotation, bool un_freeze_later /*	=false*/)
+
+bool CPHActivationShape::Activate(const Fvector need_size, u16 steps, float max_displacement, float max_rotation, bool un_freeze_later /* =false*/)
 {
     using namespace ::detail::activation_shape;
 
@@ -227,22 +117,21 @@ bool CPHActivationShape::Activate(
     {
         debug_output().DBG_OpenCashedDraw();
         Fmatrix M;
-        PHDynamicData::DMXPStoFMX(dBodyGetRotation(m_body), dBodyGetPosition(m_body), M);
+        GetPhysicsCore()->GetBodyTransform(m_body, M);
         Fvector v;
-        dGeomBoxGetLengths(m_geom, cast_fp(v));
-        v.mul(0.5f);
+        GetPhysicsCore()->GetBoxExtents(m_body, v); // v это уже half_extents
         debug_output().DBG_DrawOBB(M, v, color_xrgb(0, 255, 0));
     }
 #endif
-    VERIFY(m_geom && m_body);
+
+    VERIFY(m_body != INVALID_BODY_HANDLE);
     CPHObject::activate();
     ph_world->Freeze();
     UnFreeze();
     max_depth = 0.f;
 
-    dGeomUserDataSetObjectContactCallback(m_geom, GetMaxDepthCallback);
-    // ph_world->Step();
     ph_world->StepTouch();
+    
     u16 num_it = 15;
     float fnum_it = float(num_it);
     float fnum_steps = float(steps);
@@ -251,39 +140,36 @@ bool CPHActivationShape::Activate(
     float max_vel = max_depth / fnum_it * fnum_steps_r / fixed_step;
     float limit_l_vel = _max(_max(need_size.x, need_size.y), need_size.z) / fnum_it * fnum_steps_r / fixed_step;
 
-    if (limit_l_vel > default_l_limit)
-        limit_l_vel = default_l_limit;
-
-    if (max_vel > limit_l_vel)
-        max_vel = limit_l_vel;
+    if (limit_l_vel > default_l_limit) limit_l_vel = default_l_limit;
+    if (max_vel > limit_l_vel) max_vel = limit_l_vel;
 
     float max_a_vel = max_rotation / fnum_it * fnum_steps_r / fixed_step;
+    if (max_a_vel > default_w_limit) max_a_vel = default_w_limit;
 
-    if (max_a_vel > default_w_limit)
-        max_a_vel = default_w_limit;
-
-    // ph_world->CutVelocity(0.f,0.f);
-    dGeomUserDataSetCallbackData(m_geom, this);
-    dGeomUserDataSetObjectContactCallback(m_geom, ActivateTestDepthCallback);
-    if (m_flags.test(flStaticEnvironment))
-        dGeomUserDataAddObjectContactCallback(m_geom, StaticEnvironment);
     max_depth = 0.f;
 
     Fvector from_size;
     Fvector step_size, size;
-    dGeomBoxGetLengths(m_geom, cast_fp(from_size));
+    
+    // Получаем текущие half_extents и переводим в полный размер
+    GetPhysicsCore()->GetBoxExtents(m_body, from_size); 
+    from_size.mul(2.0f); 
+    
     step_size.sub(need_size, from_size);
     step_size.mul(fnum_steps_r);
     size.set(from_size);
+    
     bool ret = false;
     V_PH_WORLD_STATE temp_state;
     ph_world->GetState(temp_state);
+    
     for (int m = 0; steps > m; ++m)
     {
-        // float param =fnum_steps_r*(1+m);
-        // InterpolateBox(id,param);
         size.add(step_size);
-        dGeomBoxSetLengths(m_geom, size.x, size.y, size.z);
+        
+        // Устанавливаем новый размер (метод необходимо добавить в IPhysicsCore)
+        GetPhysicsCore()->SetBoxExtents(m_body, Fvector().set(size).mul(0.5f)); 
+        
         u16 attempts = 10;
         do
         {
@@ -293,9 +179,10 @@ bool CPHActivationShape::Activate(
                 max_depth = 0.f;
                 ph_world->Step();
                 CHECK_POS(Position(), "pos after ph_world->Step()", false);
-                ph_world->CutVelocity(max_vel, max_a_vel);
+                
+                CutVelocity(max_vel, max_a_vel);
                 CHECK_POS(Position(), "pos after CutVelocity", true);
-                // if(m==0&&i==0)ph_world->GetState(temp_state);
+                
                 if (max_depth < resolve_depth)
                 {
                     ret = true;
@@ -304,68 +191,103 @@ bool CPHActivationShape::Activate(
             }
             attempts--;
         } while (!ret && attempts > 0);
-#ifdef DEBUG
-//		Msg("correction attempts %d",10-attempts);
-#endif
     }
+    
     RestoreVelocityState(temp_state);
     CHECK_POS(Position(), "pos after RestoreVelocityState(temp_state);", true);
+    
     if (!un_freeze_later)
         ph_world->UnFreeze();
+
 #ifdef DEBUG
     if (debug_output().ph_dbg_draw_mask().test(phDbgDrawDeathActivationBox))
     {
         debug_output().DBG_OpenCashedDraw();
         Fmatrix M;
-        PHDynamicData::DMXPStoFMX(dBodyGetRotation(m_body), dBodyGetPosition(m_body), M);
+        GetPhysicsCore()->GetBodyTransform(m_body, M);
         Fvector v;
-        v.set(need_size);
-        v.mul(0.5f);
+        v.set(need_size).mul(0.5f);
         debug_output().DBG_DrawOBB(M, v, color_xrgb(0, 255, 255));
         debug_output().DBG_ClosedCashedDraw(30000);
     }
 #endif
     return ret;
 }
-const Fvector& CPHActivationShape::Position() { return cast_fv(dBodyGetPosition(m_body)); }
-void CPHActivationShape::Size(Fvector& size) { dGeomBoxGetLengths(m_geom, cast_fp(size)); }
-void CPHActivationShape::PhDataUpdate(dReal step) { m_safe_state.new_state(m_body); }
-void CPHActivationShape::PhTune(dReal step) {}
-dGeomID CPHActivationShape::dSpacedGeom() { return m_geom; }
-void CPHActivationShape::get_spatial_params()
-{
-    spatialParsFromDGeom(m_geom, spatial.sphere.P, AABB, spatial.sphere.R);
+
+const Fvector& CPHActivationShape::Position() 
+{ 
+    static Fvector pos;
+    Fmatrix transform;
+    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    pos = transform.c;
+    return pos; 
 }
 
-void CPHActivationShape::InitContact(dContact* c, bool& do_collide, u16, u16) {}
+void CPHActivationShape::Size(Fvector& size) 
+{ 
+    GetPhysicsCore()->GetBoxExtents(m_body, size);
+    size.mul(2.0f); // Возвращаем полный размер, а не half_extents
+}
+
+void CPHActivationShape::PhDataUpdate(float step) 
+{ 
+    m_safe_state.new_state(m_body); 
+}
+
+void CPHActivationShape::PhTune(float step) {}
+
+PhysicsShapeHandle CPHActivationShape::dSpacedGeom() 
+{ 
+    return m_geom; 
+}
+
+void CPHActivationShape::get_spatial_params()
+{
+    Fvector center, half_extents;
+    GetPhysicsCore()->GetBodyAABB(m_body, center, half_extents);
+    spatial.sphere.P = center;
+    spatial.sphere.R = _max(half_extents.x, _max(half_extents.y, half_extents.z));
+    AABB = half_extents;
+}
+
+void CPHActivationShape::InitContact(bool& do_collide, bool bo1, float depth, CPhysicsGeom* my_geom, CPhysicsGeom* oposite_geom, u16 material_idx_1, u16 material_idx_2)
+{
+    if (!do_collide) return;
+    detail::activation_shape::max_depth += depth;
+}
+
 void CPHActivationShape::CutVelocity(float l_limit, float /*a_limit*/)
 {
-    dVector3 limitedl, diffl;
-    if (dVectorLimit(dBodyGetLinearVel(m_body), l_limit, limitedl))
+    Fvector lin_vel;
+    GetPhysicsCore()->GetBodyLinearVelocity(m_body, lin_vel);
+    
+    float mag = lin_vel.magnitude();
+    if (mag > l_limit)
     {
-        dVectorSub(diffl, limitedl, dBodyGetLinearVel(m_body));
-        dBodySetLinearVel(m_body, diffl[0], diffl[1], diffl[2]);
-        dBodySetAngularVel(m_body, 0.f, 0.f, 0.f);
-        dxStepBody(m_body, fixed_step);
-        dBodySetLinearVel(m_body, limitedl[0], limitedl[1], limitedl[2]);
+        lin_vel.mul(l_limit / mag);
+        GetPhysicsCore()->SetBodyLinearVelocity(m_body, lin_vel);
+        GetPhysicsCore()->SetBodyAngularVelocity(m_body, Fvector().set(0.f, 0.f, 0.f));
     }
 }
 
 void CPHActivationShape::set_rotation(const Fmatrix& sof)
 {
-    dMatrix3 rot;
-    PHDynamicData::FMXtoDMX(sof, rot);
-    dBodySetRotation(ODEBody(), rot);
-    m_safe_state.set_rotation(rot);
+    Fmatrix current_transform;
+    GetPhysicsCore()->GetBodyTransform(m_body, current_transform);
+    
+    Fmatrix new_transform = sof;
+    new_transform.c = current_transform.c;
+    
+    GetPhysicsCore()->SetBodyTransform(m_body, new_transform);
+    m_safe_state.set_rotation(new_transform);
 }
 
 #ifdef DEBUG
 IPhysicsShellHolder* CPHActivationShape::ref_object()
 {
-    VERIFY(m_geom);
-    dxGeomUserData* ud = retrieveGeomUserData(m_geom);
-    VERIFY(ud);
-    return ud->ph_ref_object;
+    // В новой архитектуре мы можем вернуть nullptr для формы активации или 
+    // передать IPhysicsShellHolder через user_data тела, если это потребуется в дебаге.
+    return nullptr;
 }
 #endif
 

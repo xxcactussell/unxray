@@ -100,9 +100,6 @@ void CPHWorld::Create(bool mt, CObjectSpace* os, CObjectList* lo)
     m_level_objects = lo;
     Device.AddSeqFrame(this, mt);
     m_commander = xr_new<CPHCommander>();
-
-    // Инициализация нового физического ядра
-    GetPhysicsCore()->Initialize();
     
     Mesh.Create();
 

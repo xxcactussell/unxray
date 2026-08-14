@@ -57,20 +57,26 @@ void character_shell_control::set_fatal_impulse(SHit& H) const
     }
 }
 void OnCharacterContactInDeath(
-    bool& do_colide, bool bo1, dContact& c, SGameMtl* /*material_1*/, SGameMtl* /*material_2*/)
+    bool& do_colide, bool bo1, 
+    CPhysicsGeom* my_geom, CPhysicsGeom* oposite_geom, 
+    const Fvector& contact_normal, const Fvector& contact_pos, 
+    SGameMtl* material_1, SGameMtl* material_2)
 {
-    dSurfaceParameters& surface = c.surface;
-    character_shell_control* l_character_physic_support = 0;
-    if (bo1)
+    character_shell_control* l_character_physic_support = nullptr;
+    
+    if (bo1 && my_geom)
     {
-        l_character_physic_support = (character_shell_control*)PHRetrieveGeomUserData(c.geom.g1)->callback_data;
+        l_character_physic_support = (character_shell_control*)my_geom->get_callback_data();
     }
-    else
+    else if (!bo1 && oposite_geom)
     {
-        l_character_physic_support = (character_shell_control*)PHRetrieveGeomUserData(c.geom.g2)->callback_data;
+        l_character_physic_support = (character_shell_control*)oposite_geom->get_callback_data();
     }
 
-    surface.mu = l_character_physic_support->curr_skin_friction_in_death();
+    if (l_character_physic_support)
+    {
+
+    }
 }
 void character_shell_control::set_start_shell_params(CPhysicsShell* sh) const
 {

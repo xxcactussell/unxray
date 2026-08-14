@@ -127,32 +127,33 @@ void CPhysicObject::stop_bones_sound()
     bones_snd_player->stop();
 }
 
-static CPhysicsShellHolder* retrive_collide_object(bool bo1, dContact& c)
+static CPhysicsShellHolder* retrive_collide_object(bool bo1, CPhysicsGeom* my_geom, CPhysicsGeom* oposite_geom)
 {
-    CPhysicsShellHolder* collide_obj = 0;
+    CPhysicsShellHolder* collide_obj = nullptr;
 
-    dxGeomUserData* ud = 0;
-    if (bo1)
-        ud = PHRetrieveGeomUserData(c.geom.g2);
-    else
-        ud = PHRetrieveGeomUserData(c.geom.g1);
+    if (oposite_geom)
+    {
+        collide_obj = smart_cast<CPhysicsShellHolder*>((IPhysicsShellHolder*)oposite_geom->get_callback_data());
+    }
 
-    if (ud)
-        collide_obj = static_cast<CPhysicsShellHolder*>(ud->ph_ref_object);
-    else
-        collide_obj = 0;
     return collide_obj;
 }
-static void door_ignore(bool& do_collide, bool bo1, dContact& c, SGameMtl* /*material_1*/, SGameMtl* /*material_2*/)
+
+static void door_ignore(
+    bool& do_colide, bool bo1, 
+    CPhysicsGeom* geom1, CPhysicsGeom* geom2, 
+    const Fvector& contact_normal, const Fvector& contact_pos, 
+    SGameMtl* material_1, SGameMtl* material_2
+)
 {
-    CPhysicsShellHolder* collide_obj = retrive_collide_object(bo1, c);
+    CPhysicsShellHolder* collide_obj = retrive_collide_object(bo1, geom1, geom2);
     if (!collide_obj || collide_obj->cast_actor())
         return;
 
     CPhysicsShell* ph_shell = collide_obj->PPhysicsShell();
     if (!ph_shell)
     {
-        do_collide = false; //? must be AI
+        do_colide = false; //? must be AI
         return;
     }
     VERIFY(ph_shell);
@@ -160,7 +161,7 @@ static void door_ignore(bool& do_collide, bool bo1, dContact& c, SGameMtl* /*mat
     if (ph_shell->HasTracedGeoms())
         return;
 
-    do_collide = false;
+    do_colide = false;
 }
 
 void CPhysicObject::set_door_ignore_dynamics()

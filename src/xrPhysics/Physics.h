@@ -14,6 +14,7 @@
 void BodyCutForce(BodyHandle body, float l_limit, float w_limit);
 float E_NLD(BodyHandle b1, BodyHandle b2, const Fvector& norm);
 float E_NL( BodyHandle b1, BodyHandle b2, const Fvector& norm );
+float E_NlS(BodyHandle body, const Fvector& norm, float norm_sign);
 
 void ApplyGravityAccel(BodyHandle body, const Fvector& accel);
 const float fix_ext_param = 10000.f;

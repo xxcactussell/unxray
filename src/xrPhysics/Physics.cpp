@@ -58,13 +58,55 @@ void BodyCutForce(BodyHandle body, float l_limit, float w_limit)
 
 float E_NlS(BodyHandle body, const Fvector& norm, float norm_sign) 
 {
-    // Заглушка. Позже реализуем через GetPhysicsCore()->GetBodyLinearVelocity(body)
-    return 0.f; 
+    if (body == INVALID_BODY_HANDLE) return 0.f;
+
+    Fvector vel;
+    GetPhysicsCore()->GetBodyLinearVelocity(body, vel);
+    
+    float mass = GetPhysicsCore()->GetBodyMass(body);
+    if (mass <= 0.f) return 0.f;
+
+    float vel_pr = vel.dotproduct(norm) * norm_sign;
+    
+    if (vel_pr > 0.f) return 0.f;
+
+    return (vel_pr * vel_pr * mass) / 2.f;
 }
 
 float E_NLD(BodyHandle b1, BodyHandle b2, const Fvector& norm) 
 {
-    return 0.f;
+    if (b1 == INVALID_BODY_HANDLE || b2 == INVALID_BODY_HANDLE) return 0.f;
+
+    Fvector vel1, vel2;
+    GetPhysicsCore()->GetBodyLinearVelocity(b1, vel1);
+    GetPhysicsCore()->GetBodyLinearVelocity(b2, vel2);
+
+    float m1 = GetPhysicsCore()->GetBodyMass(b1);
+    float m2 = GetPhysicsCore()->GetBodyMass(b2);
+
+    float vel_pr1 = vel1.dotproduct(norm);
+    float vel_pr2 = vel2.dotproduct(norm);
+
+    if (vel_pr1 > vel_pr2) return 0.f; 
+
+    Fvector impuls1 = vel1; impuls1.mul(m1);
+    Fvector impuls2 = vel2; impuls2.mul(m2);
+
+    Fvector c_mas_impuls;
+    c_mas_impuls.add(impuls1, impuls2);
+    
+    float cmass = m1 + m2;
+    if (cmass <= 0.f) return 0.f;
+
+    Fvector c_mass_vel = c_mas_impuls;
+    c_mass_vel.div(cmass);
+
+    float c_mass_vel_prg = c_mass_vel.dotproduct(norm);
+
+    float kin_energy_start = (vel_pr1 * vel_pr1 * m1) / 2.f + (vel_pr2 * vel_pr2 * m2) / 2.f;
+    float kin_energy_end = (c_mass_vel_prg * c_mass_vel_prg * cmass) / 2.f;
+
+    return (kin_energy_start - kin_energy_end);
 }
 
 float E_NL(BodyHandle b1, BodyHandle b2, const Fvector& norm)

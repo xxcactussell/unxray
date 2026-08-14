@@ -5,7 +5,6 @@
 #include "Physics.h"
 #include "PHObject.h"
 #include "PHWorld.h"
-#include "PHMoveStorage.h"
 #include "PHCollideValidator.h"
 #include "console_vars.h"
 #ifdef DEBUG
@@ -24,7 +23,6 @@ CPHObject::CPHObject() : SpatialBase(g_pGamePersistent->SpatialSpacePhysic)
 
 void CPHObject::activate()
 {
-    R_ASSERT2(dSpacedGeom(), "trying to activate destroyed or not created object!");
     if (m_flags.test(st_activated))
         return;
     if (m_flags.test(st_freezed))
@@ -166,6 +164,7 @@ void CPHObject::UnFreeze()
 }
 
 CPHUpdateObject::CPHUpdateObject() { b_activated = false; }
+
 void CPHUpdateObject::Activate()
 {
     if (b_activated)

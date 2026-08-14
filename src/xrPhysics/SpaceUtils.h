@@ -9,12 +9,17 @@ IC void spatialParsFromShape(PhysicsShapeHandle shape, Fvector& center, Fvector&
         center.set(0.f, 0.f, 0.f);
         AABB.set(0.f, 0.f, 0.f);
         radius = 0.f;
-        return;
+        return; 
     }
 
-    // Получаем центр и half-extents (размеры от центра до краев) напрямую из ядра
     GetPhysicsCore()->GetCDBModelBounds(shape, center, AABB);
     
-    // Радиус описывающей сферы (по максимальному габариту)
-    radius = _max(AABB.x, _max(AABB.y, AABB.z));
+    float sq_len = (AABB.x * AABB.x) + (AABB.y * AABB.y) + (AABB.z * AABB.z);
+    if (sq_len < 0.0001f)
+    {
+        radius = 100.f; 
+        return;
+    }
+    
+    radius = _sqrt(sq_len);
 }

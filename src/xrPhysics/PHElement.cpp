@@ -51,22 +51,52 @@ void CPHElement::add_Cylinder(const Fcylinder& V) { CPHGeometryOwner::add_Cylind
 
 void CPHElement::build()
 {
-    // FIXME: В будущем здесь потребуется сборка Jolt Compound Shape на основе m_geoms.
-    // Пока оставляем создание базового Box как точку опоры твердого тела.
-    Fvector half_extents = {0.5f, 0.5f, 0.5f};
     if (m_geoms.empty())
     {
+        // Фоллбэк только для пустышек
+        Fvector half_extents = {0.5f, 0.5f, 0.5f};
         m_body = GetPhysicsCore()->CreateBox(half_extents, m_mass_center, 1.f);
         Fix();
     }
     else
     {
         VERIFY2(m_mass > 0.f, "Element has bad mass");
-        m_body = GetPhysicsCore()->CreateBox(half_extents, m_mass_center, m_mass);
+
+        xr_vector<PhysicsShapeHandle> shapes;
+        xr_vector<Fmatrix> local_transforms;
+
+        for (CPhysicsGeom* geom : m_geoms)
+        {
+            if (geom->geometry())
+            {
+                shapes.push_back(geom->geometry());
+                
+                Fmatrix local_xform;
+                geom->get_local_form(local_xform);
+                local_transforms.push_back(local_xform);
+            }
+        }
+
+        if (shapes.empty())
+        {
+            // Защита от битых моделей без физики
+            m_body = GetPhysicsCore()->CreateBox({0.5f, 0.5f, 0.5f}, m_mass_center, m_mass);
+        }
+        else
+        {
+            PhysicsShapeHandle compound_shape = GetPhysicsCore()->CreateCompoundShape(
+                shapes.data(), 
+                local_transforms.data(), 
+                shapes.size()
+            );
+            
+            m_body = GetPhysicsCore()->CreateBodyFromShape(compound_shape, m_mass_center, m_mass);
+        }
     }
 
     VERIFY_BOUNDARIES2(m_mass_center, phBoundaries, PhysicsRefObject(), "m_mass_center");
 
+    // Применяем начальную трансформацию к собранному телу
     Fmatrix transform;
     transform.identity();
     transform.c = m_mass_center;

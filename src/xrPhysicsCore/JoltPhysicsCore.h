@@ -124,4 +124,6 @@ public:
 
     void SetBodyFixedRotation(BodyHandle body_handle) override;
     BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) override;
+    virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) override;
+    virtual BodyHandle CreateBodyFromShape(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) override;
 };

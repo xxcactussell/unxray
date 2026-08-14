@@ -8,9 +8,6 @@
 
 using namespace CDB;
 
-PhysicsShapeHandle shape;
-
-// Model building
 MODEL::MODEL() :
 #ifdef CONFIG_PROFILE_LOCKS
     pcs(xr_new<Lock>(MUTEX_PROFILE_ID(MODEL)))
@@ -22,10 +19,12 @@ MODEL::MODEL() :
 
 MODEL::~MODEL()
 {
-    syncronize(); // maybe model still in building
+    syncronize(); 
     status = S_INIT;
-    if (shape)
-        GetPhysicsCore()->DestroyCDBModel(shape);
+    
+    if (shape_handle)
+        GetPhysicsCore()->DestroyCDBModel(shape_handle);
+        
     xr_free(tris);
     tris_count = 0;
     xr_free(verts);
@@ -62,7 +61,6 @@ void MODEL::build(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callback* bc, vo
             ScopeLock lock{ pcs };
             build_internal(V, Vcnt, T, Tcnt, bc, bcp);
             status = S_READY;
-            // Msg("* xrCDB: cform build completed, memory usage: %d K", memory() / 1024);
         });
 
         while (S_INIT == status)
@@ -80,10 +78,12 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
 
     xr_free(verts);
     xr_free(tris);
-    if (shape)
+    
+    // ИСПРАВЛЕНИЕ: Очищаем shape_handle модели
+    if (shape_handle)
     {
-        GetPhysicsCore()->DestroyCDBModel(shape);
-        shape = nullptr;
+        GetPhysicsCore()->DestroyCDBModel(shape_handle);
+        shape_handle = nullptr;
     }
 
     // verts
@@ -103,16 +103,15 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
     // Release data pointers
     status = S_BUILD;
 
-    // Jolt integration: Create MeshShape from vertices and indices
-    shape = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count);
-    if (!shape)
+    shape_handle = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count);
+    if (!shape_handle)
     {
         xr_free(verts);
         xr_free(tris);
         return;
     }
 
-    GetPhysicsCore()->CreateStaticBody(shape, Fvector().set(0.f, 0.f, 0.f));
+    GetPhysicsCore()->CreateStaticBody(shape_handle, Fvector().set(0.f, 0.f, 0.f));
 }
 
 void MODEL::load_geom(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt)
@@ -224,10 +223,12 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
 
     xr_free(verts);
     xr_free(tris);
-    if (shape)
+    
+    // ИСПРАВЛЕНИЕ: Очищаем shape_handle перед десериализацией
+    if (shape_handle)
     {
-        GetPhysicsCore()->DestroyCDBModel(shape);
-        shape = nullptr;
+        GetPhysicsCore()->DestroyCDBModel(shape_handle);
+        shape_handle = nullptr;
     }
 
     verts = xr_alloc<Fvector>(verts_count);
@@ -239,14 +240,15 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
     CopyMemory(tris, rstream->pointer(), trisSize);
     rstream->advance(trisSize);
 
-    shape = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count);
-    if (!shape)
+    // ИСПРАВЛЕНИЕ: Сохраняем хэндл в поле экземпляра
+    shape_handle = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count);
+    if (!shape_handle)
     {
         FS.r_close(rstream);
         return false;
     }
 
-    GetPhysicsCore()->CreateStaticBody(shape, Fvector().set(0.f, 0.f, 0.f));
+    GetPhysicsCore()->CreateStaticBody(shape_handle, Fvector().set(0.f, 0.f, 0.f));
     
     status = S_READY;
 
@@ -258,10 +260,10 @@ void MODEL::deserialize_tree(IReader* rstream)
 {
     R_ASSERT(rstream);
 
-    if (shape)
+    if (shape_handle)
     {
-        GetPhysicsCore()->DestroyCDBModel(shape);
-        shape = nullptr;
+        GetPhysicsCore()->DestroyCDBModel(shape_handle);
+        shape_handle = nullptr;
     }
 
     status = S_READY;
@@ -276,7 +278,9 @@ size_t MODEL::memory()
     }
     size_t V = static_cast<size_t>(verts_count) * sizeof(Fvector);
     size_t T = static_cast<size_t>(tris_count) * sizeof(TRI);
-    size_t S = GetPhysicsCore()->GetShapeMemoryUsage(shape);
+    
+    size_t S = GetPhysicsCore()->GetShapeMemoryUsage(shape_handle);
+    
     return S + V + T + sizeof(*this);
 }
 

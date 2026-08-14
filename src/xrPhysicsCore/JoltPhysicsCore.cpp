@@ -11,6 +11,7 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/CollisionDispatch.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLockMulti.h>
@@ -42,7 +43,7 @@ void JoltPhysicsCore::Initialize()
 
     m_physics_system = new JPH::PhysicsSystem();
     const uint32_t cMaxBodies = 10240;
-    const uint32_t cNumBodyMutexes = 0; 
+    const uint32_t cNumBodyMutexes = 1024; 
     const uint32_t cMaxBodyPairs = 10240;
     const uint32_t cMaxContactConstraints = 10240;
 
@@ -103,10 +104,18 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
     JPH::IndexedTriangleList jolt_triangles;
     jolt_triangles.reserve(t_cnt);
     for (u32 i = 0; i < t_cnt; ++i) {
-        jolt_triangles.push_back(JPH::IndexedTriangle(tris[i].verts[0], tris[i].verts[1], tris[i].verts[2]));
+        jolt_triangles.push_back(JPH::IndexedTriangle(
+            tris[i].verts[0], 
+            tris[i].verts[1],
+            tris[i].verts[2],
+            0,
+            i
+        ));
     }
 
     JPH::MeshShapeSettings settings(jolt_vertices, jolt_triangles);
+    settings.mPerTriangleUserData = true;
+
     JPH::ShapeSettings::ShapeResult result = settings.Create();
 
     if (result.HasError()) {
@@ -139,22 +148,26 @@ long JoltPhysicsCore::GetShapeMemoryUsage(PhysicsShapeHandle handle)
 void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle, const Fvector& start, const Fvector& dir, float range, std::vector<CDBRaycastHit>& out_hits) 
 {
     if (!handle) return;
-    JPH::Shape* shape = static_cast<JPH::Shape*>(handle);
+    
+    JPH::MeshShape* mesh_shape = static_cast<JPH::MeshShape*>(handle);
 
     JPH::Vec3 j_start(start.x, start.y, start.z);
     JPH::Vec3 j_dir(dir.x * range, dir.y * range, dir.z * range);
     JPH::RayCast ray(j_start, j_dir);
 
     JPH::RayCastSettings settings;
+    settings.mBackFaceModeTriangles = JPH::EBackFaceMode::CollideWithBackFaces;
+    settings.mTreatConvexAsSolid = false;
+
     JPH::SubShapeIDCreator id_creator;
     JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
 
-    shape->CastRay(ray, settings, id_creator, collector);
+    mesh_shape->CastRay(ray, settings, id_creator, collector);
 
     for (const JPH::RayCastResult& hit : collector.mHits) {
         CDBRaycastHit cdb_hit;
         cdb_hit.range = hit.mFraction * range;
-        cdb_hit.tri_index = hit.mSubShapeID2.GetValue(); 
+        cdb_hit.tri_index = mesh_shape->GetTriangleUserData(hit.mSubShapeID2); 
         out_hits.push_back(cdb_hit);
     }
 }
@@ -165,7 +178,8 @@ void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle,
                                       std::vector<CDBRaycastHit>& out_hits) 
 {
     if (!handle) return;
-    JPH::Shape* shape = static_cast<JPH::Shape*>(handle);
+    
+    JPH::MeshShape* mesh_shape = static_cast<JPH::MeshShape*>(handle);
 
     JPH::Vec3 j_start(start.x, start.y, start.z);
     JPH::Vec3 j_dir(dir.x * range, dir.y * range, dir.z * range);
@@ -180,27 +194,125 @@ void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle,
     if (mode == CDBRayMode::Nearest) 
     {
         JPH::ClosestHitCollisionCollector<JPH::CastRayCollector> collector;
-        shape->CastRay(ray, settings, id_creator, collector);
+        mesh_shape->CastRay(ray, settings, id_creator, collector);
         if (collector.HadHit()) {
-            out_hits.push_back({ collector.mHit.mFraction * range, collector.mHit.mSubShapeID2.GetValue() });
+            out_hits.push_back({ 
+                collector.mHit.mFraction * range, 
+                mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2) 
+            });
         }
     } 
     else if (mode == CDBRayMode::First) 
     {
         JPH::AnyHitCollisionCollector<JPH::CastRayCollector> collector;
-        shape->CastRay(ray, settings, id_creator, collector);
+        mesh_shape->CastRay(ray, settings, id_creator, collector);
         if (collector.HadHit()) {
-            out_hits.push_back({ collector.mHit.mFraction * range, collector.mHit.mSubShapeID2.GetValue() });
+            out_hits.push_back({ 
+                collector.mHit.mFraction * range, 
+                mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2) 
+            });
         }
     } 
     else 
     {
         JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
-        shape->CastRay(ray, settings, id_creator, collector);
+        mesh_shape->CastRay(ray, settings, id_creator, collector);
         for (const JPH::RayCastResult& hit : collector.mHits) {
-            out_hits.push_back({ hit.mFraction * range, hit.mSubShapeID2.GetValue() });
+            out_hits.push_back({ 
+                hit.mFraction * range, 
+                mesh_shape->GetTriangleUserData(hit.mSubShapeID2) 
+            });
         }
     }
+}
+
+PhysicsShapeHandle JoltPhysicsCore::CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count)
+{
+    if (count == 0 || !shapes || !transforms) return nullptr;
+
+    JPH::StaticCompoundShapeSettings compound_settings;
+
+    for (size_t i = 0; i < count; ++i)
+    {
+        JPH::Shape* jph_shape = static_cast<JPH::Shape*>(shapes[i]);
+        if (!jph_shape) continue;
+
+        const Fvector& pos = transforms[i].c;
+        JPH::Vec3 position(pos.x, pos.y, pos.z);
+        
+        const Fmatrix& m = transforms[i];
+        float trace = m._11 + m._22 + m._33;
+        float x, y, z, w;
+
+        if (trace > 0.0f) {
+            float s = std::sqrt(trace + 1.0f) * 2.0f;
+            w = 0.25f * s;
+            x = (m._32 - m._23) / s;
+            y = (m._13 - m._31) / s;
+            z = (m._21 - m._12) / s;
+        } else if ((m._11 > m._22) && (m._11 > m._33)) {
+            float s = std::sqrt(1.0f + m._11 - m._22 - m._33) * 2.0f;
+            w = (m._32 - m._23) / s;
+            x = 0.25f * s;
+            y = (m._21 + m._12) / s;
+            z = (m._13 + m._31) / s;
+        } else if (m._22 > m._33) {
+            float s = std::sqrt(1.0f + m._22 - m._11 - m._33) * 2.0f;
+            w = (m._13 - m._31) / s;
+            x = (m._21 + m._12) / s;
+            y = 0.25f * s;
+            z = (m._32 + m._23) / s;
+        } else {
+            float s = std::sqrt(1.0f + m._33 - m._11 - m._22) * 2.0f;
+            w = (m._21 - m._12) / s;
+            x = (m._13 + m._31) / s;
+            y = (m._32 + m._23) / s;
+            z = 0.25f * s;
+        }
+
+        JPH::Quat rotation(x, y, z, w);
+        rotation = rotation.Normalized();
+
+        // Добавляем форму с ее локальным смещением
+        compound_settings.AddShape(position, rotation, jph_shape);
+    }
+
+    JPH::ShapeSettings::ShapeResult result = compound_settings.Create();
+    if (result.HasError())
+    {
+        Msg("! [Jolt] Failed to create compound shape: %s", result.GetError().c_str());
+        return nullptr;
+    }
+
+    JPH::Shape* final_shape = result.Get().GetPtr();
+    final_shape->AddRef(); 
+    
+    return static_cast<PhysicsShapeHandle>(final_shape);
+}
+
+BodyHandle JoltPhysicsCore::CreateBodyFromShape(PhysicsShapeHandle shape_handle, const Fvector& pos, float mass)
+{
+    if (!m_physics_system || !shape_handle) return INVALID_BODY_HANDLE;
+
+    JPH::Shape* shape = static_cast<JPH::Shape*>(shape_handle);
+    
+    JPH::BodyCreationSettings body_settings(
+        shape, 
+        JPH::RVec3(pos.x, pos.y, pos.z), 
+        JPH::Quat::sIdentity(), 
+        JPH::EMotionType::Dynamic, 
+        Layers::MOVING
+    );
+    
+    body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+    body_settings.mMassPropertiesOverride.mMass = mass;
+
+    JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
+    if (!body) return INVALID_BODY_HANDLE;
+
+    m_physics_system->GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);
+    
+    return static_cast<BodyHandle>(body->GetID().GetIndex());
 }
 
 BodyHandle JoltPhysicsCore::CreateBox(const Fvector& half_extents, const Fvector& position, float mass) {
@@ -369,7 +481,8 @@ bool JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
                                   std::vector<u32>& out_tri_indices)
 {
     if (!handle) return false;
-    JPH::Shape* mesh_shape = static_cast<JPH::Shape*>(handle);
+    
+    JPH::MeshShape* mesh_shape = static_cast<JPH::MeshShape*>(handle);
 
     JPH::Vec3 j_z(box_z_axis.x, box_z_axis.y, box_z_axis.z);
     JPH::Vec3 j_y(box_y_axis.x, box_y_axis.y, box_y_axis.z);
@@ -378,7 +491,6 @@ bool JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
     j_y = j_y.Normalized();
     JPH::Vec3 j_x = j_y.Cross(j_z).Normalized(); 
 
-    // Создаем Jolt Box
     JPH::BoxShape box(JPH::Vec3(box_sizes.x * 0.5f, box_sizes.y * 0.5f, box_sizes.z * 0.5f));
     
     JPH::Mat44 rot(
@@ -391,17 +503,19 @@ bool JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
     class JoltOBBCollector : public JPH::CollideShapeCollector {
     public:
         std::vector<u32>& indices;
+        JPH::MeshShape* m_mesh_shape; 
         bool has_hit = false;
 
-        JoltOBBCollector(std::vector<u32>& out_ind) : indices(out_ind) {}
+        JoltOBBCollector(std::vector<u32>& out_ind, JPH::MeshShape* shape) 
+            : indices(out_ind), m_mesh_shape(shape) {}
 
         virtual void AddHit(const JPH::CollideShapeResult &inResult) override {
             has_hit = true;
-            indices.push_back(inResult.mSubShapeID2.GetValue());
+            indices.push_back(m_mesh_shape->GetTriangleUserData(inResult.mSubShapeID2));
         }
     };
-
-    JoltOBBCollector collector(out_tri_indices);
+    
+    JoltOBBCollector collector(out_tri_indices, mesh_shape);
     JPH::CollideShapeSettings settings;
     settings.mBackFaceMode = JPH::EBackFaceMode::CollideWithBackFaces;
 
@@ -422,7 +536,9 @@ void JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
                                   std::vector<u32>& out_tri_indices) 
 {
     if (!handle) return;
-    JPH::Shape* mesh_shape = static_cast<JPH::Shape*>(handle);
+    
+    // Сразу приводим к MeshShape
+    JPH::MeshShape* mesh_shape = static_cast<JPH::MeshShape*>(handle);
 
     JPH::BoxShape box(JPH::Vec3(extents.x, extents.y, extents.z));
     
@@ -445,7 +561,7 @@ void JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
             settings, collector, JPH::ShapeFilter()
         );
         if (collector.HadHit()) {
-            out_tri_indices.push_back(collector.mHit.mSubShapeID2.GetValue());
+            out_tri_indices.push_back(mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2));
         }
     } 
     else 
@@ -459,14 +575,20 @@ void JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
             settings, collector, JPH::ShapeFilter()
         );
         for (const JPH::CollideShapeResult& hit : collector.mHits) {
-            out_tri_indices.push_back(hit.mSubShapeID2.GetValue());
+            // Читаем UserData
+            out_tri_indices.push_back(mesh_shape->GetTriangleUserData(hit.mSubShapeID2));
         }
     }
 }
 
 void JoltPhysicsCore::GetCDBModelBounds(PhysicsShapeHandle handle, Fvector& out_center, Fvector& out_extents) const 
 {
-    if (!handle) return;
+    if (!handle) 
+    {
+        out_center.set(0.f, 0.f, 0.f);
+        out_extents.set(0.f, 0.f, 0.f);
+        return; 
+    }
     
     const JPH::Shape* shape = static_cast<const JPH::Shape*>(handle);
     JPH::AABox bounds = shape->GetLocalBounds();

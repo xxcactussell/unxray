@@ -23,3 +23,5 @@
 # exclude doxygen output
 doc/doxygen/html/*
 tasks/
+RENDER_ISSUES_REPORT.md
+doc/jolt_character_migration_guide.md

@@ -637,7 +637,7 @@ void CPHSimpleCharacter::SetPosition(const Fvector& pos)
         return;
 
     float full_height = m_cyl_hight + 2.f * m_radius;
-    float center_y = pos.y + (full_height / 2.f);
+    float center_y = pos.y;
 
     m_death_position.set(pos.x, center_y, pos.z);
     m_safe_position.set(pos.x, center_y, pos.z);

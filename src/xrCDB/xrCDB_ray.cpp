@@ -32,6 +32,7 @@ void COLLIDER::ray_query(u32 ray_mode, const MODEL* m_def, const Fvector& r_star
 
     for (const auto& hit : hits)
     {
+        
         RESULT& R = r_add();
         R.id = hit.tri_index;
         R.range = hit.range;
@@ -40,6 +41,7 @@ void COLLIDER::ray_query(u32 ray_mode, const MODEL* m_def, const Fvector& r_star
         R.verts[0] = verts[T.verts[0]];
         R.verts[1] = verts[T.verts[1]];
         R.verts[2] = verts[T.verts[2]];
+        
         R.dummy = T.dummy;
 
         Fvector edge1, edge2, tvec, pvec, qvec;
@@ -48,13 +50,23 @@ void COLLIDER::ray_query(u32 ray_mode, const MODEL* m_def, const Fvector& r_star
         
         pvec.crossproduct(r_dir, edge2);
         float det = edge1.dotproduct(pvec);
-        float inv_det = 1.0f / det;
         
-        tvec.sub(r_start, R.verts[0]);
-        R.u = tvec.dotproduct(pvec) * inv_det;
-        
-        qvec.crossproduct(tvec, edge1);
-        R.v = r_dir.dotproduct(qvec) * inv_det;
+        // Строгая защита от деления на ноль
+        if (!fis_zero(det))
+        {
+            float inv_det = 1.0f / det;
+            
+            tvec.sub(r_start, R.verts[0]);
+            R.u = tvec.dotproduct(pvec) * inv_det;
+            
+            qvec.crossproduct(tvec, edge1);
+            R.v = r_dir.dotproduct(qvec) * inv_det;
+        }
+        else
+        {
+            R.u = 0.f;
+            R.v = 0.f;
+        }
     }
 }
 } // namespace CDB

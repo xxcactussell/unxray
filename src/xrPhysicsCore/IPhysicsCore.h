@@ -132,6 +132,9 @@ public:
 
     virtual void SetBodyFixedRotation(BodyHandle body_handle) = 0;
     virtual BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) = 0;
+
+    virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) = 0;
+    virtual BodyHandle CreateBodyFromShape(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) = 0;
 };
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore();

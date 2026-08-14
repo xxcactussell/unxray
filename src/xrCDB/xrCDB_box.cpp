@@ -5,7 +5,6 @@
 
 namespace CDB
 {
-
 void COLLIDER::box_query(u32 box_mode, const MODEL* m_def, const Fvector& b_center, const Fvector& b_dim)
 {
     ZoneScoped;
@@ -33,8 +32,8 @@ void COLLIDER::box_query(u32 box_mode, const MODEL* m_def, const Fvector& b_cent
         R.verts[0] = verts[T.verts[0]];
         R.verts[1] = verts[T.verts[1]];
         R.verts[2] = verts[T.verts[2]];
+        
         R.dummy = T.dummy;
     }
 }
-
 } // namespace CDB

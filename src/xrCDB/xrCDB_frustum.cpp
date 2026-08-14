@@ -19,14 +19,18 @@ void COLLIDER::frustum_query(u32 frustum_mode, const MODEL* m_def, const CFrustu
 
     Fvector C, E;
     GetPhysicsCore()->GetCDBModelBounds(m_def->get_shape_handle(), C, E);
+    float extents_sq_len = (E.x * E.x) + (E.y * E.y) + (E.z * E.z);
     
-    u32 test_mask = F.getMask();
-    Fvector mM[2];
-    mM[0].sub(C, E);
-    mM[1].add(C, E);
-    
-    if (F.testAABB(&mM[0].x, test_mask) == fcvNone)
-        return;
+    if (extents_sq_len > 0.0001f)
+    {
+        u32 test_mask = F.getMask();
+        Fvector mM[2];
+        mM[0].sub(C, E);
+        mM[1].add(C, E);
+        
+        if (F.testAABB(&mM[0].x, test_mask) == fcvNone)
+            return;
+    }
 
     const u32 tris_count = m_def->get_tris_count();
     const TRI* tris = m_def->get_tris();

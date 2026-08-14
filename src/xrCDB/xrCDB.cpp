@@ -111,6 +111,8 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
         xr_free(tris);
         return;
     }
+
+    GetPhysicsCore()->CreateStaticBody(shape, Fvector().set(0.f, 0.f, 0.f));
 }
 
 void MODEL::load_geom(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt)
@@ -244,6 +246,8 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
         return false;
     }
 
+    GetPhysicsCore()->CreateStaticBody(shape, Fvector().set(0.f, 0.f, 0.f));
+    
     status = S_READY;
 
     FS.r_close(rstream);

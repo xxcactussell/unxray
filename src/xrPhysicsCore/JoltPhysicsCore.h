@@ -121,4 +121,7 @@ public:
 
     void* GetBodyUserData(BodyHandle body) const override;
     void SetBodyUserData(BodyHandle body, void* data) override;
+
+    void SetBodyFixedRotation(BodyHandle body_handle) override;
+    BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) override;
 };

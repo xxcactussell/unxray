@@ -319,10 +319,15 @@ void JoltPhysicsCore::GetBodyTransform(BodyHandle body_handle, Fmatrix& out_matr
     
     JPH::Mat44 transform = body_interface.GetWorldTransform(id);
     
-    out_matrix.i.set(transform(0, 0), transform(0, 1), transform(0, 2));
-    out_matrix.j.set(transform(1, 0), transform(1, 1), transform(1, 2));
-    out_matrix.k.set(transform(2, 0), transform(2, 1), transform(2, 2));
-    out_matrix.c.set(transform(3, 0), transform(3, 1), transform(3, 2));
+    JPH::Vec3 axis_x = transform.GetAxisX();
+    JPH::Vec3 axis_y = transform.GetAxisY();
+    JPH::Vec3 axis_z = transform.GetAxisZ();
+    JPH::Vec3 pos = transform.GetTranslation();
+
+    out_matrix.i.set(axis_x.GetX(), axis_x.GetY(), axis_x.GetZ());
+    out_matrix.j.set(axis_y.GetX(), axis_y.GetY(), axis_y.GetZ());
+    out_matrix.k.set(axis_z.GetX(), axis_z.GetY(), axis_z.GetZ());
+    out_matrix.c.set(pos.GetX(), pos.GetY(), pos.GetZ());
 }
 
 void JoltPhysicsCore::SetBodyTransform(BodyHandle body_handle, const Fmatrix& matrix) {
@@ -468,6 +473,43 @@ void JoltPhysicsCore::GetCDBModelBounds(PhysicsShapeHandle handle, Fvector& out_
     
     out_center.set(bounds.GetCenter().GetX(), bounds.GetCenter().GetY(), bounds.GetCenter().GetZ());
     out_extents.set(bounds.GetExtent().GetX(), bounds.GetExtent().GetY(), bounds.GetExtent().GetZ());
+}
+
+void JoltPhysicsCore::SetBodyFixedRotation(BodyHandle body_handle) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    
+    JPH::BodyID id(body_handle);
+    JPH::BodyLockWrite lock(m_physics_system->GetBodyLockInterface(), id);
+    if (lock.Succeeded()) {
+        JPH::Body& body = lock.GetBody();
+        if (body.IsDynamic()) {
+            body.GetMotionProperties()->SetInverseInertia(JPH::Vec3::sZero(), JPH::Quat::sIdentity());
+        }
+    }
+}
+
+BodyHandle JoltPhysicsCore::CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) 
+{
+    if (!m_physics_system || !shape_handle) return INVALID_BODY_HANDLE;
+
+    JPH::Shape* shape = static_cast<JPH::Shape*>(shape_handle);
+
+    JPH::BodyCreationSettings body_settings(
+        shape, 
+        JPH::Vec3(position.x, position.y, position.z), 
+        JPH::Quat::sIdentity(), 
+        JPH::EMotionType::Static, 
+        Layers::NON_MOVING
+    );
+
+    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
+    JPH::Body* body = body_interface.CreateBody(body_settings);
+    
+    if (!body) return INVALID_BODY_HANDLE;
+
+    body_interface.AddBody(body->GetID(), JPH::EActivation::DontActivate);
+    
+    return body->GetID().GetIndexAndSequenceNumber();
 }
 
 // ============================================================================

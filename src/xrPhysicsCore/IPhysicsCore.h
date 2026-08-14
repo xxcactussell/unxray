@@ -129,6 +129,9 @@ public:
 
     virtual void* GetBodyUserData(BodyHandle body) const = 0;
     virtual void SetBodyUserData(BodyHandle body, void* data) = 0;
+
+    virtual void SetBodyFixedRotation(BodyHandle body_handle) = 0;
+    virtual BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) = 0;
 };
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore();

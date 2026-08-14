@@ -133,11 +133,22 @@ void CPHSimpleCharacter::Create(Fvector sizes)
 
     b_exist = true;
 
-    // В Jolt Physics создание персонажа абстрагировано. 
-    // Предположим, что IPhysicsCore имеет метод CreateCharacterBody
-    // m_body = GetPhysicsCore()->CreateCharacterBody(m_radius, m_cyl_hight, m_mass);
-    // Для совместимости заглушка:
-    // m_body = ...
+    m_cyl_hight = sizes.y - 2.f * m_radius;
+    if (m_cyl_hight < 0.f)
+        m_cyl_hight = 0.01f;
+
+    b_exist = true;
+
+    m_body = GetPhysicsCore()->CreateCylinder(m_radius, sizes.y / 2.f, Fvector().set(0.f, 0.f, 0.f), m_mass);
+    
+    GetPhysicsCore()->SetBodyFixedRotation(m_body); 
+    
+    m_body_interpolation.SetBody(m_body);
+    
+    if (m_phys_ref_object)
+    {
+        SetPhysicsRefObject(m_phys_ref_object);
+    }
     
     if (m_phys_ref_object)
     {
@@ -624,11 +635,16 @@ void CPHSimpleCharacter::SetPosition(const Fvector& pos)
     VERIFY_BOUNDARIES(pos, phBoundaries, PhysicsRefObject());
     if (!b_exist)
         return;
-    m_death_position.set(pos.x, pos.y + m_radius, pos.z);
-    m_safe_position.set(pos.x, pos.y + m_radius, pos.z);
+
+    float full_height = m_cyl_hight + 2.f * m_radius;
+    float center_y = pos.y + (full_height / 2.f);
+
+    m_death_position.set(pos.x, center_y, pos.z);
+    m_safe_position.set(pos.x, center_y, pos.z);
     b_death_pos = false;
 
-    GetPhysicsCore()->SetBodyPosition(m_body, Fvector().set(pos.x, pos.y + m_radius, pos.z));
+    GetPhysicsCore()->SetBodyPosition(m_body, Fvector().set(pos.x, center_y, pos.z));
+    
     CPHDisablingTranslational::Reinit();
     m_body_interpolation.ResetPositions();
     CPHObject::spatial_move();

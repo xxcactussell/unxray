@@ -279,6 +279,10 @@ void CPHSimpleCharacter::PhTune(float step)
             m_air_frames++; 
         } else {
             // Normal ground contact or we landed.
+            if (m_air_frames > 0) {
+                b_meet_control = true;
+                is_contact = true;
+            }
             b_jumping = false;
             m_air_frames = 0;
         }

@@ -25,6 +25,7 @@ private:
     JointHandle m_next_joint_handle = 1;
 
     std::unordered_map<CharacterVirtualHandle, JPH::Ref<JPH::CharacterVirtual>> m_characters;
+    std::unordered_map<CharacterVirtualHandle, bool> m_stick_to_floor;
     CharacterVirtualHandle m_next_character_handle = 1;
 
 public:
@@ -145,4 +146,5 @@ public:
     void DeactivateCharacterVirtual(CharacterVirtualHandle handle) override;
     bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const override;
     void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) override;
+    void SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) override;
 };

@@ -1028,6 +1028,7 @@ CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandl
     
     CharacterVirtualHandle handle = m_next_character_handle++;
     m_characters[handle] = character;
+    m_stick_to_floor[handle] = true;
     return handle;
 }
 
@@ -1035,6 +1036,7 @@ void JoltPhysicsCore::DestroyCharacterVirtual(CharacterVirtualHandle handle) {
     auto it = m_characters.find(handle);
     if (it != m_characters.end()) {
         m_characters.erase(it);
+        m_stick_to_floor.erase(handle);
     }
 }
 
@@ -1154,15 +1156,24 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
     if (it != m_characters.end()) {
         JPH::CharacterVirtual* character = it->second.GetPtr();
         
-        JPH::CharacterVirtual::ExtendedUpdateSettings update_settings;
-        update_settings.mStickToFloorStepDown = -character->GetUp() * 0.6f;
-        update_settings.mWalkStairsStepUp = character->GetUp() * 0.4f;
-
         // X-Ray doesn't automatically apply gravity to velocity when not on ground
         // CharacterVirtual requires us to explicitly add gravity to mLinearVelocity
         JPH::Vec3 current_vel = character->GetLinearVelocity();
         current_vel += JPH::Vec3(gravity.x, gravity.y, gravity.z) * delta_time;
         character->SetLinearVelocity(current_vel);
+
+        JPH::CharacterVirtual::ExtendedUpdateSettings update_settings;
+        bool stick_to_floor = true;
+        if (m_stick_to_floor.find(handle) != m_stick_to_floor.end()) {
+            stick_to_floor = m_stick_to_floor[handle];
+        }
+        
+        if (!stick_to_floor) {
+            update_settings.mStickToFloorStepDown = JPH::Vec3::sZero();
+        } else {
+            update_settings.mStickToFloorStepDown = -character->GetUp() * 0.6f;
+        }
+        update_settings.mWalkStairsStepUp = character->GetUp() * 0.4f;
 
         JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
 
@@ -1174,6 +1185,12 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
             m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
             body_filter, {}, *m_temp_allocator
         );
+    }
+}
+
+void JoltPhysicsCore::SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) {
+    if (m_stick_to_floor.find(handle) != m_stick_to_floor.end()) {
+        m_stick_to_floor[handle] = stick_to_floor;
     }
 }
 

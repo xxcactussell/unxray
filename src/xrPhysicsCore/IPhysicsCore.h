@@ -161,6 +161,7 @@ public:
 
     virtual bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const = 0;
     virtual void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) = 0;
+    virtual void SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) = 0;
 };
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore();

@@ -255,14 +255,6 @@ void CPHSimpleCharacter::PhDataUpdate(float step)
     GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
 
     m_char_handle_interpolation.UpdatePositions();
-
-    static u32 tick = 0;
-    if (tick++ % 10 == 0)
-        Msg("~ [JOLT] PhDataUpdate: accel(%.2f,%.2f,%.2f), vel_in(%.2f,%.2f,%.2f), vel_out(%.2f,%.2f,%.2f), pos(%.2f,%.2f,%.2f)", 
-            m_acceleration.x, m_acceleration.y, m_acceleration.z,
-            vel_before.x, vel_before.y, vel_before.z,
-            vel_after.x, vel_after.y, vel_after.z,
-            pos.x, pos.y, pos.z);
 }
 
 void CPHSimpleCharacter::PhTune(float step)
@@ -277,15 +269,34 @@ void CPHSimpleCharacter::PhTune(float step)
     IPhysicsCore::SJoltCharacterGroundState ground_state;
     GetPhysicsCore()->GetCharacterVirtualGroundState(m_char_handle, ground_state);
     
+    Fvector current_vel;
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, current_vel);
+
     if (ground_state.on_ground) {
-        m_air_frames = 0;
+        if (b_jumping && current_vel.y > 0.1f) {
+            // We are "on the ground" but moving UP fast (just jumped).
+            // Jolt's ground state is stale because it hasn't updated yet.
+            m_air_frames++; 
+        } else {
+            // Normal ground contact or we landed.
+            b_jumping = false;
+            m_air_frames = 0;
+        }
     } else {
         m_air_frames++;
     }
 
     // 4 frames of "coyote time" to hide micro-bounces from the game logic
     b_on_ground = (m_air_frames < 4);
-    
+
+    bool stick_to_floor = !(b_jump || b_jumping);
+    GetPhysicsCore()->SetCharacterVirtualStickToFloor(m_char_handle, stick_to_floor);
+
+    static u32 tick = 0;
+    if (tick++ % 10 == 0)
+        Msg("~ [JOLT] PhTune: stick_to_floor=%d, b_jump=%d, b_on_ground=%d", 
+            stick_to_floor, b_jump, b_on_ground);
+
     if (b_on_ground) {
         b_valide_ground_contact = true;
         m_ground_contact_normal = ground_state.ground_normal;
@@ -312,28 +323,57 @@ void CPHSimpleCharacter::PhTune(float step)
         b_jumping = true;
     }
     
-    if (is_control)
+    if (b_on_ground || m_elevator_state.ClimbingState())
     {
-        if (m_elevator_state.ClimbingState())
+        if (is_control)
         {
-            velocity = m_acceleration;
+            if (m_elevator_state.ClimbingState())
+            {
+                velocity = m_acceleration;
+            }
+            else
+            {
+                // When jumping on this frame, we shouldn't overwrite the jump momentum immediately!
+                // But wait, if we are on the ground, and we JUST jumped, we want to keep the jump momentum.
+                if (!b_jumping) 
+                {
+                    velocity.x = m_acceleration.x;
+                    velocity.z = m_acceleration.z;
+                }
+            }
         }
         else
         {
-            velocity.x = m_acceleration.x;
-            velocity.z = m_acceleration.z;
+            if (m_elevator_state.ClimbingState())
+            {
+                if (!b_jumping) velocity.set(0,0,0);
+            }
+            else 
+            {
+                if (!b_jumping) 
+                {
+                    velocity.x = 0;
+                    velocity.z = 0;
+                }
+            }
         }
     }
     else
     {
-        if (m_elevator_state.ClimbingState())
+        if (is_control)
         {
-            velocity.set(0,0,0);
-        }
-        else 
-        {
-            velocity.x = 0;
-            velocity.z = 0;
+            // Steer direction but preserve jump momentum
+            float horiz_mag = _sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+            
+            velocity.x += (m_acceleration.x - velocity.x) * 0.05f;
+            velocity.z += (m_acceleration.z - velocity.z) * 0.05f;
+            
+            float new_horiz_mag = _sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+            if (new_horiz_mag > 0.001f)
+            {
+                velocity.x *= horiz_mag / new_horiz_mag;
+                velocity.z *= horiz_mag / new_horiz_mag;
+            }
         }
     }
 

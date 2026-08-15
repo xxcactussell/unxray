@@ -4,7 +4,7 @@
 #include "PhysicsCommon.h"
 #include "xrPhysicsCore/IPhysicsCore.h"
 
-void CPHContactBodyEffector::Init(BodyHandle body, const Fvector& normal, float depth, SGameMtl* material)
+void CPHContactBodyEffector::Init(CharacterVirtualHandle body, const Fvector& normal, float depth, SGameMtl* material)
 {
     CPHBaseBodyEffector::Init(body);
     m_contact_normal = normal;
@@ -20,16 +20,16 @@ void CPHContactBodyEffector::Merge(const Fvector& normal, float depth, SGameMtl*
 }
 void CPHContactBodyEffector::Apply()
 {
-    if (m_body == INVALID_BODY_HANDLE) return;
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
 
     Fvector linear_velocity;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, linear_velocity);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, linear_velocity);
     
     float linear_velocity_smag = linear_velocity.square_magnitude();
     float linear_velocity_mag = _sqrt(linear_velocity_smag);
     float effect = 10000.f * m_recip_flotation * m_recip_flotation;
     
-    float mass = GetPhysicsCore()->GetBodyMass(m_body);
+    float mass = GetPhysicsCore()->GetBodyMass(m_char_handle);
     
     float l_air = linear_velocity_mag * effect;
     if (l_air > mass / fixed_step)
@@ -50,6 +50,6 @@ void CPHContactBodyEffector::Apply()
             force.mad(norm, -prg);
         }
         
-        GetPhysicsCore()->ApplyForce(m_body, force);
+        GetPhysicsCore()->ApplyForce(m_char_handle, force);
     }
 }

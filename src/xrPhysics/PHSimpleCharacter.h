@@ -131,6 +131,7 @@ protected:
     bool b_foot_mtl_check;
     float m_friction_factor;
     bool b_non_interactive;
+    bool m_is_active;
 
 public:
     CPHSimpleCharacter();
@@ -230,18 +231,18 @@ public:
     {
         if (!b_exist)
             return false;
-        return GetPhysicsCore()->IsBodyActive(m_body);
+        return m_is_active;
     }
     virtual void GetBodyPosition(Fvector& vpos)
     {
         VERIFY(b_exist);
-        GetPhysicsCore()->GetBodyPosition(m_body, vpos);
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, vpos);
     }
     const Fvector& BodyPosition() const
     {
-        VERIFY(b_exist && m_body != INVALID_BODY_HANDLE);
+        VERIFY(b_exist && m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE);
         static Fvector temp;
-        GetPhysicsCore()->GetBodyPosition(m_body, temp);
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, temp);
         return temp;
     }
 
@@ -258,7 +259,7 @@ private:
     u16 RetriveContactBone();
     void SafeAndLimitVelocity();
     virtual void UpdateStaticDamage(const Fvector& normal, const Fvector& pos, SGameMtl* tri_material, bool bo1);
-    void UpdateDynamicDamage(const Fvector& normal, const Fvector& pos, BodyHandle b2, u16 obj_material_idx, bool bo1);
+    void UpdateDynamicDamage(const Fvector& normal, const Fvector& pos, CharacterVirtualHandle b2, u16 obj_material_idx, bool bo1);
     IC void FootProcess(const Fvector& normal, const Fvector& pos, bool& do_collide, bool bo, CPhysicsGeom* g);
     IC void foot_material_update(u16 tri_material, u16 foot_material_idx);
     static void TestPathCallback(bool& do_colide, bool bo1, CPhysicsGeom* geom1, CPhysicsGeom* geom2, const Fvector& contact_normal, const Fvector& contact_pos, SGameMtl* material_1, SGameMtl* material_2);

@@ -258,12 +258,12 @@ shell_root CPHShellSplitterHolder::ElementSingleSplit(const element_fracture& sp
                 CPHElement* el2 = static_cast<CPHElement*>(joint->PSecond_element());
                 VERIFY(el2);
 
-                BodyHandle body1 = el1->get_body();
-                BodyHandle body2 = el2->get_body();
+                CharacterVirtualHandle body1 = el1->get_body();
+                CharacterVirtualHandle body2 = el2->get_body();
                 
                 Fmatrix safe_form1, safe_form2;
-                if (body1 != INVALID_BODY_HANDLE) GetPhysicsCore()->GetBodyTransform(body1, safe_form1);
-                if (body2 != INVALID_BODY_HANDLE) GetPhysicsCore()->GetBodyTransform(body2, safe_form2);
+                if (body1 != INVALID_CHARACTER_VIRTUAL_HANDLE) GetPhysicsCore()->GetBodyTransform(body1, safe_form1);
+                if (body2 != INVALID_CHARACTER_VIRTUAL_HANDLE) GetPhysicsCore()->GetBodyTransform(body2, safe_form2);
 
                 K->LL_GetBindTransform(bones_bind_forms);
                 el1->SetTransform(bones_bind_forms[el1->m_SelfID], mh_unspecified);
@@ -271,8 +271,8 @@ shell_root CPHShellSplitterHolder::ElementSingleSplit(const element_fracture& sp
                 
                 joint->ReattachFirstElement(split_elem.first);
 
-                if (body1 != INVALID_BODY_HANDLE) GetPhysicsCore()->SetBodyTransform(body1, safe_form1);
-                if (body2 != INVALID_BODY_HANDLE) GetPhysicsCore()->SetBodyTransform(body2, safe_form2);
+                if (body1 != INVALID_CHARACTER_VIRTUAL_HANDLE) GetPhysicsCore()->SetBodyTransform(body1, safe_form1);
+                if (body2 != INVALID_CHARACTER_VIRTUAL_HANDLE) GetPhysicsCore()->SetBodyTransform(body2, safe_form2);
             }
         }
     }
@@ -384,9 +384,9 @@ void CPHShellSplitterHolder::PhDataUpdate(float step)
         case CPHShellSplitter::splElement:
         {
             CPHElement* element = m_pShell->elements[i->m_element];
-            BodyHandle body = element->get_body(); 
+            CharacterVirtualHandle body = element->get_body(); 
             
-            if (body == INVALID_BODY_HANDLE || !GetPhysicsCore()->IsBodyActive(body))
+            if (body == INVALID_CHARACTER_VIRTUAL_HANDLE || !GetPhysicsCore()->IsBodyActive(body))
                 return; 
                 
             i->m_breaked = (element->FracturesHolder()->PhDataUpdate(element)) || i->m_breaked;

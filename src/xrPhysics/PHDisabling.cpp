@@ -128,8 +128,8 @@ void CPHDisablingTranslational::Reinit() { CPHDisablingBase::Reinit(); }
 void CPHDisablingTranslational::UpdateL1()
 {
     m_stateL1.Reset();
-    BodyHandle body = get_body();
-    if (body == INVALID_BODY_HANDLE) return;
+    CharacterVirtualHandle body = get_body();
+    if (body == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
 
     Fmatrix transform;
     GetPhysicsCore()->GetBodyTransform(body, transform);
@@ -157,8 +157,8 @@ void CPHDisablingRotational::Reinit() { CPHDisablingBase::Reinit(); }
 void CPHDisablingRotational::UpdateL1()
 {
     m_stateL1.Reset();
-    BodyHandle body = get_body();
-    if (body == INVALID_BODY_HANDLE) return;
+    CharacterVirtualHandle body = get_body();
+    if (body == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
 
     Fmatrix transform;
     GetPhysicsCore()->GetBodyTransform(body, transform);

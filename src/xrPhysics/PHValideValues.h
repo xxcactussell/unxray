@@ -58,13 +58,13 @@ class CSafeBodyLinearState
     CSafeVector3 m_safe_linear_vel;
 
 public:
-    IC void create(BodyHandle b)
+    IC void create(CharacterVirtualHandle b)
     {
-        R_ASSERT(b != INVALID_BODY_HANDLE);
+        R_ASSERT(b != INVALID_CHARACTER_VIRTUAL_HANDLE);
         new_state(b);
     }
     
-    IC void new_state(BodyHandle b)
+    IC void new_state(CharacterVirtualHandle b)
     {
         Fmatrix transform;
         GetPhysicsCore()->GetBodyTransform(b, transform);
@@ -97,9 +97,9 @@ public:
         rotation.identity(); 
     }
     
-    IC void create(BodyHandle b)
+    IC void create(CharacterVirtualHandle b)
     {
-        R_ASSERT(b != INVALID_BODY_HANDLE);
+        R_ASSERT(b != INVALID_CHARACTER_VIRTUAL_HANDLE);
         GetPhysicsCore()->GetBodyTransform(b, rotation);
         rotation.c.set(0, 0, 0); // Оставляем только матрицу поворота
         new_state(b);
@@ -111,7 +111,7 @@ public:
         rotation.c.set(0, 0, 0);
     }
     
-    IC void new_state(BodyHandle b)
+    IC void new_state(CharacterVirtualHandle b)
     {
         Fmatrix transform;
         GetPhysicsCore()->GetBodyTransform(b, transform);
@@ -133,13 +133,13 @@ class CSafeBodyAngularState
     CSafeVector4 m_safe_quaternion;
 
 public:
-    IC void create(BodyHandle b)
+    IC void create(CharacterVirtualHandle b)
     {
-        R_ASSERT(b != INVALID_BODY_HANDLE);
+        R_ASSERT(b != INVALID_CHARACTER_VIRTUAL_HANDLE);
         new_state(b);
     }
     
-    IC void new_state(BodyHandle b)
+    IC void new_state(CharacterVirtualHandle b)
     {
         Fvector ang_vel;
         GetPhysicsCore()->GetBodyAngularVelocity(b, ang_vel);
@@ -166,13 +166,13 @@ class CSafeBodyState
     CSafeBodyAngularState m_safe_angular_state;
 
 public:
-    IC void create(BodyHandle b)
+    IC void create(CharacterVirtualHandle b)
     {
-        R_ASSERT(b != INVALID_BODY_HANDLE);
+        R_ASSERT(b != INVALID_CHARACTER_VIRTUAL_HANDLE);
         new_state(b);
     }
     
-    IC void new_state(BodyHandle b)
+    IC void new_state(CharacterVirtualHandle b)
     {
         m_safe_linear_state.new_state(b);
         m_safe_angular_state.new_state(b);

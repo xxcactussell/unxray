@@ -12,7 +12,7 @@ public:
     Fmatrix BoneTransform;
 
 private:
-    BodyHandle body = INVALID_BODY_HANDLE;
+    CharacterVirtualHandle body = INVALID_CHARACTER_VIRTUAL_HANDLE;
     CPHInterpolation* p_parent_body_interpolation = nullptr;
     CPHInterpolation body_interpolation;
     
@@ -26,7 +26,7 @@ private:
 
 public:
     PHDynamicData();
-    PHDynamicData(unsigned int numOfchilds, BodyHandle body);
+    PHDynamicData(unsigned int numOfchilds, CharacterVirtualHandle body);
 
     inline void UpdateInterpolation()
     {
@@ -39,11 +39,11 @@ public:
     void InterpolateTransformVsParent(Fmatrix& transform);
     
     void Destroy();
-    void Create(unsigned int numOfchilds, BodyHandle Body);
+    void Create(unsigned int numOfchilds, CharacterVirtualHandle Body);
     void CalculateData(void);
     
     PHDynamicData* GetChild(unsigned int ChildNum);
-    bool SetChild(unsigned int ChildNum, unsigned int numOfchilds, BodyHandle body);
+    bool SetChild(unsigned int ChildNum, unsigned int numOfchilds, CharacterVirtualHandle body);
     
     void SetAsZero();
     void SetAsZeroRecursive();
@@ -51,7 +51,7 @@ public:
 
     void GetWorldMX(Fmatrix& aTransform)
     {
-        if (body != INVALID_BODY_HANDLE)
+        if (body != INVALID_CHARACTER_VIRTUAL_HANDLE)
         {
             GetPhysicsCore()->GetBodyTransform(body, aTransform);
         }
@@ -67,7 +67,7 @@ public:
     }
 
 private:
-    void CalculateR_N_PosOfChilds(BodyHandle parent);
+    void CalculateR_N_PosOfChilds(CharacterVirtualHandle parent);
 
 public:
     bool SetGeom(PhysicsShapeHandle ageom);

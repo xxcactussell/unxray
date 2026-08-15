@@ -62,7 +62,7 @@ static CBoneInstance* get_capture_bone(CPHCharacter* a_character)
 
 CPHCapture::CPHCapture(
     CPHCharacter* a_character, IPhysicsShellHolder* a_taget_object, NearestToPointCallback* cb /*=0*/)
-    : m_joint(INVALID_JOINT_HANDLE), m_ajoint(INVALID_JOINT_HANDLE), m_body(INVALID_BODY_HANDLE), 
+    : m_joint(INVALID_JOINT_HANDLE), m_ajoint(INVALID_JOINT_HANDLE), m_char_handle(INVALID_CHARACTER_VIRTUAL_HANDLE), 
       m_taget_object(a_taget_object), m_character(a_character),
       b_disabled(false), b_character_feedback(false), e_state(cstFree),
       ///////////////////////////////////////////////////////////////
@@ -87,7 +87,7 @@ CPHCapture::CPHCapture(
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 CPHCapture::CPHCapture(CPHCharacter* a_character, IPhysicsShellHolder* a_taget_object, u16 a_taget_element)
-    : m_joint(INVALID_JOINT_HANDLE), m_ajoint(INVALID_JOINT_HANDLE), m_body(INVALID_BODY_HANDLE), 
+    : m_joint(INVALID_JOINT_HANDLE), m_ajoint(INVALID_JOINT_HANDLE), m_char_handle(INVALID_CHARACTER_VIRTUAL_HANDLE), 
       b_disabled(false), b_character_feedback(false),
       m_taget_object(a_taget_object), m_character(a_character), e_state(cstFree),
       ///////////////////////////////////////////////////////////////
@@ -184,10 +184,10 @@ void CPHCapture::Release()
         m_ajoint = INVALID_JOINT_HANDLE;
     }
 
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->DestroyBody(m_body);
-        m_body = INVALID_BODY_HANDLE;
+        GetPhysicsCore()->DestroyBody(m_char_handle);
+        m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     }
 
     if (e_state == cstPulling && m_taget_element && !m_taget_object->ObjectGetDestroy() &&

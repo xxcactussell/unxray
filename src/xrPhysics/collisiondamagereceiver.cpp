@@ -10,8 +10,8 @@ void DamageReceiverCollisionCallback(bool& do_colide, bool bo1, CPhysicsGeom* ge
     if (material_1->Flags.test(SGameMtl::flPassable) || material_2->Flags.test(SGameMtl::flPassable))
         return;
 
-    BodyHandle b1 = geom1 ? geom1->m_body : INVALID_BODY_HANDLE;
-    BodyHandle b2 = geom2 ? geom2->m_body : INVALID_BODY_HANDLE;
+    CharacterVirtualHandle b1 = geom1 ? geom1->m_char_handle : INVALID_CHARACTER_VIRTUAL_HANDLE;
+    CharacterVirtualHandle b2 = geom2 ? geom2->m_char_handle : INVALID_CHARACTER_VIRTUAL_HANDLE;
 
     CPhysicsGeom* geom_self = bo1 ? geom1 : geom2;
     CPhysicsGeom* geom_damager = bo1 ? geom2 : geom1;
@@ -41,9 +41,9 @@ void DamageReceiverCollisionCallback(bool& do_colide, bool bo1, CPhysicsGeom* ge
     Fvector dir = contact_normal;
     Fvector pos;
     
-    if (geom_self->m_body != INVALID_BODY_HANDLE) {
+    if (geom_self->m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE) {
         Fmatrix self_transform;
-        GetPhysicsCore()->GetBodyTransform(geom_self->m_body, self_transform);
+        GetPhysicsCore()->GetBodyTransform(geom_self->m_char_handle, self_transform);
         pos.sub(contact_pos, self_transform.c);
     } else {
         pos.set(0, 0, 0);
@@ -60,21 +60,21 @@ void BreakableObjectCollisionCallback(
     VERIFY(geom2);
 
     ICollisionDamageReceiver* damag_receiver = 0;
-    BodyHandle body = INVALID_BODY_HANDLE;
+    CharacterVirtualHandle body = INVALID_CHARACTER_VIRTUAL_HANDLE;
     float norm_sign = 0;
 
     if (bo1)
     {
         VERIFY(geom1->ph_ref_object);
         damag_receiver = geom1->ph_ref_object->ObjectPhCollisionDamageReceiver();
-        body = geom2->m_body;
+        body = geom2->m_char_handle;
         norm_sign = -1.f;
     }
     else
     {
         VERIFY(geom2->ph_ref_object);
         damag_receiver = geom2->ph_ref_object->ObjectPhCollisionDamageReceiver();
-        body = geom1->m_body;
+        body = geom1->m_char_handle;
         norm_sign = 1.f;
     }
     VERIFY(damag_receiver);

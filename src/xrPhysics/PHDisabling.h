@@ -52,7 +52,7 @@ protected:
     virtual void ReEnable() = 0;
     virtual void UpdateL1() = 0;
     virtual void UpdateL2() = 0;
-    virtual BodyHandle get_body() = 0; // dBodyID -> BodyHandle
+    virtual CharacterVirtualHandle get_body() = 0; // dBodyID -> CharacterVirtualHandle
 };
 
 class CPHDisablingBase : public virtual CBaseDisableData

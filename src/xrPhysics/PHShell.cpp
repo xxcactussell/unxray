@@ -133,7 +133,7 @@ float CPHShell::getMass()
 
 void CPHShell::get_spatial_params()
 {
-    if (elements.empty() || elements.front()->get_body() == INVALID_BODY_HANDLE) 
+    if (elements.empty() || elements.front()->get_body() == INVALID_CHARACTER_VIRTUAL_HANDLE) 
         return;
     
     Fvector center, extents;

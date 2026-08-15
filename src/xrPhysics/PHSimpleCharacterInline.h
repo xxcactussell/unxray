@@ -3,7 +3,7 @@
 void CPHSimpleCharacter::UpdateStaticDamage(const Fvector& normal, const Fvector& pos, SGameMtl* tri_material, bool bo1)
 {
     Fvector v;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, v);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
     
     float norm_prg = _abs(v.dotproduct(normal));
     float smag = v.square_magnitude();
@@ -33,10 +33,10 @@ void CPHSimpleCharacter::UpdateStaticDamage(const Fvector& normal, const Fvector
     }
 }
 
-void CPHSimpleCharacter::UpdateDynamicDamage(const Fvector& normal, const Fvector& pos, BodyHandle b2, u16 obj_material_idx, bool bo1)
+void CPHSimpleCharacter::UpdateDynamicDamage(const Fvector& normal, const Fvector& pos, CharacterVirtualHandle b2, u16 obj_material_idx, bool bo1)
 {
     Fvector vel, obj_vel;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, vel);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, vel);
     GetPhysicsCore()->GetBodyLinearVelocity(b2, obj_vel);
     
     float m_mass_other = GetPhysicsCore()->GetBodyMass(b2);
@@ -72,7 +72,7 @@ void CPHSimpleCharacter::UpdateDynamicDamage(const Fvector& normal, const Fvecto
         // или передавать его снаружи (через CPhysicsGeom)
         // Если userData в ядре настроена на возврат IPhysicsShellHolder:
         IPhysicsShellHolder* obj = bo1 ? (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(b2) 
-                                       : (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(m_body);
+                                       : (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(m_char_handle);
         
         if (obj && !obj->ObjectGetDestroy())
         {

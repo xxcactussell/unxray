@@ -41,24 +41,24 @@ Fbox phBoundaries = {1000.f, 1000.f, -1000.f, -1000.f};
 
 CBlockAllocator<CPHContactBodyEffector, 128> ContactEffectors;
 
-void FixBody(BodyHandle body, float ext_param, float mass_param)
+void FixBody(CharacterVirtualHandle body, float ext_param, float mass_param)
 {
 
 }
 
-void FixBody(BodyHandle body) 
+void FixBody(CharacterVirtualHandle body) 
 { 
     FixBody(body, fix_ext_param, fix_mass_param); 
 }
 
-void BodyCutForce(BodyHandle body, float l_limit, float w_limit)
+void BodyCutForce(CharacterVirtualHandle body, float l_limit, float w_limit)
 {
 
 }
 
-float E_NlS(BodyHandle body, const Fvector& norm, float norm_sign) 
+float E_NlS(CharacterVirtualHandle body, const Fvector& norm, float norm_sign) 
 {
-    if (body == INVALID_BODY_HANDLE) return 0.f;
+    if (body == INVALID_CHARACTER_VIRTUAL_HANDLE) return 0.f;
 
     Fvector vel;
     GetPhysicsCore()->GetBodyLinearVelocity(body, vel);
@@ -73,9 +73,9 @@ float E_NlS(BodyHandle body, const Fvector& norm, float norm_sign)
     return (vel_pr * vel_pr * mass) / 2.f;
 }
 
-float E_NLD(BodyHandle b1, BodyHandle b2, const Fvector& norm) 
+float E_NLD(CharacterVirtualHandle b1, CharacterVirtualHandle b2, const Fvector& norm) 
 {
-    if (b1 == INVALID_BODY_HANDLE || b2 == INVALID_BODY_HANDLE) return 0.f;
+    if (b1 == INVALID_CHARACTER_VIRTUAL_HANDLE || b2 == INVALID_CHARACTER_VIRTUAL_HANDLE) return 0.f;
 
     Fvector vel1, vel2;
     GetPhysicsCore()->GetBodyLinearVelocity(b1, vel1);
@@ -109,12 +109,12 @@ float E_NLD(BodyHandle b1, BodyHandle b2, const Fvector& norm)
     return (kin_energy_start - kin_energy_end);
 }
 
-float E_NL(BodyHandle b1, BodyHandle b2, const Fvector& norm)
+float E_NL(CharacterVirtualHandle b1, CharacterVirtualHandle b2, const Fvector& norm)
 {
-    VERIFY(b1 != INVALID_BODY_HANDLE || b2 != INVALID_BODY_HANDLE);
-    if (b1 != INVALID_BODY_HANDLE)
+    VERIFY(b1 != INVALID_CHARACTER_VIRTUAL_HANDLE || b2 != INVALID_CHARACTER_VIRTUAL_HANDLE);
+    if (b1 != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        if (b2 != INVALID_BODY_HANDLE)
+        if (b2 != INVALID_CHARACTER_VIRTUAL_HANDLE)
             return E_NLD(b1, b2, norm);
         else
             return E_NlS(b1, norm, 1);
@@ -123,7 +123,7 @@ float E_NL(BodyHandle b1, BodyHandle b2, const Fvector& norm)
         return E_NlS(b2, norm, -1);
 }
 
-void ApplyGravityAccel(BodyHandle body, const Fvector& accel)
+void ApplyGravityAccel(CharacterVirtualHandle body, const Fvector& accel)
 {
 
 }

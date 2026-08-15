@@ -25,3 +25,5 @@ doc/doxygen/html/*
 tasks/
 RENDER_ISSUES_REPORT.md
 doc/jolt_character_migration_guide.md
+JoltVCImplementation.md
+JoltVirtualCharacterControllerExample.md

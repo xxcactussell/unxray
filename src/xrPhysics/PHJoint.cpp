@@ -11,11 +11,11 @@
 const float hinge2_spring = 20000.f;
 const float hinge2_damping = 1000.f;
 
-IC BodyHandle body_for_joint(CPhysicsElement* ee)
+IC CharacterVirtualHandle body_for_joint(CPhysicsElement* ee)
 {
     VERIFY(smart_cast<CPHElement*>(ee));
     CPHElement* e = static_cast<CPHElement*>(ee);
-    return e->isFixed() ? INVALID_BODY_HANDLE : e->get_body();
+    return e->isFixed() ? INVALID_CHARACTER_VIRTUAL_HANDLE : e->get_body();
 }
 
 IC void SwapLimits(float& lo, float& hi)
@@ -94,8 +94,8 @@ void CPHJoint::CreateHinge()
     axis0.set(0, 0, 0);
     
     CalcAxis(0, axis0, lo, hi, first_matrix, second_matrix, rotate);
-    BodyHandle b1 = body_for_joint(first);
-    if (b1 == INVALID_BODY_HANDLE) axis0.invert();
+    CharacterVirtualHandle b1 = body_for_joint(first);
+    if (b1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis0.invert();
 
     m_joint = GetPhysicsCore()->CreateJoint(hinge, b1, body_for_joint(second), pos, 
                                             axis0, Fvector().set(0,0,0), Fvector().set(0,0,0), 
@@ -127,8 +127,8 @@ void CPHJoint::CreateHinge2()
     default: NODEFAULT;
     }
 
-    BodyHandle b1 = body_for_joint(first);
-    BodyHandle b2 = body_for_joint(second);
+    CharacterVirtualHandle b1 = body_for_joint(first);
+    CharacterVirtualHandle b2 = body_for_joint(second);
 
     Fmatrix first_matrix_inv;
     first_matrix_inv.set(first_matrix);
@@ -141,7 +141,7 @@ void CPHJoint::CreateHinge2()
     axis1.set(0, 0, 0);
 
     CalcAxis(0, axis0, lo0, hi0, first_matrix, second_matrix, rotate);
-    if (b1 == INVALID_BODY_HANDLE) axis0.invert();
+    if (b1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis0.invert();
 
     CalcAxis(1, axis1, lo1, hi1, first_matrix, second_matrix, rotate);
 
@@ -167,8 +167,8 @@ void CPHJoint::CreateSlider()
     VERIFY(first && second);
     first->GetGlobalTransformDynamic(&first_matrix);
     second->GetGlobalTransformDynamic(&second_matrix);
-    BodyHandle body1 = body_for_joint(first);
-    BodyHandle body2 = body_for_joint(second);
+    CharacterVirtualHandle body1 = body_for_joint(first);
+    CharacterVirtualHandle body2 = body_for_joint(second);
 
     pos.set(0, 0, 0);
     switch (vs_anchor)
@@ -179,12 +179,12 @@ void CPHJoint::CreateSlider()
     default: NODEFAULT;
     }
 
-    if (body1 != INVALID_BODY_HANDLE)
+    if (body1 != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         axes[0].vs = vs_first;
         axes[1].vs = vs_first;
     }
-    else if (body2 != INVALID_BODY_HANDLE)
+    else if (body2 != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         axes[0].vs = vs_second;
         axes[1].vs = vs_second;
@@ -202,7 +202,7 @@ void CPHJoint::CreateSlider()
     
     CalcAxis(0, axis0, lo0, hi0, first_matrix, second_matrix, rotate);
     CalcAxis(1, axis1, lo1, hi1, first_matrix, second_matrix, rotate);
-    if (body1 == INVALID_BODY_HANDLE) axis1.invert(); 
+    if (body1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis1.invert(); 
 
     Fvector slider_axis = {-axis0.x, -axis0.y, -axis0.z};
     m_joint = GetPhysicsCore()->CreateJoint(slider, body1, body2, pos, 
@@ -227,8 +227,8 @@ void CPHJoint::CreateFullControl()
     VERIFY(first && second);
     first->GetGlobalTransformDynamic(&first_matrix);
     second->GetGlobalTransformDynamic(&second_matrix);
-    BodyHandle body1 = body_for_joint(first);
-    BodyHandle body2 = body_for_joint(second);
+    CharacterVirtualHandle body1 = body_for_joint(first);
+    CharacterVirtualHandle body2 = body_for_joint(second);
 
     pos.set(0, 0, 0);
     switch (vs_anchor)
@@ -249,13 +249,13 @@ void CPHJoint::CreateFullControl()
     axis0.set(0, 0, 0); axis1.set(0, 0, 0); axis2.set(0, 0, 0);
     
     CalcAxis(0, axis0, lo0, hi0, first_matrix, second_matrix, rotate);
-    if (body1 == INVALID_BODY_HANDLE) axis0.invert();
+    if (body1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis0.invert();
     
     CalcAxis(1, axis1, lo1, hi1, first_matrix, second_matrix, rotate);
-    if (body1 == INVALID_BODY_HANDLE) axis1.invert();
+    if (body1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis1.invert();
 
     CalcAxis(2, axis2, lo2, hi2, first_matrix, second_matrix, rotate);
-    if (body1 == INVALID_BODY_HANDLE) axis2.invert();
+    if (body1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis2.invert();
 
     m_joint = GetPhysicsCore()->CreateJoint(full_control, body1, body2, pos, 
                                             axis0, axis1, axis2, 
@@ -781,7 +781,7 @@ void CPHJoint::CalcAxis(int ax_num, Fvector& axis, float& lo, float& hi, const F
 void CPHJoint::GetLimits(float& lo_limit, float& hi_limit, int axis_num)
 {
     LimitAxisNum(axis_num);
-    if (body_for_joint(pFirst_element) != INVALID_BODY_HANDLE)
+    if (body_for_joint(pFirst_element) != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         lo_limit = axes[axis_num].low;
         hi_limit = axes[axis_num].high;

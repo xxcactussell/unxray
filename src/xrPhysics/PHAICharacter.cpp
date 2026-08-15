@@ -23,7 +23,7 @@ void CPHAICharacter::Create(Fvector sizes)
 
 bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
 {
-    if (!b_exist || m_body == INVALID_BODY_HANDLE)
+    if (!b_exist || m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
         return false;
         
     if (m_forced_physics_control || JumpState())
@@ -68,8 +68,8 @@ bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
     bool ret = true;
     
     // Сохраняем и временно отключаем гравитацию для попытки перемещения
-    float save_gm = GetPhysicsCore()->GetBodyGravityFactor(m_body);
-    GetPhysicsCore()->SetBodyGravityFactor(m_body, 0.0f);
+    float save_gm = GetPhysicsCore()->GetBodyGravityFactor(m_char_handle);
+    GetPhysicsCore()->SetBodyGravityFactor(m_char_handle, 0.0f);
     
     for (u32 i = 0; steps_num > i; ++i)
     {
@@ -89,7 +89,7 @@ bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
     ret = step_single(fixed_step);
 
     // Восстанавливаем гравитацию
-    GetPhysicsCore()->SetBodyGravityFactor(m_body, save_gm);
+    GetPhysicsCore()->SetBodyGravityFactor(m_char_handle, save_gm);
     SetVelocity(cur_vel);
     
     Fvector pos_new;
@@ -97,8 +97,8 @@ bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
 
     SetPosition(pos_new);
     m_last_move.sub(pos_new, current_pos).mul(1.f / Device.fTimeDelta);
-    m_body_interpolation.UpdatePositions();
-    m_body_interpolation.UpdatePositions();
+    m_char_handle_interpolation.UpdatePositions();
+    m_char_handle_interpolation.UpdatePositions();
     
     if (ret)
         Disable();

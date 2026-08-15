@@ -36,8 +36,8 @@ public:
     bool b_exist;
 
 protected:
-    CPHInterpolation m_body_interpolation;
-    BodyHandle m_body;
+    CPHInterpolation m_char_handle_interpolation;
+    CharacterVirtualHandle m_char_handle;
     IPhysicsShellHolder* m_phys_ref_object;
 
     float m_mass;
@@ -78,7 +78,7 @@ public:
     virtual bool UpdateRestrictionType(CPHCharacter* ach) = 0;
     virtual void FreezeContent();
     virtual void UnFreezeContent();
-    virtual BodyHandle get_body() { return m_body; }
+    virtual CharacterVirtualHandle get_body() { return m_char_handle; }
     virtual void fix_body_rotation();
     virtual void get_body_position(Fvector& p);
     virtual void Disable();
@@ -128,8 +128,8 @@ public:
     
     virtual void SetApplyGravity(BOOL flag) 
     { 
-        if (m_body != INVALID_BODY_HANDLE)
-            GetPhysicsCore()->SetBodyGravityFactor(m_body, flag ? 1.0f : 0.0f);
+        if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+            GetPhysicsCore()->SetBodyGravityFactor(m_char_handle, flag ? 1.0f : 0.0f);
     }
     
     virtual void SetObjectContactCallbackData(void* callback) = 0;
@@ -148,8 +148,8 @@ public:
     
     virtual void GetFootCenter(Fvector& vpos) 
     { 
-        if (m_body != INVALID_BODY_HANDLE)
-            GetPhysicsCore()->GetBodyPosition(m_body, vpos);
+        if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+            GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, vpos);
     }
     
     virtual void SetMas(float mass) = 0;

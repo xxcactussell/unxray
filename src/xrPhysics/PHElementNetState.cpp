@@ -11,22 +11,22 @@ void CPHElement::get_State(SPHNetState& state)
 {
     GetGlobalPositionDynamic(&state.position);
     getQuaternion(state.quaternion);
-    m_body_interpolation.GetPosition(state.previous_position, 0);
-    m_body_interpolation.GetRotation(state.previous_quaternion, 0);
+    m_char_handle_interpolation.GetPosition(state.previous_position, 0);
+    m_char_handle_interpolation.GetRotation(state.previous_quaternion, 0);
     get_LinearVel(state.linear_vel);
     get_AngularVel(state.angular_vel);
     getForce(state.force);
     getTorque(state.torque);
     
-    // Добавили безопасную проверку m_body
-    if (!isActive() || m_body == INVALID_BODY_HANDLE)
+    // Добавили безопасную проверку m_char_handle
+    if (!isActive() || m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         state.enabled = false;
         return;
     }
     
     // Заменили dBodyIsEnabled
-    state.enabled = GetPhysicsCore()->IsBodyActive(m_body);
+    state.enabled = GetPhysicsCore()->IsBodyActive(m_char_handle);
 }
 
 void CPHElement::set_State(const SPHNetState& state)
@@ -35,10 +35,10 @@ void CPHElement::set_State(const SPHNetState& state)
     m_flags.set(flUpdate, TRUE);
     SetGlobalPositionDynamic(state.position);
     setQuaternion(state.quaternion);
-    m_body_interpolation.SetPosition(state.previous_position, 0);
-    m_body_interpolation.SetRotation(state.previous_quaternion, 0);
-    m_body_interpolation.SetPosition(state.position, 1);
-    m_body_interpolation.SetRotation(state.quaternion, 1);
+    m_char_handle_interpolation.SetPosition(state.previous_position, 0);
+    m_char_handle_interpolation.SetRotation(state.previous_quaternion, 0);
+    m_char_handle_interpolation.SetPosition(state.position, 1);
+    m_char_handle_interpolation.SetRotation(state.quaternion, 1);
     set_LinearVel(state.linear_vel);
     set_AngularVel(state.angular_vel);
     setForce(state.force);
@@ -48,14 +48,14 @@ void CPHElement::set_State(const SPHNetState& state)
         return;
         
 #if 1
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        bool is_active = GetPhysicsCore()->IsBodyActive(m_body);
+        bool is_active = GetPhysicsCore()->IsBodyActive(m_char_handle);
         
         // Заменили dBodyEnable
         if (state.enabled && !is_active)
         {
-            GetPhysicsCore()->ActivateBody(m_body);
+            GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
             m_shell->EnableObject(0);
         }
         // Заменили dBodyIsEnabled

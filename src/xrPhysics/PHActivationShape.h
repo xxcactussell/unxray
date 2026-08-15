@@ -8,7 +8,7 @@ class IPhysicsShellHolder;
 
 class CPHActivationShape : public CPHObject
 {
-    BodyHandle m_body = INVALID_BODY_HANDLE;
+    CharacterVirtualHandle m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     PhysicsShapeHandle m_geom = nullptr;
     Flags16 m_flags;
     CSafeFixedRotationState m_safe_state;
@@ -46,7 +46,7 @@ public:
     void Size(Fvector& size);
     
     // Заменяем dBodyID ODEBody()
-    BodyHandle GetBodyHandle() { return m_body; }
+    CharacterVirtualHandle GetCharacterVirtualHandle() { return m_char_handle; }
     
     void set_rotation(const Fmatrix& rot);
 

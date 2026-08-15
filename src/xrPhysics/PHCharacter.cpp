@@ -16,7 +16,7 @@ CPHCharacter::CPHCharacter(void) : CPHDisablingTranslational()
 {
     m_params.acceleration = 0.001f;
     m_params.velocity = 0.0001f;
-    m_body = INVALID_BODY_HANDLE;
+    m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     m_safe_velocity.set(0.f, 0.f, 0.f);
     m_safe_position.set(0.f, 0.f, 0.f);
     m_mean_y = 0.f;
@@ -34,39 +34,39 @@ CPHCharacter::~CPHCharacter(void) {}
 
 void CPHCharacter::FreezeContent()
 {
-    if (m_body != INVALID_BODY_HANDLE)
-        GetPhysicsCore()->DeactivateBody(m_body);
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
     CPHObject::FreezeContent();
 }
 
 void CPHCharacter::UnFreezeContent()
 {
-    if (m_body != INVALID_BODY_HANDLE)
-        GetPhysicsCore()->ActivateBody(m_body);
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
     CPHObject::UnFreezeContent();
 }
 
 void CPHCharacter::getForce(Fvector& force)
 {
-    if (!b_exist || m_body == INVALID_BODY_HANDLE)
+    if (!b_exist || m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         force.set(0, 0, 0);
         return;
     }
-    GetPhysicsCore()->GetBodyForce(m_body, force);
+    GetPhysicsCore()->GetBodyForce(m_char_handle, force);
 }
 
 void CPHCharacter::setForce(const Fvector& force)
 {
-    if (!b_exist || m_body == INVALID_BODY_HANDLE)
+    if (!b_exist || m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
         return;
-    GetPhysicsCore()->SetBodyForce(m_body, force);
+    GetPhysicsCore()->SetBodyForce(m_char_handle, force);
 }
 
 void CPHCharacter::get_State(SPHNetState& state)
 {
     GetPosition(state.position);
-    m_body_interpolation.GetPosition(state.previous_position, 0);
+    m_char_handle_interpolation.GetPosition(state.previous_position, 0);
     GetVelocity(state.linear_vel);
     getForce(state.force);
 
@@ -85,8 +85,8 @@ void CPHCharacter::get_State(SPHNetState& state)
 
 void CPHCharacter::set_State(const SPHNetState& state)
 {
-    m_body_interpolation.SetPosition(state.previous_position, 0);
-    m_body_interpolation.SetPosition(state.position, 1);
+    m_char_handle_interpolation.SetPosition(state.previous_position, 0);
+    m_char_handle_interpolation.SetPosition(state.position, 1);
     SetPosition(state.position);
     SetVelocity(state.linear_vel);
     setForce(state.force);
@@ -102,9 +102,9 @@ void CPHCharacter::set_State(const SPHNetState& state)
 void CPHCharacter::Disable()
 {
     CPHObject::deactivate();
-    if (m_body != INVALID_BODY_HANDLE)
-        GetPhysicsCore()->DeactivateBody(m_body);
-    m_body_interpolation.ResetPositions();
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
+    m_char_handle_interpolation.ResetPositions();
 }
 
 void CPHCharacter::Enable()
@@ -112,8 +112,8 @@ void CPHCharacter::Enable()
     if (!b_exist)
         return;
     CPHObject::activate();
-    if (m_body != INVALID_BODY_HANDLE)
-        GetPhysicsCore()->ActivateBody(m_body);
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
 }
 
 void CPHCharacter::GetSavedVelocity(Fvector& vvel)
@@ -126,19 +126,19 @@ void CPHCharacter::GetSavedVelocity(Fvector& vvel)
 
 void CPHCharacter::CutVelocity(float l_limit, float a_limit)
 {
-    if (m_body == INVALID_BODY_HANDLE) return;
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
 
     Fvector linear_velocity;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, linear_velocity);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, linear_velocity);
     
     float mag = linear_velocity.magnitude();
     if (mag > l_limit && !fis_zero(mag))
     {
         linear_velocity.mul(l_limit / mag);
-        GetPhysicsCore()->SetBodyLinearVelocity(m_body, linear_velocity);
+        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
     }
     
-    GetPhysicsCore()->SetBodyAngularVelocity(m_body, Fvector().set(0.f, 0.f, 0.f));
+    GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, Fvector().set(0.f, 0.f, 0.f));
 }
 
 const Fmatrix& CPHCharacter::XFORM() const
@@ -151,10 +151,10 @@ void CPHCharacter::get_AngularVel(Fvector& velocity) const { velocity.set(0, 0, 
 
 const Fvector& CPHCharacter::mass_Center() const 
 { 
-    // В оригинале X-Ray здесь возвращался cast_fv(dBodyGetLinearVel(m_body)),
+    // В оригинале X-Ray здесь возвращался cast_fv(dBodyGetLinearVel(m_char_handle)),
     // что логически является скоростью, а не позицией. Сохраняем это поведение.
-    if (m_body != INVALID_BODY_HANDLE)
-        GetPhysicsCore()->GetBodyLinearVelocity(m_body, m_last_velocity_cache);
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, m_last_velocity_cache);
     else
         m_last_velocity_cache.set(0,0,0);
         
@@ -164,8 +164,8 @@ const Fvector& CPHCharacter::mass_Center() const
 void CPHCharacter::get_body_position(Fvector& p)
 {
     VERIFY(b_exist);
-    VERIFY(m_body != INVALID_BODY_HANDLE);
-    GetPhysicsCore()->GetBodyPosition(m_body, p);
+    VERIFY(m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE);
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, p);
 }
 
 void virtual_move_collide_callback(
@@ -181,9 +181,9 @@ void virtual_move_collide_callback(
 
 void CPHCharacter::fix_body_rotation()
 {
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->SetBodyAngularVelocity(m_body, Fvector().set(0.f, 0.f, 0.f));
+        GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, Fvector().set(0.f, 0.f, 0.f));
         // Для Jolt можно также принудительно обнулить кватернион вращения, если требуется,
         // но обычно для Character используется LockRotations.
     }

@@ -11,6 +11,8 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/CollisionDispatch.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
@@ -996,6 +998,170 @@ void JoltPhysicsCore::SetBodyUserData(BodyHandle body_handle, void* data) {
     JPH::BodyLockWrite lock(m_physics_system->GetBodyLockInterface(), id);
     if (lock.Succeeded()) {
         lock.GetBody().SetUserData(reinterpret_cast<JPH::uint64>(data));
+    }
+}
+
+PhysicsShapeHandle JoltPhysicsCore::CreateCapsuleShape(float radius, float half_height) {
+    JPH::RefConst<JPH::Shape> capsule = new JPH::CapsuleShape(half_height, radius);
+    
+    JPH::RefConst<JPH::Shape> translated_capsule = JPH::RotatedTranslatedShapeSettings(
+        JPH::Vec3(0, half_height + radius, 0),
+        JPH::Quat::sIdentity(),
+        capsule
+    ).Create().Get();
+
+    translated_capsule->AddRef();
+    return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(translated_capsule.GetPtr()));
+}
+
+CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos) {
+    JPH::Shape* jolt_shape = reinterpret_cast<JPH::Shape*>(shape);
+
+    JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
+    settings->mShape = jolt_shape;
+    settings->mMaxSlopeAngle = JPH::DegreesToRadians(45.0f);
+    settings->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -0.1f);
+    
+    JPH::RVec3 pos(initial_pos.x, initial_pos.y, initial_pos.z);
+    
+    JPH::CharacterVirtual* character = new JPH::CharacterVirtual(settings, pos, JPH::Quat::sIdentity(), 0, m_physics_system);
+    
+    CharacterVirtualHandle handle = m_next_character_handle++;
+    m_characters[handle] = character;
+    return handle;
+}
+
+void JoltPhysicsCore::DestroyCharacterVirtual(CharacterVirtualHandle handle) {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        m_characters.erase(it);
+    }
+}
+
+void JoltPhysicsCore::SetCharacterVirtualVelocity(CharacterVirtualHandle handle, const Fvector& velocity) {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        it->second->SetLinearVelocity(JPH::Vec3(velocity.x, velocity.y, velocity.z));
+    }
+}
+
+void JoltPhysicsCore::GetCharacterVirtualVelocity(CharacterVirtualHandle handle, Fvector& velocity) const {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        JPH::Vec3 vel = it->second->GetLinearVelocity();
+        velocity.set(vel.GetX(), vel.GetY(), vel.GetZ());
+    }
+}
+
+void JoltPhysicsCore::GetCharacterVirtualPosition(CharacterVirtualHandle handle, Fvector& position) const {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        JPH::RVec3 pos = it->second->GetPosition();
+        position.set(pos.GetX(), pos.GetY(), pos.GetZ());
+    }
+}
+
+void JoltPhysicsCore::SetCharacterVirtualPosition(CharacterVirtualHandle handle, const Fvector& position) {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        it->second->SetPosition(JPH::RVec3(position.x, position.y, position.z));
+    }
+}
+
+void JoltPhysicsCore::SetCharacterVirtualShape(CharacterVirtualHandle handle, PhysicsShapeHandle shape) {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        JPH::Shape* jolt_shape = reinterpret_cast<JPH::Shape*>(shape);
+        it->second->SetShape(jolt_shape, 1.5f * m_physics_system->GetPhysicsSettings().mPenetrationSlop,
+                             m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
+                             m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
+                             {}, {}, *m_temp_allocator);
+    }
+}
+
+void JoltPhysicsCore::ActivateCharacterVirtual(CharacterVirtualHandle handle) {
+    // Virtual characters don't need activation in Jolt like rigid bodies do, 
+    // since they are updated manually. We can leave this as a no-op or manage a list.
+}
+
+void JoltPhysicsCore::DeactivateCharacterVirtual(CharacterVirtualHandle handle) {
+    // Same as above.
+}
+
+bool JoltPhysicsCore::IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        return it->second->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround && !it->second->IsSlopeTooSteep(it->second->GetGroundNormal());
+    }
+    return false;
+}
+
+void JoltPhysicsCore::GetCharacterVirtualGroundState(CharacterVirtualHandle handle, SJoltCharacterGroundState& out_state) const {
+    out_state.on_ground = false;
+    out_state.ground_normal.set(0.f, 1.f, 0.f);
+    out_state.ground_velocity.set(0.f, 0.f, 0.f);
+
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        JPH::CharacterVirtual* character = it->second.GetPtr();
+        
+        out_state.on_ground = (character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround);
+        
+        JPH::Vec3 normal = character->GetGroundNormal();
+        out_state.ground_normal.set(normal.GetX(), normal.GetY(), normal.GetZ());
+        
+        JPH::Vec3 ground_vel = character->GetGroundVelocity();
+        out_state.ground_velocity.set(ground_vel.GetX(), ground_vel.GetY(), ground_vel.GetZ());
+    }
+}
+
+void JoltPhysicsCore::SetCharacterVirtualUserData(CharacterVirtualHandle handle, void* data) {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        it->second->SetUserData(reinterpret_cast<JPH::uint64>(data));
+    }
+}
+
+class JoltIgnoreActorBodyFilter : public JPH::BodyFilter {
+public:
+    JPH::PhysicsSystem* m_system;
+    JPH::uint64 m_actor_user_data;
+    
+    JoltIgnoreActorBodyFilter(JPH::PhysicsSystem* system, JPH::uint64 user_data) 
+        : m_system(system), m_actor_user_data(user_data) {}
+        
+    virtual bool ShouldCollide(const JPH::BodyID &inBodyID) const override {
+        if (m_actor_user_data == 0) return true;
+        
+        JPH::BodyLockRead lock(m_system->GetBodyLockInterface(), inBodyID);
+        if (lock.Succeeded()) {
+            if (lock.GetBody().GetUserData() == m_actor_user_data) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        JPH::CharacterVirtual* character = it->second.GetPtr();
+        
+        JPH::CharacterVirtual::ExtendedUpdateSettings update_settings;
+        update_settings.mStickToFloorStepDown = -character->GetUp() * 0.2f;
+        update_settings.mWalkStairsStepUp = character->GetUp() * 0.4f;
+
+        JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
+
+        character->ExtendedUpdate(
+            delta_time,
+            JPH::Vec3(gravity.x, gravity.y, gravity.z),
+            update_settings,
+            m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
+            m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
+            body_filter, {}, *m_temp_allocator
+        );
     }
 }
 

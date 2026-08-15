@@ -41,7 +41,7 @@ protected:
     u32 m_time_start;
     CBoneInstance* m_capture_bone;
     
-    BodyHandle m_body;
+    CharacterVirtualHandle m_char_handle;
     
     bool b_collide;
     bool b_disabled;

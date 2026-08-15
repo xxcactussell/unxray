@@ -54,14 +54,14 @@ void RestoreVelocityState(V_PH_WORLD_STATE& state)
 CPHActivationShape::CPHActivationShape()
 {
     m_geom = nullptr;
-    m_body = INVALID_BODY_HANDLE;
+    m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     m_flags.zero();
     m_flags.set(flFixedRotation, true);
 }
 
 CPHActivationShape::~CPHActivationShape() 
 { 
-    VERIFY(m_body == INVALID_BODY_HANDLE); 
+    VERIFY(m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE); 
 }
 
 void CPHActivationShape::Create(const Fvector start_pos, const Fvector start_size, IPhysicsShellHolder* ref_obj, EType _type /*=etBox*/, u16 flags)
@@ -77,34 +77,34 @@ void CPHActivationShape::Create(const Fvector start_pos, const Fvector start_siz
     {
     case etBox: 
         // В X-Ray start_size это полный размер, а IPhysicsCore::CreateBox ожидает half_extents
-        m_body = GetPhysicsCore()->CreateBox(Fvector().set(start_size).mul(0.5f), start_pos, mass); 
+        m_char_handle = GetPhysicsCore()->CreateBox(Fvector().set(start_size).mul(0.5f), start_pos, mass); 
         break;
     case etSphere: 
         // Создание сферы (метод необходимо добавить в IPhysicsCore)
-        m_body = GetPhysicsCore()->CreateSphere(start_size.x, start_pos, mass); 
+        m_char_handle = GetPhysicsCore()->CreateSphere(start_size.x, start_pos, mass); 
         break;
     case etCylinder:
         // Создание цилиндра (метод необходимо добавить в IPhysicsCore)
-        m_body = GetPhysicsCore()->CreateCylinder(start_size.x, start_size.y, start_pos, mass);
+        m_char_handle = GetPhysicsCore()->CreateCylinder(start_size.x, start_size.y, start_pos, mass);
         break;
     };
 
     // Отключаем гравитацию для выталкивающего шейпа
-    GetPhysicsCore()->SetBodyGravityFactor(m_body, 0.0f);
+    GetPhysicsCore()->SetBodyGravityFactor(m_char_handle, 0.0f);
 
-    m_safe_state.create(m_body);
+    m_safe_state.create(m_char_handle);
     spatial_register();
     m_flags.set(flags, true);
 }
 
 void CPHActivationShape::Destroy()
 {
-    VERIFY(m_body != INVALID_BODY_HANDLE);
+    VERIFY(m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE);
     spatial_unregister();
     CPHObject::deactivate();
     
-    GetPhysicsCore()->DestroyBody(m_body);
-    m_body = INVALID_BODY_HANDLE;
+    GetPhysicsCore()->DestroyBody(m_char_handle);
+    m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     m_geom = nullptr;
 }
 
@@ -117,14 +117,14 @@ bool CPHActivationShape::Activate(const Fvector need_size, u16 steps, float max_
     {
         debug_output().DBG_OpenCashedDraw();
         Fmatrix M;
-        GetPhysicsCore()->GetBodyTransform(m_body, M);
+        GetPhysicsCore()->GetBodyTransform(m_char_handle, M);
         Fvector v;
-        GetPhysicsCore()->GetBoxExtents(m_body, v); // v это уже half_extents
+        GetPhysicsCore()->GetBoxExtents(m_char_handle, v); // v это уже half_extents
         debug_output().DBG_DrawOBB(M, v, color_xrgb(0, 255, 0));
     }
 #endif
 
-    VERIFY(m_body != INVALID_BODY_HANDLE);
+    VERIFY(m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE);
     CPHObject::activate();
     ph_world->Freeze();
     UnFreeze();
@@ -152,7 +152,7 @@ bool CPHActivationShape::Activate(const Fvector need_size, u16 steps, float max_
     Fvector step_size, size;
     
     // Получаем текущие half_extents и переводим в полный размер
-    GetPhysicsCore()->GetBoxExtents(m_body, from_size); 
+    GetPhysicsCore()->GetBoxExtents(m_char_handle, from_size); 
     from_size.mul(2.0f); 
     
     step_size.sub(need_size, from_size);
@@ -168,7 +168,7 @@ bool CPHActivationShape::Activate(const Fvector need_size, u16 steps, float max_
         size.add(step_size);
         
         // Устанавливаем новый размер (метод необходимо добавить в IPhysicsCore)
-        GetPhysicsCore()->SetBoxExtents(m_body, Fvector().set(size).mul(0.5f)); 
+        GetPhysicsCore()->SetBoxExtents(m_char_handle, Fvector().set(size).mul(0.5f)); 
         
         u16 attempts = 10;
         do
@@ -204,7 +204,7 @@ bool CPHActivationShape::Activate(const Fvector need_size, u16 steps, float max_
     {
         debug_output().DBG_OpenCashedDraw();
         Fmatrix M;
-        GetPhysicsCore()->GetBodyTransform(m_body, M);
+        GetPhysicsCore()->GetBodyTransform(m_char_handle, M);
         Fvector v;
         v.set(need_size).mul(0.5f);
         debug_output().DBG_DrawOBB(M, v, color_xrgb(0, 255, 255));
@@ -218,20 +218,20 @@ const Fvector& CPHActivationShape::Position()
 { 
     static Fvector pos;
     Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, transform);
     pos = transform.c;
     return pos; 
 }
 
 void CPHActivationShape::Size(Fvector& size) 
 { 
-    GetPhysicsCore()->GetBoxExtents(m_body, size);
+    GetPhysicsCore()->GetBoxExtents(m_char_handle, size);
     size.mul(2.0f); // Возвращаем полный размер, а не half_extents
 }
 
 void CPHActivationShape::PhDataUpdate(float step) 
 { 
-    m_safe_state.new_state(m_body); 
+    m_safe_state.new_state(m_char_handle); 
 }
 
 void CPHActivationShape::PhTune(float step) {}
@@ -244,7 +244,7 @@ PhysicsShapeHandle CPHActivationShape::dSpacedGeom()
 void CPHActivationShape::get_spatial_params()
 {
     Fvector center, half_extents;
-    GetPhysicsCore()->GetBodyAABB(m_body, center, half_extents);
+    GetPhysicsCore()->GetBodyAABB(m_char_handle, center, half_extents);
     spatial.sphere.P = center;
     spatial.sphere.R = _max(half_extents.x, _max(half_extents.y, half_extents.z));
     AABB = half_extents;
@@ -259,26 +259,26 @@ void CPHActivationShape::InitContact(bool& do_collide, bool bo1, float depth, CP
 void CPHActivationShape::CutVelocity(float l_limit, float /*a_limit*/)
 {
     Fvector lin_vel;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, lin_vel);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, lin_vel);
     
     float mag = lin_vel.magnitude();
     if (mag > l_limit)
     {
         lin_vel.mul(l_limit / mag);
-        GetPhysicsCore()->SetBodyLinearVelocity(m_body, lin_vel);
-        GetPhysicsCore()->SetBodyAngularVelocity(m_body, Fvector().set(0.f, 0.f, 0.f));
+        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, lin_vel);
+        GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, Fvector().set(0.f, 0.f, 0.f));
     }
 }
 
 void CPHActivationShape::set_rotation(const Fmatrix& sof)
 {
     Fmatrix current_transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, current_transform);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, current_transform);
     
     Fmatrix new_transform = sof;
     new_transform.c = current_transform.c;
     
-    GetPhysicsCore()->SetBodyTransform(m_body, new_transform);
+    GetPhysicsCore()->SetBodyTransform(m_char_handle, new_transform);
     m_safe_state.set_rotation(new_transform);
 }
 

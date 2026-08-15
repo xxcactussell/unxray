@@ -76,12 +76,12 @@ void TTestDepthCallback(bool& do_colide, bool bo1, CPhysicsGeom* geom1, CPhysics
         if (test_depth > Pars::depth_to_use_force)
         {
             float force = Pars::callback_force_factor * ph_world->Gravity();
-            BodyHandle b1 = geom1 ? geom1->get_body() : INVALID_BODY_HANDLE;
-            BodyHandle b2 = geom2 ? geom2->get_body() : INVALID_BODY_HANDLE;
+            CharacterVirtualHandle b1 = geom1 ? geom1->get_body() : INVALID_CHARACTER_VIRTUAL_HANDLE;
+            CharacterVirtualHandle b2 = geom2 ? geom2->get_body() : INVALID_CHARACTER_VIRTUAL_HANDLE;
 
-            if (b1 != INVALID_BODY_HANDLE)
+            if (b1 != INVALID_CHARACTER_VIRTUAL_HANDLE)
                 GetPhysicsCore()->ApplyForce(b1, Fvector().set(contact_normal).mul(force));
-            if (b2 != INVALID_BODY_HANDLE)
+            if (b2 != INVALID_CHARACTER_VIRTUAL_HANDLE)
                 GetPhysicsCore()->ApplyForce(b2, Fvector().set(contact_normal).mul(-force));
 
             if (geom1 && geom1->ph_ref_object)
@@ -107,7 +107,7 @@ ObjectContactCallbackFun* TestFootDepthCallback = &TTestDepthCallback<STestFootC
 ///////////////////////////////////////////////////////////////////////////////////////
 class CVelocityLimiter : public CPHUpdateObject
 {
-    BodyHandle m_body;
+    CharacterVirtualHandle m_char_handle;
 
 public:
     float l_limit;
@@ -118,12 +118,12 @@ private:
     Fvector m_safe_position;
 
 public:
-    CVelocityLimiter(BodyHandle b, float l, float yl)
+    CVelocityLimiter(CharacterVirtualHandle b, float l, float yl)
     {
-        R_ASSERT(b != INVALID_BODY_HANDLE);
-        m_body = b;
-        GetPhysicsCore()->GetBodyLinearVelocity(m_body, m_safe_velocity);
-        GetPhysicsCore()->GetBodyPosition(m_body, m_safe_position);
+        R_ASSERT(b != INVALID_CHARACTER_VIRTUAL_HANDLE);
+        m_char_handle = b;
+        GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, m_safe_velocity);
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, m_safe_position);
         l_limit = l;
         y_limit = yl;
     }
@@ -131,13 +131,13 @@ public:
     virtual ~CVelocityLimiter()
     {
         Deactivate();
-        m_body = INVALID_BODY_HANDLE;
+        m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     }
 
     bool VelocityLimit()
     {
         Fvector linear_velocity;
-        GetPhysicsCore()->GetBodyLinearVelocity(m_body, linear_velocity);
+        GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, linear_velocity);
         
         bool ret = false;
         float mag = _sqrt(linear_velocity.x * linear_velocity.x + linear_velocity.z * linear_velocity.z);
@@ -156,7 +156,7 @@ public:
         }
         
         if (ret)
-            GetPhysicsCore()->SetBodyLinearVelocity(m_body, linear_velocity);
+            GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
             
         return ret;
     }
@@ -164,15 +164,15 @@ public:
     virtual void PhDataUpdate(float step)
     {
         Fvector linear_velocity;
-        GetPhysicsCore()->GetBodyLinearVelocity(m_body, linear_velocity);
+        GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, linear_velocity);
 
         if (VelocityLimit())
         {
             // В Jolt позиция и так вычисляется корректно, мы лишь обрезаем скорость.
         }
 
-        GetPhysicsCore()->GetBodyPosition(m_body, m_safe_position);
-        GetPhysicsCore()->GetBodyLinearVelocity(m_body, m_safe_velocity);
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, m_safe_position);
+        GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, m_safe_velocity);
     }
 
     virtual void PhTune(float step) { VelocityLimit(); }
@@ -215,8 +215,8 @@ bool ActivateBoxDynamic(IPHMovementControl* mov_control, bool character_exist, u
     
     VERIFY(mov_control->character());
     
-    BodyHandle char_body = mov_control->character()->get_body();
-    if (char_body != INVALID_BODY_HANDLE)
+    CharacterVirtualHandle char_body = mov_control->character()->get_body();
+    if (char_body != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         GetPhysicsCore()->SetBodyLinearVelocity(char_body, Fvector().set(0, 0, 0));
         GetPhysicsCore()->SetBodyAngularVelocity(char_body, Fvector().set(0, 0, 0));

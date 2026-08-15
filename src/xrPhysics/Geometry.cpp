@@ -9,7 +9,7 @@
 #include "debug_output.h"
 #endif 
 
-CPhysicsGeom::CPhysicsGeom() : m_geom_shape(nullptr), m_bone_id(u16(-1)), m_element_position(u16(-1)), m_body(INVALID_BODY_HANDLE)
+CPhysicsGeom::CPhysicsGeom() : m_geom_shape(nullptr), m_bone_id(u16(-1)), m_element_position(u16(-1)), m_char_handle(INVALID_CHARACTER_VIRTUAL_HANDLE)
 {
 }
 
@@ -62,9 +62,9 @@ void CPhysicsGeom::get_global_center_bt(Fvector& center)
 
 void CPhysicsGeom::get_xform(Fmatrix& form) const
 {
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->GetBodyTransform(m_body, form);
+        GetPhysicsCore()->GetBodyTransform(m_char_handle, form);
     }
     else
     {
@@ -88,9 +88,9 @@ void CPhysicsGeom::get_Box(Fmatrix& form, Fvector& sz) const
 
 void CPhysicsGeom::set_static_ref_form(const Fmatrix& form)
 {
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->SetBodyTransform(m_body, form);
+        GetPhysicsCore()->SetBodyTransform(m_char_handle, form);
     }
 }
 
@@ -104,9 +104,9 @@ void CPhysicsGeom::set_build_position(const Fvector& /*ref_point*/)
     clear_motion_history(true); 
 }
 
-void CPhysicsGeom::set_body(BodyHandle body)
+void CPhysicsGeom::set_body(CharacterVirtualHandle body)
 {
-    m_body = body;
+    m_char_handle = body;
 }
 
 void CPhysicsGeom::clear_cashed_tries()
@@ -243,9 +243,9 @@ PhysicsShapeHandle CBoxGeom::create()
 void CBoxGeom::set_size(const Fvector& half_size)
 {
     m_box.m_halfsize.set(half_size);
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->SetBoxExtents(m_body, half_size);
+        GetPhysicsCore()->SetBoxExtents(m_char_handle, half_size);
     }
 }
 

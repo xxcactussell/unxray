@@ -16,7 +16,7 @@ void ActivateShapeExplosive(IPhysicsShellHolder* self_obj, const Fvector& size, 
     CPHCollideValidator::SetCharacterClassNotCollide(activation_shape);
 
     // Отключаем гравитацию для формы активации через новое физическое ядро
-    GetPhysicsCore()->SetBodyGravityFactor(activation_shape.GetBodyHandle(), 0.0f);
+    GetPhysicsCore()->SetBodyGravityFactor(activation_shape.GetCharacterVirtualHandle(), 0.0f);
     
     activation_shape.Activate(size, 1, 1.f, float(M_PI) / 8.f);
     in_out_pos.set(activation_shape.Position());

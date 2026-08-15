@@ -11,15 +11,15 @@
 #include "phvalide.h"
 #include "xrPhysicsCore/IPhysicsCore.h" // Наше ядро Jolt
 
-void BodyCutForce(BodyHandle body, float l_limit, float w_limit);
-float E_NLD(BodyHandle b1, BodyHandle b2, const Fvector& norm);
-float E_NL( BodyHandle b1, BodyHandle b2, const Fvector& norm );
-float E_NlS(BodyHandle body, const Fvector& norm, float norm_sign);
+void BodyCutForce(CharacterVirtualHandle body, float l_limit, float w_limit);
+float E_NLD(CharacterVirtualHandle b1, CharacterVirtualHandle b2, const Fvector& norm);
+float E_NL( CharacterVirtualHandle b1, CharacterVirtualHandle b2, const Fvector& norm );
+float E_NlS(CharacterVirtualHandle body, const Fvector& norm, float norm_sign);
 
-void ApplyGravityAccel(BodyHandle body, const Fvector& accel);
+void ApplyGravityAccel(CharacterVirtualHandle body, const Fvector& accel);
 const float fix_ext_param = 10000.f;
 const float fix_mass_param = 100000000.f;
-void FixBody(BodyHandle body);
+void FixBody(CharacterVirtualHandle body);
 
 extern class CBlockAllocator<CPHContactBodyEffector, 128> ContactEffectors;
 

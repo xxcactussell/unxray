@@ -13,7 +13,7 @@
 
 void CPHStaticGeomShell::get_spatial_params()
 {
-    if (!m_geoms.empty() && m_geoms.front()->get_body() != INVALID_BODY_HANDLE)
+    if (!m_geoms.empty() && m_geoms.front()->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         Fvector extents;
         GetPhysicsCore()->GetBodyAABB(m_geoms.front()->get_body(), spatial.sphere.P, extents);

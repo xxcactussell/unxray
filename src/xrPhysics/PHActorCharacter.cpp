@@ -206,7 +206,7 @@ void CPHActorCharacter::Jump(const Fvector& accel)
         b_jump = true;
         
         Fvector vel;
-        GetPhysicsCore()->GetBodyLinearVelocity(m_body, vel);
+        GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, vel);
         
         float amag = m_acceleration.magnitude();
         if (amag < 1.f)
@@ -364,14 +364,4 @@ float free_fly_up_force_limit = 4000.f;
 void CPHActorCharacter::PhTune(float step)
 {
     inherited::PhTune(step);
-    if (b_lose_control && !b_external_impulse) 
-    {
-        Fvector force;
-        GetPhysicsCore()->GetBodyForce(m_body, force);
-        float fy = force.y;
-        if (fy > free_fly_up_force_limit)
-            fy = free_fly_up_force_limit;
-            
-        GetPhysicsCore()->SetBodyForce(m_body, Fvector().set(force.x, fy, force.z));
-    }
 }

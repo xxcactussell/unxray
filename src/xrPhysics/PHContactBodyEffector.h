@@ -12,7 +12,7 @@ class CPHContactBodyEffector : public CPHBaseBodyEffector
     SGameMtl* m_material;
 
 public:
-    void Init(BodyHandle body, const Fvector& normal, float depth, SGameMtl* material);
+    void Init(CharacterVirtualHandle body, const Fvector& normal, float depth, SGameMtl* material);
     void Merge(const Fvector& normal, float depth, SGameMtl* material);
     void Apply();
 };

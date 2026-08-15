@@ -29,7 +29,7 @@ CPHElement::CPHElement()
     m_l_scale = default_l_scale;
     m_w_scale = default_w_scale;
 
-    m_body = INVALID_BODY_HANDLE;
+    m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     m_flags.set(flActive, FALSE);
     m_flags.set(flActivating, FALSE);
     m_parent_element = NULL;
@@ -55,7 +55,7 @@ void CPHElement::build()
     {
         // Фоллбэк только для пустышек
         Fvector half_extents = {0.5f, 0.5f, 0.5f};
-        m_body = GetPhysicsCore()->CreateBox(half_extents, m_mass_center, 1.f);
+        m_char_handle = GetPhysicsCore()->CreateBox(half_extents, m_mass_center, 1.f);
         Fix();
     }
     else
@@ -80,7 +80,7 @@ void CPHElement::build()
         if (shapes.empty())
         {
             // Защита от битых моделей без физики
-            m_body = GetPhysicsCore()->CreateBox({0.5f, 0.5f, 0.5f}, m_mass_center, m_mass);
+            m_char_handle = GetPhysicsCore()->CreateBox({0.5f, 0.5f, 0.5f}, m_mass_center, m_mass);
         }
         else
         {
@@ -90,7 +90,7 @@ void CPHElement::build()
                 shapes.size()
             );
             
-            m_body = GetPhysicsCore()->CreateBodyFromShape(compound_shape, m_mass_center, m_mass);
+            m_char_handle = GetPhysicsCore()->CreateBodyFromShape(compound_shape, m_mass_center, m_mass);
         }
     }
 
@@ -100,25 +100,30 @@ void CPHElement::build()
     Fmatrix transform;
     transform.identity();
     transform.c = m_mass_center;
-    GetPhysicsCore()->SetBodyTransform(m_body, transform);
+    GetPhysicsCore()->SetBodyTransform(m_char_handle, transform);
 
     CPHDisablingTranslational::Reinit();
     CPHGeometryOwner::build();
-    set_body(m_body);
+    set_body(m_char_handle);
+    
+    if (m_phys_ref_object && m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        GetPhysicsCore()->SetBodyUserData(m_char_handle, m_phys_ref_object);
+    }
 }
 
 void CPHElement::RunSimulation()
 {
-    GetPhysicsCore()->ActivateBody(m_body);
+    GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
 }
 
 void CPHElement::destroy()
 {
     CPHGeometryOwner::destroy();
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->DestroyBody(m_body);
-        m_body = INVALID_BODY_HANDLE;
+        GetPhysicsCore()->DestroyBody(m_char_handle);
+        m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     }
 }
 
@@ -211,12 +216,12 @@ void CPHElement::SetTransform(const Fmatrix& m0, motion_history_state history_st
     
     Fmatrix transform = m0;
     transform.c = mc;
-    GetPhysicsCore()->SetBodyTransform(m_body, transform);
+    GetPhysicsCore()->SetBodyTransform(m_char_handle, transform);
     
     CPHDisablingFull::Reinit();
 
     Fmatrix check_tr;
-    GetPhysicsCore()->GetBodyTransform(m_body, check_tr);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, check_tr);
     VERIFY2(check_tr.c.magnitude() > 0.f || true, "not valide safe position");
     
     m_flags.set(flUpdate, TRUE);
@@ -230,7 +235,7 @@ void CPHElement::getQuaternion(Fquaternion& quaternion)
     if (!isActive())
         return;
     Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, transform);
     quaternion.set(transform);
     VERIFY(_valid(quaternion));
 }
@@ -242,9 +247,9 @@ void CPHElement::setQuaternion(const Fquaternion& quaternion)
         return;
         
     Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, transform);
     transform.rotation(quaternion);
-    GetPhysicsCore()->SetBodyTransform(m_body, transform);
+    GetPhysicsCore()->SetBodyTransform(m_char_handle, transform);
     
     CPHDisablingRotational::Reinit();
     m_flags.set(flUpdate, TRUE);
@@ -256,7 +261,7 @@ void CPHElement::GetGlobalPositionDynamic(Fvector* v)
     if (!isActive())
         return;
     Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, transform);
     v->set(transform.c);
     VERIFY(_valid(*v));
 }
@@ -269,9 +274,9 @@ void CPHElement::SetGlobalPositionDynamic(const Fvector& position)
     VERIFY_BOUNDARIES2(position, phBoundaries, PhysicsRefObject(), "SetGlobalPosition argument ");
     
     Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, transform);
     transform.c = position;
-    GetPhysicsCore()->SetBodyTransform(m_body, transform);
+    GetPhysicsCore()->SetBodyTransform(m_char_handle, transform);
     
     CPHDisablingTranslational::Reinit();
     m_flags.set(flUpdate, TRUE);
@@ -283,19 +288,19 @@ void CPHElement::TransformPosition(const Fmatrix& form, motion_history_state his
     if (!isActive())
         return;
     VERIFY(_valid(form));
-    R_ASSERT2(m_body != INVALID_BODY_HANDLE, "body is not created");
+    R_ASSERT2(m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE, "body is not created");
     
     Fmatrix bm;
-    GetPhysicsCore()->GetBodyTransform(m_body, bm);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, bm);
     Fmatrix new_bm;
     new_bm.mul(form, bm);
     
-    GetPhysicsCore()->SetBodyTransform(m_body, new_bm);
+    GetPhysicsCore()->SetBodyTransform(m_char_handle, new_bm);
     VERIFY_BOUNDARIES2(new_bm.c, phBoundaries, PhysicsRefObject(), "TransformPosition dest pos");
     
     CPHDisablingFull::Reinit();
-    m_body_interpolation.ResetPositions();
-    m_body_interpolation.ResetRotations();
+    m_char_handle_interpolation.ResetPositions();
+    m_char_handle_interpolation.ResetRotations();
     m_flags.set(flUpdate, TRUE);
     if (history_state != mh_not_clear)
         clear_motion_history(mh_unspecified == history_state);
@@ -328,13 +333,13 @@ void CPHElement::Activate(const Fmatrix& transform, const Fvector& lin_vel, cons
     Start();
     SetTransform(transform, mh_unspecified);
 
-    GetPhysicsCore()->SetBodyLinearVelocity(m_body, lin_vel);
-    GetPhysicsCore()->SetBodyAngularVelocity(m_body, ang_vel);
+    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, lin_vel);
+    GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, ang_vel);
 
-    m_body_interpolation.SetBody(m_body);
+    m_char_handle_interpolation.SetBody(m_char_handle);
 
     if (disable)
-        GetPhysicsCore()->DeactivateBody(m_body);
+        GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
         
     m_flags.set(flActive, TRUE);
     m_flags.set(flActivating, TRUE);
@@ -376,7 +381,7 @@ void CPHElement::Update()
         return;
     if (m_flags.test(flActivating))
         m_flags.set(flActivating, FALSE);
-    if (!GetPhysicsCore()->IsBodyActive(m_body) && !m_flags.test(flUpdate))
+    if (!GetPhysicsCore()->IsBodyActive(m_char_handle) && !m_flags.test(flUpdate))
         return;
 
     InterpolateGlobalTransform(&mXFORM);
@@ -390,7 +395,7 @@ void CPHElement::PhTune(float step)
     
     Fvector pos;
     Fmatrix tr;
-    GetPhysicsCore()->GetBodyTransform(m_body, tr);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
     pos = tr.c;
     VERIFY_BOUNDARIES2(pos, phBoundaries, PhysicsRefObject(), "PhTune body position");
 }
@@ -402,8 +407,8 @@ void CPHElement::PhDataUpdate(float step)
 
     if (isFixed())
     {
-        GetPhysicsCore()->SetBodyLinearVelocity(m_body, Fvector().set(0,0,0));
-        GetPhysicsCore()->SetBodyAngularVelocity(m_body, Fvector().set(0,0,0));
+        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, Fvector().set(0,0,0));
+        GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, Fvector().set(0,0,0));
         return;
     }
 
@@ -411,19 +416,19 @@ void CPHElement::PhDataUpdate(float step)
     if (debug_output().ph_dbg_draw_mask().test(phDbgDrawMassCenters))
     {
         Fmatrix tr;
-        GetPhysicsCore()->GetBodyTransform(m_body, tr);
+        GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
         debug_output().DBG_DrawPoint(tr.c, 0.03f, color_xrgb(255, 0, 0));
     }
 #endif
 
-    bool is_active_body = GetPhysicsCore()->IsBodyActive(m_body);
+    bool is_active_body = GetPhysicsCore()->IsBodyActive(m_char_handle);
     m_flags.set(flEnabledOnStep, is_active_body);
     if (!is_active_body)
         return;
 
     Fvector linear_velocity, angular_velocity;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, linear_velocity);
-    GetPhysicsCore()->GetBodyAngularVelocity(m_body, angular_velocity);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, linear_velocity);
+    GetPhysicsCore()->GetBodyAngularVelocity(m_char_handle, angular_velocity);
 
     VERIFY(dV_valid(linear_velocity));
     VERIFY(dV_valid(angular_velocity));
@@ -433,8 +438,8 @@ void CPHElement::PhDataUpdate(float step)
     
     linear_velocity.div(m_l_scale);
     angular_velocity.div(m_w_scale);
-    GetPhysicsCore()->SetBodyLinearVelocity(m_body, linear_velocity);
-    GetPhysicsCore()->SetBodyAngularVelocity(m_body, angular_velocity);
+    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
+    GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, angular_velocity);
 
     float linear_velocity_mag = linear_velocity.magnitude();
     float angular_velocity_mag = angular_velocity.magnitude();
@@ -448,19 +453,19 @@ void CPHElement::PhDataUpdate(float step)
         Disabling();
 
     Fmatrix tr;
-    GetPhysicsCore()->GetBodyTransform(m_body, tr);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
     VERIFY_BOUNDARIES2(tr.c, phBoundaries, PhysicsRefObject(), "PhDataUpdate end, body position");
     
     UpdateInterpolation();
 
-    if (!GetPhysicsCore()->IsBodyActive(m_body))
+    if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
         return;
 
     if (!fis_zero(k_w))
     {
         Fvector torque = angular_velocity;
         torque.mul(-k_w);
-        GetPhysicsCore()->ApplyTorque(m_body, torque);
+        GetPhysicsCore()->ApplyTorque(m_char_handle, torque);
     }
 }
 
@@ -469,34 +474,34 @@ void CPHElement::Enable()
     if (!isActive())
         return;
     m_shell->EnableObject(0);
-    GetPhysicsCore()->ActivateBody(m_body);
+    GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
 }
 
 void CPHElement::Disable()
 {
-    if (!isActive() || !GetPhysicsCore()->IsBodyActive(m_body))
+    if (!isActive() || !GetPhysicsCore()->IsBodyActive(m_char_handle))
         return;
     FillInterpolation();
-    GetPhysicsCore()->DeactivateBody(m_body);
+    GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
 }
 
 void CPHElement::ReEnable() {}
 
 void CPHElement::Freeze()
 {
-    if (m_body == INVALID_BODY_HANDLE)
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
         return;
 
-    m_flags.set(flWasEnabledBeforeFreeze, GetPhysicsCore()->IsBodyActive(m_body));
-    GetPhysicsCore()->DeactivateBody(m_body);
+    m_flags.set(flWasEnabledBeforeFreeze, GetPhysicsCore()->IsBodyActive(m_char_handle));
+    GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
 }
 
 void CPHElement::UnFreeze()
 {
-    if (m_body == INVALID_BODY_HANDLE)
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
         return;
     if (m_flags.test(flWasEnabledBeforeFreeze))
-        GetPhysicsCore()->ActivateBody(m_body);
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
 }
 
 bool dbg_draw_ph_force_apply = false;
@@ -505,19 +510,19 @@ void CPHElement::applyImpulseVsMC(const Fvector& pos, const Fvector& dir, float 
 {
     if (!isActive() || m_flags.test(flFixed))
         return;
-    if (!GetPhysicsCore()->IsBodyActive(m_body))
-        GetPhysicsCore()->ActivateBody(m_body);
+    if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
         
     Fvector impulse;
     impulse.set(dir);
     impulse.mul(val / fixed_step);
     
     Fmatrix tr;
-    GetPhysicsCore()->GetBodyTransform(m_body, tr);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
     Fvector world_pos;
     tr.transform_tiny(world_pos, pos);
     
-    GetPhysicsCore()->ApplyPointImpulse(m_body, impulse, world_pos);
+    GetPhysicsCore()->ApplyPointImpulse(m_char_handle, impulse, world_pos);
 }
 
 void CPHElement::applyImpulseVsGF(const Fvector& pos, const Fvector& dir, float val)
@@ -525,14 +530,14 @@ void CPHElement::applyImpulseVsGF(const Fvector& pos, const Fvector& dir, float 
     VERIFY(_valid(pos) && _valid(dir) && _valid(val));
     if (!isActive() || m_flags.test(flFixed))
         return;
-    if (!GetPhysicsCore()->IsBodyActive(m_body))
-        GetPhysicsCore()->ActivateBody(m_body);
+    if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
         
     Fvector impulse;
     impulse.set(dir);
     impulse.mul(val / fixed_step);
     
-    GetPhysicsCore()->ApplyPointImpulse(m_body, impulse, pos);
+    GetPhysicsCore()->ApplyPointImpulse(m_char_handle, impulse, pos);
 }
 
 void CPHElement::applyImpulseTrace(const Fvector& pos, const Fvector& dir, float val, u16 id)
@@ -603,8 +608,8 @@ void CPHElement::InterpolateGlobalTransform(Fmatrix* m)
         VERIFY(_valid(*m));
         return;
     }
-    m_body_interpolation.InterpolateRotation(*m);
-    m_body_interpolation.InterpolatePosition(m->c);
+    m_char_handle_interpolation.InterpolateRotation(*m);
+    m_char_handle_interpolation.InterpolatePosition(m->c);
     MulB43InverceLocalForm(*m);
     m_flags.set(flUpdate, FALSE);
     VERIFY(_valid(*m));
@@ -612,14 +617,14 @@ void CPHElement::InterpolateGlobalTransform(Fmatrix* m)
 
 void CPHElement::GetGlobalTransformDynamic(Fmatrix* m) const
 {
-    GetPhysicsCore()->GetBodyTransform(m_body, *m);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, *m);
     MulB43InverceLocalForm(*m);
     VERIFY(_valid(*m));
 }
 
 void CPHElement::InterpolateGlobalPosition(Fvector* v)
 {
-    m_body_interpolation.InterpolatePosition(*v);
+    m_char_handle_interpolation.InterpolatePosition(*v);
     VERIFY(_valid(*v));
 }
 
@@ -632,9 +637,9 @@ void CPHElement::build(bool disable)
     build();
     SetTransform(mXFORM, mh_unspecified);
 
-    m_body_interpolation.SetBody(m_body);
+    m_char_handle_interpolation.SetBody(m_char_handle);
     if (disable)
-        GetPhysicsCore()->DeactivateBody(m_body);
+        GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
 }
 
 void CPHElement::RunSimulation(const Fmatrix& start_from)
@@ -709,7 +714,7 @@ bool CPHElement::AnimToVel(float dt, float l_limit, float a_limit)
     
     Fvector mc0;
     Fmatrix tr;
-    GetPhysicsCore()->GetBodyTransform(m_body, tr);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
     mc0 = tr.c;
     
     Fvector lv;
@@ -724,8 +729,8 @@ bool CPHElement::AnimToVel(float dt, float l_limit, float a_limit)
     put_in_range(lv, l_limit);
     put_in_range(aw, a_limit);
 
-    GetPhysicsCore()->SetBodyLinearVelocity(m_body, lv);
-    GetPhysicsCore()->SetBodyAngularVelocity(m_body, aw);
+    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, lv);
+    GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, aw);
     return ret;
 }
 
@@ -774,6 +779,10 @@ void CPHElement::BonesCallBack(CBoneInstance* B)
 void CPHElement::set_PhysicsRefObject(IPhysicsShellHolder* ref_object)
 {
     CPHGeometryOwner::set_PhysicsRefObject(ref_object);
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        GetPhysicsCore()->SetBodyUserData(m_char_handle, ref_object);
+    }
 }
 
 void CPHElement::set_ObjectContactCallback(ObjectContactCallbackFun* callback)
@@ -818,22 +827,22 @@ void CPHElement::addInertia(float M)
 
 void CPHElement::get_LinearVel(Fvector& velocity) const
 {
-    if (!isActive() || (!m_flags.test(flAnimated) && !GetPhysicsCore()->IsBodyActive(m_body)))
+    if (!isActive() || (!m_flags.test(flAnimated) && !GetPhysicsCore()->IsBodyActive(m_char_handle)))
     {
         velocity.set(0, 0, 0);
         return;
     }
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, velocity);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, velocity);
 }
 
 void CPHElement::get_AngularVel(Fvector& velocity) const
 {
-    if (!isActive() || (!m_flags.test(flAnimated) && !GetPhysicsCore()->IsBodyActive(m_body)))
+    if (!isActive() || (!m_flags.test(flAnimated) && !GetPhysicsCore()->IsBodyActive(m_char_handle)))
     {
         velocity.set(0, 0, 0);
         return;
     }
-    GetPhysicsCore()->GetBodyAngularVelocity(m_body, velocity);
+    GetPhysicsCore()->GetBodyAngularVelocity(m_char_handle, velocity);
 }
 
 void CPHElement::set_LinearVel(const Fvector& velocity)
@@ -843,7 +852,7 @@ void CPHElement::set_LinearVel(const Fvector& velocity)
     VERIFY2(_valid(velocity), "not valid argument velocity");
     Fvector vel = velocity;
     put_in_range(vel, m_l_limit);
-    GetPhysicsCore()->SetBodyLinearVelocity(m_body, vel);
+    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, vel);
 }
 
 void CPHElement::set_AngularVel(const Fvector& velocity)
@@ -854,7 +863,7 @@ void CPHElement::set_AngularVel(const Fvector& velocity)
 
     Fvector vel = velocity;
     put_in_range(vel, m_w_limit);
-    GetPhysicsCore()->SetBodyAngularVelocity(m_body, vel);
+    GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, vel);
 }
 
 void CPHElement::getForce(Fvector& force)
@@ -879,10 +888,10 @@ void CPHElement::applyForce(float x, float y, float z)
     VERIFY(_valid(x) && _valid(y) && _valid(z));
     if (!isActive() || m_flags.test(flFixed))
         return;
-    if (!GetPhysicsCore()->IsBodyActive(m_body))
-        GetPhysicsCore()->ActivateBody(m_body);
+    if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
         
-    GetPhysicsCore()->ApplyForce(m_body, Fvector().set(x, y, z));
+    GetPhysicsCore()->ApplyForce(m_char_handle, Fvector().set(x, y, z));
     m_shell->EnableObject(0);
 }
 
@@ -890,13 +899,13 @@ void CPHElement::applyImpulse(const Fvector& dir, float val)
 {
     if (!isActive() || m_flags.test(flFixed))
         return;
-    if (!GetPhysicsCore()->IsBodyActive(m_body))
-        GetPhysicsCore()->ActivateBody(m_body);
+    if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
         
     Fvector impulse;
     impulse.set(dir);
     impulse.mul(val / fixed_step);
-    GetPhysicsCore()->ApplyLinearImpulse(m_body, impulse);
+    GetPhysicsCore()->ApplyLinearImpulse(m_char_handle, impulse);
 }
 
 void CPHElement::add_Shape(const SBoneShape& shape, const Fmatrix& offset)
@@ -908,13 +917,13 @@ void CPHElement::add_Shape(const SBoneShape& shape) { CPHGeometryOwner::add_Shap
 
 void CPHElement::add_geom(CPhysicsGeom* g)
 {
-    g->set_body(m_body);
+    g->set_body(m_char_handle);
     CPHGeometryOwner::add_geom(g);
 }
 
 void CPHElement::remove_geom(CPhysicsGeom* g)
 {
-    g->set_body(INVALID_BODY_HANDLE);
+    g->set_body(INVALID_CHARACTER_VIRTUAL_HANDLE);
     CPHGeometryOwner::remove_geom(g);
 }
 
@@ -968,7 +977,7 @@ const Fvector& CPHElement::mass_Center() const
 {
     static Fvector mc;
     Fmatrix tr;
-    GetPhysicsCore()->GetBodyTransform(m_body, tr);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
     mc = tr.c;
     return mc;
 }
@@ -988,7 +997,7 @@ void CPHElement::PassEndGeoms(u16 from, u16 to, CPHElement* dest)
     GEOM_I i = i_from;
     for (; i != e; ++i)
     {
-        (*i)->set_body(INVALID_BODY_HANDLE);
+        (*i)->set_body(INVALID_CHARACTER_VIRTUAL_HANDLE);
         u16& element_pos = (*i)->element_position();
         element_pos = element_pos - shift;
     }
@@ -1016,8 +1025,8 @@ void CPHElement::DeleteFracturesHolder() { xr_delete(m_fratures_holder); }
 void CPHElement::CreateSimulBase()
 {
     Fvector half_extents = {0.5f, 0.5f, 0.5f};
-    m_body = GetPhysicsCore()->CreateBox(half_extents, m_mass_center, m_mass);
-    GetPhysicsCore()->DeactivateBody(m_body);
+    m_char_handle = GetPhysicsCore()->CreateBox(half_extents, m_mass_center, m_mass);
+    GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
 }
 
 void CPHElement::ReAdjustMassPositions(const Fmatrix& shift_pivot, float density)
@@ -1048,7 +1057,7 @@ void CPHElement::ResetMass(float density)
     shift_mc.sub(m_mass_center, tmp);
     
     Fmatrix tr;
-    GetPhysicsCore()->GetBodyTransform(m_body, tr);
+    GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
     tmp = tr.c;
     tmp.add(shift_mc);
 
@@ -1064,7 +1073,7 @@ void CPHElement::ReInitDynamics(const Fmatrix& shift_pivot, float density)
     for (; i != e; ++i)
     {
         (*i)->set_build_position(m_mass_center);
-        (*i)->set_body(m_body);
+        (*i)->set_body(m_char_handle);
     }
 }
 
@@ -1085,7 +1094,7 @@ void CPHElement::PresetActive()
         m_shell->m_object_in_root.invert();
     }
 
-    m_body_interpolation.SetBody(m_body);
+    m_char_handle_interpolation.SetBody(m_char_handle);
     FillInterpolation();
     m_flags.set(flActive, TRUE);
     RunSimulation();
@@ -1128,7 +1137,7 @@ void CPHElement::set_ApplyByGravity(bool flag)
 {
     if (!isActive() || m_flags.test(flFixed))
         return;
-    GetPhysicsCore()->SetBodyGravityFactor(m_body, flag ? 1.0f : 0.0f);
+    GetPhysicsCore()->SetBodyGravityFactor(m_char_handle, flag ? 1.0f : 0.0f);
 }
 
 bool CPHElement::get_ApplyByGravity() 
@@ -1157,8 +1166,8 @@ void CPHElement::applyGravityAccel(const Fvector& accel)
     VERIFY(_valid(accel));
     if (m_flags.test(flFixed))
         return;
-    if (!GetPhysicsCore()->IsBodyActive(m_body))
-        GetPhysicsCore()->ActivateBody(m_body);
+    if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
     m_shell->EnableObject(0);
 }
 
@@ -1169,20 +1178,20 @@ void CPHElement::CutVelocity(float l_limit, float a_limit)
     VERIFY(_valid(l_limit) && _valid(a_limit));
     
     Fvector lin_vel, ang_vel;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, lin_vel);
-    GetPhysicsCore()->GetBodyAngularVelocity(m_body, ang_vel);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, lin_vel);
+    GetPhysicsCore()->GetBodyAngularVelocity(m_char_handle, ang_vel);
 
     if (lin_vel.magnitude() > l_limit)
     {
         lin_vel.normalize();
         lin_vel.mul(l_limit);
-        GetPhysicsCore()->SetBodyLinearVelocity(m_body, lin_vel);
+        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, lin_vel);
     }
     if (ang_vel.magnitude() > a_limit)
     {
         ang_vel.normalize();
         ang_vel.mul(a_limit);
-        GetPhysicsCore()->SetBodyAngularVelocity(m_body, ang_vel);
+        GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, ang_vel);
     }
 }
 
@@ -1201,10 +1210,10 @@ void CPHElement::dbg_draw_velocity(float scale, u32 color)
     VERIFY(m_shell->PKinematics());
     Fmatrix bone;
     GetGlobalTransformDynamic(&bone);
-    VERIFY(m_body != INVALID_BODY_HANDLE);
+    VERIFY(m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE);
     
     Fvector vel;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, vel);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, vel);
     debug_output().DBG_DrawPoint(bone.c, 0.01f, color);
     debug_output().DBG_DrawLine(bone.c, Fvector().add(bone.c, vel.mul(scale)), color);
 }

@@ -54,9 +54,9 @@ struct TPHCharacterRestrictor : public SPHCharacterRestrictor
         if (!my_geom || !oposite_geom)
             return;
             
-        BodyHandle b1 = my_geom->get_body();
-        BodyHandle b2 = oposite_geom->get_body();
-        if (b1 == INVALID_BODY_HANDLE || b2 == INVALID_BODY_HANDLE)
+        CharacterVirtualHandle b1 = my_geom->get_body();
+        CharacterVirtualHandle b2 = oposite_geom->get_body();
+        if (b1 == INVALID_CHARACTER_VIRTUAL_HANDLE || b2 == INVALID_CHARACTER_VIRTUAL_HANDLE)
             return;
 
         CPHObject* o1 = my_geom->ph_object;

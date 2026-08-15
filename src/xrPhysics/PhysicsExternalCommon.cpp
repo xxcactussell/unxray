@@ -8,10 +8,10 @@ bool ContactShotMarkGetEffectPars(const Fvector& pos, const Fvector& normal, CPh
 {
     if (!g1 || !g2) return false;
 
-    BodyHandle b = g1->get_body();
+    CharacterVirtualHandle b = g1->get_body();
     b_invert_normal = false;
     
-    if (b == INVALID_BODY_HANDLE)
+    if (b == INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         b = g2->get_body();
         data = g2;
@@ -22,7 +22,7 @@ bool ContactShotMarkGetEffectPars(const Fvector& pos, const Fvector& normal, CPh
         data = g1;
     }
     
-    if (b == INVALID_BODY_HANDLE)
+    if (b == INVALID_CHARACTER_VIRTUAL_HANDLE)
         return false;
 
     Fvector vel;

@@ -18,7 +18,7 @@ public:
     u16 m_element_position;
     Flags16 m_flags;
 
-    BodyHandle m_body = INVALID_BODY_HANDLE;
+    CharacterVirtualHandle m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     IPhysicsShellHolder* ph_ref_object = nullptr; 
 
     CPHObject* ph_object = nullptr;
@@ -67,8 +67,8 @@ public:
     void set_local_form_bt(const Fmatrix& xform);
     
     // set
-    void set_body(BodyHandle body);
-    BodyHandle get_body() const { return m_body; }
+    void set_body(CharacterVirtualHandle body);
+    CharacterVirtualHandle get_body() const { return m_char_handle; }
     void set_bone_id(u16 id) { m_bone_id = id; }
     u16 bone_id() { return m_bone_id; }
 

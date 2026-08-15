@@ -5,8 +5,8 @@
 class CPHBaseBodyEffector
 {
 protected:
-    BodyHandle m_body = INVALID_BODY_HANDLE;
+    CharacterVirtualHandle m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
 
 public:
-    void Init(BodyHandle body) { m_body = body; }
+    void Init(CharacterVirtualHandle body) { m_char_handle = body; }
 };

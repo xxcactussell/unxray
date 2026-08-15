@@ -145,10 +145,10 @@ void CPHFracturesHolder::InitNewElement(CPHElement* element, const Fmatrix& shif
 {
     element->CreateSimulBase();
     element->ReInitDynamics(shift_pivot, density);
-    VERIFY(element->get_body() != INVALID_BODY_HANDLE);
+    VERIFY(element->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE);
 }
 
-void CPHFracturesHolder::PhTune(BodyHandle body)
+void CPHFracturesHolder::PhTune(CharacterVirtualHandle body)
 {
     // Обратная связь суставов в Jolt обрабатывается автоматически на уровне Constraints.
 }
@@ -248,8 +248,8 @@ CPHFracture::CPHFracture()
 
 bool CPHFracture::Update(CPHElement* element)
 {
-    BodyHandle body = element->get_body();
-    if (body == INVALID_BODY_HANDLE) return false;
+    CharacterVirtualHandle body = element->get_body();
+    if (body == INVALID_CHARACTER_VIRTUAL_HANDLE) return false;
 
     CPHFracturesHolder* holder = element->FracturesHolder();
     PH_IMPACT_STORAGE& impacts = holder->Impacts();

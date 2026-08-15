@@ -66,7 +66,7 @@ void CPHGeometryOwner::destroy()
     b_builded = false;
 }
 
-void CPHGeometryOwner::set_body(BodyHandle body)
+void CPHGeometryOwner::set_body(CharacterVirtualHandle body)
 {
     GEOM_I i = m_geoms.begin(), e = m_geoms.end();
     for (; i != e; ++i)

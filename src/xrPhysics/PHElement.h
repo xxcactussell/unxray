@@ -23,14 +23,14 @@ class CPHElement : public CPhysicsElement,
     friend class CPHFracturesHolder;
 
     float m_mass;
-    BodyHandle m_body = INVALID_BODY_HANDLE;
+    CharacterVirtualHandle m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
 
     float m_l_scale;
     float m_w_scale;
 
     CPHElement* m_parent_element; 
     CPHShell* m_shell; 
-    CPHInterpolation m_body_interpolation; 
+    CPHInterpolation m_char_handle_interpolation; 
 
     float m_w_limit;
     float m_l_limit;
@@ -55,14 +55,14 @@ private:
     ////////////////////////////////////////////Interpolation/////////////////////////////////////////////////////////////////////////////////////
     void FillInterpolation() 
     {
-        m_body_interpolation.ResetPositions();
-        m_body_interpolation.ResetRotations();
+        m_char_handle_interpolation.ResetPositions();
+        m_char_handle_interpolation.ResetRotations();
         m_flags.set(flUpdate, TRUE);
     }
     IC void UpdateInterpolation() 
     {
-        m_body_interpolation.UpdatePositions();
-        m_body_interpolation.UpdateRotations();
+        m_char_handle_interpolation.UpdatePositions();
+        m_char_handle_interpolation.UpdateRotations();
         m_flags.set(flUpdate, TRUE);
     }
 
@@ -130,12 +130,12 @@ public:
     void Enable(); 
     
     // Заменили dBodyIsEnabled на запросы к Jolt
-    virtual bool isEnabled() const { return isActive() && (m_body != INVALID_BODY_HANDLE && GetPhysicsCore()->IsBodyActive(m_body)); }
+    virtual bool isEnabled() const { return isActive() && (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE && GetPhysicsCore()->IsBodyActive(m_char_handle)); }
     virtual bool isFullActive() const { return isActive() && !m_flags.test(flActivating); }
     virtual bool isActive() const { return !!m_flags.test(flActive); }
     virtual void Freeze(); 
     virtual void UnFreeze(); 
-    virtual bool EnabledStateOnStep() { return (m_body != INVALID_BODY_HANDLE && GetPhysicsCore()->IsBodyActive(m_body)) || m_flags.test(flEnabledOnStep); } 
+    virtual bool EnabledStateOnStep() { return (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE && GetPhysicsCore()->IsBodyActive(m_char_handle)) || m_flags.test(flEnabledOnStep); } 
     
     ////////////////////////////////////////////////Updates///////////////////////////////////////////////////////////////////////////////////////////////
     bool AnimToVel(float dt, float l_limit, float a_limit);
@@ -223,8 +223,8 @@ public:
     CPhysicsElement* parent_element() { return m_parent_element; }
 #endif
     void SetShell(CPHShell* p); 
-    virtual BodyHandle get_body() { return m_body; } 
-    virtual const BodyHandle get_bodyConst() const { return m_body; }
+    virtual CharacterVirtualHandle get_body() { return m_char_handle; } 
+    virtual const CharacterVirtualHandle get_bodyConst() const { return m_char_handle; }
     
     //////////////////////////////////////////////////////Breakable//////////////////////////////////////////////////////////////////////////////////
     IC CPHFracturesHolder* FracturesHolder() { return m_fratures_holder; } 

@@ -95,7 +95,7 @@ protected:
     void destroy();
     void build_Geom(CPhysicsGeom& V); 
     void build_Geom(u16 i);
-    void set_body(BodyHandle body);
+    void set_body(CharacterVirtualHandle body);
 
     CPHGeometryOwner();
     virtual ~CPHGeometryOwner();

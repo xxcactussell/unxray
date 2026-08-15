@@ -18,6 +18,9 @@ typedef void* PhysicsShapeHandle;
 typedef uint32_t JointHandle;
 constexpr JointHandle INVALID_JOINT_HANDLE = 0xFFFFFFFF;
 
+typedef uint32_t CharacterVirtualHandle;
+constexpr CharacterVirtualHandle INVALID_CHARACTER_VIRTUAL_HANDLE = 0xFFFFFFFF;
+
 struct CDBRaycastHit {
     float range;
     u32 tri_index;
@@ -135,6 +138,29 @@ public:
 
     virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) = 0;
     virtual BodyHandle CreateBodyFromShape(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) = 0;
+
+    // --- CharacterVirtual ---
+    virtual PhysicsShapeHandle CreateCapsuleShape(float radius, float half_height) = 0;
+    virtual CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos) = 0;
+    virtual void DestroyCharacterVirtual(CharacterVirtualHandle handle) = 0;
+    virtual void SetCharacterVirtualVelocity(CharacterVirtualHandle handle, const Fvector& velocity) = 0;
+    virtual void GetCharacterVirtualPosition(CharacterVirtualHandle handle, Fvector& position) const = 0;
+    virtual void SetCharacterVirtualPosition(CharacterVirtualHandle handle, const Fvector& position) = 0;
+    virtual void SetCharacterVirtualShape(CharacterVirtualHandle handle, PhysicsShapeHandle shape) = 0;
+    virtual void ActivateCharacterVirtual(CharacterVirtualHandle handle) = 0;
+    virtual void DeactivateCharacterVirtual(CharacterVirtualHandle handle) = 0;
+    virtual void GetCharacterVirtualVelocity(CharacterVirtualHandle handle, Fvector& velocity) const = 0;
+    virtual void SetCharacterVirtualUserData(CharacterVirtualHandle handle, void* data) = 0;
+    
+    struct SJoltCharacterGroundState {
+        bool on_ground;
+        Fvector ground_normal;
+        Fvector ground_velocity;
+    };
+    virtual void GetCharacterVirtualGroundState(CharacterVirtualHandle handle, SJoltCharacterGroundState& out_state) const = 0;
+
+    virtual bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const = 0;
+    virtual void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) = 0;
 };
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore();

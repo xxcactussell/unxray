@@ -99,7 +99,7 @@ void CElevatorState::SwitchState(Estate new_state)
     if ((m_state != clbClimbingUp && m_state != clbClimbingDown) &&
         (new_state == clbClimbingUp || new_state == clbClimbingDown))
     {
-        if (m_character->get_body() != INVALID_BODY_HANDLE)
+        if (m_character->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE)
             GetPhysicsCore()->SetBodyGravityFactor(m_character->get_body(), 0.0f);
     }
 
@@ -107,7 +107,7 @@ void CElevatorState::SwitchState(Estate new_state)
     if ((new_state != clbClimbingUp && new_state != clbClimbingDown) &&
         (m_state == clbClimbingUp || m_state == clbClimbingDown))
     {
-        if (m_character->get_body() != INVALID_BODY_HANDLE)
+        if (m_character->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE)
             GetPhysicsCore()->SetBodyGravityFactor(m_character->get_body(), 1.0f);
     }
 

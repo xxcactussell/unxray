@@ -4,8 +4,18 @@ set -euo pipefail
 # ─── Настройки ───────────────────────────────────────────────────────────────
 MSVC_DIR="${HOME}/.msvc/bin/x64"
 SOLUTION="src/engine.sln"
-CONFIGURATION="${1:-Release}"   # Debug | Mixed | Release | ReleaseMasterGold
-PLATFORM="${2:-x64}"            # x64 | Win32
+COPY_TO_STEAM=false
+ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "-toSteam" ]]; then
+        COPY_TO_STEAM=true
+    else
+        ARGS+=("$arg")
+    fi
+done
+
+CONFIGURATION="${ARGS[0]:-Release}"   # Debug | Mixed | Release | ReleaseMasterGold
+PLATFORM="${ARGS[1]:-x64}"            # x64 | Win32
 TOOLSET="v145"                  # соответствует MSVC 14.5x в msvc-wine
 # NOTE: Wine Mono не поддерживает out-of-proc MSBuild узлы (/m > 1 вызывает
 # TypeLoadException в дочерних процессах). Принудительно используем 1 поток.
@@ -118,6 +128,29 @@ if [[ ${EXIT_CODE} -eq 0 ]]; then
     fi
     
     echo "   Артефакты готовы в: ${TARGET_DIR}/"
+
+    if [[ "${COPY_TO_STEAM}" == true ]]; then
+        STEAM_PATHS=(
+            "${HOME}/.steam/steam/steamapps/common/Stalker Call of Pripyat"
+            "${HOME}/.local/share/Steam/steamapps/common/Stalker Call of Pripyat"
+            "${HOME}/.steam/root/steamapps/common/Stalker Call of Pripyat"
+        )
+        STEAM_PATH=""
+        for p in "${STEAM_PATHS[@]}"; do
+            if [[ -d "$p" ]]; then
+                STEAM_PATH="$p"
+                break
+            fi
+        done
+        
+        if [[ -n "${STEAM_PATH}" ]]; then
+            echo "[INFO] Копируем артефакты в Steam: ${STEAM_PATH}"
+            rsync -a "${TARGET_DIR}/" "${STEAM_PATH}/"
+            echo "  - Копирование завершено."
+        else
+            echo "[WARN] Папка игры 'Stalker Call of Pripyat' не найдена в стандартных путях Steam."
+        fi
+    fi
 else
     echo "❌ Сборка завершилась с ошибкой (код ${EXIT_CODE})"
 fi

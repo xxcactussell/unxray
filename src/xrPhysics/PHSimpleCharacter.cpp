@@ -40,8 +40,9 @@ CPHSimpleCharacter::CPHSimpleCharacter()
     m_cap = nullptr;
     m_acceleration.set(0, 0, 0);
     b_external_impulse = false;
-    m_ext_impuls_stop_step = u64(-1);
     m_ext_imulse.set(0, 0, 0);
+    m_is_active = false;
+    m_ext_impuls_stop_step = u64(-1);
     m_phys_ref_object = nullptr;
     b_on_object = false;
     b_was_on_object = false;
@@ -100,17 +101,17 @@ void CPHSimpleCharacter::SetBox(const Fvector& sizes)
         m_cyl_hight = 0.01f;
         
     // В Jolt размеры и геометрии обновляются через ядро
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        // GetPhysicsCore()->ResizeCharacter(m_body, m_radius, m_cyl_hight);
+        // GetPhysicsCore()->ResizeCharacter(m_char_handle, m_radius, m_cyl_hight);
     }
 }
 
 void CPHSimpleCharacter::get_Box(Fvector& sz, Fvector& c) const
 {
     sz.set(2 * m_radius, 2 * m_radius + m_cyl_hight, 2 * m_radius);
-    if (m_body != INVALID_BODY_HANDLE)
-        GetPhysicsCore()->GetBodyPosition(m_body, c);
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, c);
     else
         c.set(0, 0, 0);
 }
@@ -133,27 +134,17 @@ void CPHSimpleCharacter::Create(Fvector sizes)
 
     b_exist = true;
 
-    m_cyl_hight = sizes.y - 2.f * m_radius;
-    if (m_cyl_hight < 0.f)
-        m_cyl_hight = 0.01f;
+    PhysicsShapeHandle shape = GetPhysicsCore()->CreateCapsuleShape(m_radius, m_cyl_hight / 2.f);
+    m_char_handle = GetPhysicsCore()->CreateCharacterVirtual(shape, Fvector().set(0.f, 0.f, 0.f));
 
-    b_exist = true;
-
-    m_body = GetPhysicsCore()->CreateCylinder(m_radius, sizes.y / 2.f, Fvector().set(0.f, 0.f, 0.f), m_mass);
-    
-    GetPhysicsCore()->SetBodyFixedRotation(m_body); 
-    
-    m_body_interpolation.SetBody(m_body);
+    m_char_handle_interpolation.SetBody(m_char_handle);
     
     if (m_phys_ref_object)
     {
+        GetPhysicsCore()->SetCharacterVirtualUserData(m_char_handle, m_phys_ref_object);
         SetPhysicsRefObject(m_phys_ref_object);
     }
     
-    if (m_phys_ref_object)
-    {
-        SetPhysicsRefObject(m_phys_ref_object);
-    }
     if (m_object_contact_callback)
     {
         SetObjectContactCallback(m_object_contact_callback);
@@ -199,10 +190,10 @@ void CPHSimpleCharacter::Destroy()
     spatial_unregister();
     CPHObject::deactivate();
 
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->DestroyBody(m_body);
-        m_body = INVALID_BODY_HANDLE;
+        GetPhysicsCore()->DestroyCharacterVirtual(m_char_handle);
+        m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     }
 }
 
@@ -210,279 +201,133 @@ const static u64 impulse_time_constant = 30;
 
 void CPHSimpleCharacter::ApplyImpulse(const Fvector& dir, const float P)
 {
-    if (!b_exist || b_external_impulse)
-        return;
-
-    m_ext_imulse.set(dir);
-    if (b_lose_control || b_jumping || b_jump)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        m_ext_imulse.set(0, -1, 0);
-    }
-    Enable();
-    b_lose_control = true;
-    b_external_impulse = true;
-    m_ext_impuls_stop_step = ph_world->m_steps_num + impulse_time_constant;
-    
-    if (m_body != INVALID_BODY_HANDLE)
-    {
-        GetPhysicsCore()->SetBodyLinearVelocity(m_body, Fvector().set(0,0,0));
-        Fvector force = m_ext_imulse;
-        force.mul(P / fixed_step);
-        GetPhysicsCore()->ApplyForce(m_body, force);
+        Fvector v;
+        GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
+        v.x += dir.x * P / 50.0f;
+        v.y += dir.y * P / 50.0f;
+        v.z += dir.z * P / 50.0f;
+        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, v);
     }
 }
 
-void CPHSimpleCharacter::ApplyForce(const Fvector& force) 
-{ 
-    ApplyForce(force.x, force.y, force.z); 
+void CPHSimpleCharacter::ApplyForce(const Fvector& force)
+{
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        Fvector v;
+        GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
+        v.x += force.x / 50.0f;
+        v.y += force.y / 50.0f;
+        v.z += force.z / 50.0f;
+        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, v);
+    }
 }
 
 void CPHSimpleCharacter::ApplyForce(float x, float y, float z)
 {
-    if (!b_exist || m_body == INVALID_BODY_HANDLE)
-        return;
-    Enable();
-    GetPhysicsCore()->ApplyForce(m_body, Fvector().set(x, y, z));
+    ApplyForce(Fvector().set(x, y, z));
 }
 
 void CPHSimpleCharacter::ApplyForce(const Fvector& dir, float force)
 {
-    ApplyForce(dir.x * force, dir.y * force, dir.z * force);
+    Fvector f; f.set(dir); f.mul(force); ApplyForce(f);
 }
 
 void CPHSimpleCharacter::PhDataUpdate(float step)
 {
-    SafeAndLimitVelocity();
-
-    if (!IsEnabled())
-    {
-        if (!ph_world->IsFreezed())
-            b_lose_control = false;
-        return;
-    }
-    if (is_contact && !is_control && !b_lose_ground)
-        Disabling();
-
-    if (ph_world->m_steps_num > m_ext_impuls_stop_step)
-    {
-        b_external_impulse = false;
-        m_ext_impuls_stop_step = u64(-1);
-        m_ext_imulse.set(0, 0, 0);
-        Fvector vel;
-        GetVelocity(vel);
-        float mag = vel.magnitude();
-        if (mag > m_max_velocity)
-        {
-            vel.mul(m_max_velocity / mag);
-        }
-        SetVelocity(Fvector().set(0, 0, 0));
-    }
-    was_contact = is_contact;
-    was_control = is_control;
-    b_was_side_contact = b_side_contact;
-    is_contact = false;
-    b_side_contact = false;
-    b_any_contacts = false;
-    b_valide_ground_contact = false;
-    b_valide_wall_contact = false;
-
-    b_was_on_object = b_on_object;
-    b_on_object = false;
-    b_death_pos = false;
-    m_contact_count = 0;
-    m_friction_factor = 0.f;
-    b_collision_restrictor_touch = false;
-    b_foot_mtl_check = true;
-    b_depart_control = false;
+    // SafeAndLimitVelocity(); // Disabled for Jolt: it clamps velocity incorrectly
+    if (!IsEnabled()) return;
     
-    GetPhysicsCore()->SetBodyAngularVelocity(m_body, Fvector().set(0, 0, 0));
-    // В Jolt вращение персонажа обычно блокируется настройками тела (lock rotations).
+    Fvector vel_before;
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, vel_before);
+    
+    GetPhysicsCore()->UpdateCharacterVirtual(m_char_handle, step, Fvector().set(0.f, -ph_world->Gravity(), 0.f));
 
-    float mass = GetPhysicsCore()->GetBodyMass(m_body);
-    Fvector linear_velocity;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, linear_velocity);
+    Fvector vel_after;
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, vel_after);
     
-    float linear_velocity_mag = linear_velocity.magnitude();
-    float l_air = linear_velocity_mag * default_k_l; 
-    if (l_air > mass / fixed_step)
-        l_air = mass / fixed_step; 
+    Fvector pos;
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
 
-    if (!fis_zero(l_air))
-    {
-        Fvector damp;
-        damp.set(linear_velocity).mul(-l_air);
-        GetPhysicsCore()->ApplyForce(m_body, damp);
-    }
-        
-    if (b_non_interactive)
-    {
-        Disable();
-        GetPhysicsCore()->SetBodyPosition(m_body, m_last_move);
-    }
-    
-    Fvector current_pos;
-    GetPhysicsCore()->GetBodyPosition(m_body, current_pos);
-    
-    m_last_move.sub(current_pos, m_last_move);
-    m_last_move.mul(1.f / fixed_step);
-    
-    if (PhOutOfBoundaries(current_pos))
-        Disable();
-        
-    VERIFY_BOUNDARIES(current_pos, phBoundaries, PhysicsRefObject());
-    m_body_interpolation.UpdatePositions();
+    m_char_handle_interpolation.UpdatePositions();
+
+    static u32 tick = 0;
+    if (tick++ % 10 == 0)
+        Msg("~ [JOLT] PhDataUpdate: accel(%.2f,%.2f,%.2f), vel_in(%.2f,%.2f,%.2f), vel_out(%.2f,%.2f,%.2f), pos(%.2f,%.2f,%.2f)", 
+            m_acceleration.x, m_acceleration.y, m_acceleration.z,
+            vel_before.x, vel_before.y, vel_before.z,
+            vel_after.x, vel_after.y, vel_after.z,
+            pos.x, pos.y, pos.z);
 }
 
 void CPHSimpleCharacter::PhTune(float step)
 {
     Fvector current_pos;
-    GetPhysicsCore()->GetBodyPosition(m_body, current_pos);
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, current_pos);
     m_last_move.set(current_pos);
-    
     m_elevator_state.PhTune(step);
 
-    b_air_contact_state = !is_contact;
+    if (!IsEnabled()) return;
 
-#ifdef DEBUG
-    if (debug_output().ph_dbg_draw_mask().test(phDbgCharacterControl))
-    {
-        if (b_air_contact_state)
-            debug_output().DBG_DrawPoint(current_pos, m_radius, color_xrgb(255, 0, 0));
-    }
-#endif
-
-    bool b_good_graund = b_valide_ground_contact && m_ground_contact_normal.y > M_SQRT1_2;
-
-    if (!IsEnabled())
-    {
-        if (!ph_world->IsFreezed())
-            b_lose_control = false;
-        return;
+    IPhysicsCore::SJoltCharacterGroundState ground_state;
+    GetPhysicsCore()->GetCharacterVirtualGroundState(m_char_handle, ground_state);
+    
+    b_on_ground = ground_state.on_ground;
+    if (b_on_ground) {
+        b_valide_ground_contact = true;
+        m_ground_contact_normal = ground_state.ground_normal;
+        m_ground_contact_position = current_pos;
+    } else {
+        b_valide_ground_contact = false;
+        m_ground_contact_normal.set(0, 1, 0);
     }
 
-    if (m_acceleration.magnitude() > 0.1f)
-        is_control = true;
-    else
-        is_control = false;
-
-    b_depart = was_contact && (!is_contact);
-    b_stop_control = was_control && (!is_control);
-    b_meet = (!was_contact) && (is_contact);
-    if (b_lose_control && (is_contact || m_elevator_state.ClimbingState()))
-        b_meet_control = true;
-    b_on_ground = b_valide_ground_contact || (b_meet && (!b_depart));
-
-    if (m_elevator_state.ClimbingState())
-    {
-        b_side_contact = false;
-        m_friction_factor = 1.f;
-        if (b_stop_control)
-            GetPhysicsCore()->SetBodyLinearVelocity(m_body, Fvector().set(0, 0, 0));
-    }
-
-    if (b_depart)
-        m_depart_position.set(current_pos);
+    if (m_acceleration.magnitude() > 0.1f) is_control = true;
+    else is_control = false;
 
     Fvector velocity;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, velocity);
-    float linear_vel_smag = velocity.square_magnitude();
-    
-    if (b_lose_control)
-    {
-        if ((b_on_ground && (m_ground_contact_normal.y > (M_SQRT1_2 / 2.f))) || 
-            fis_zero(linear_vel_smag) || m_elevator_state.ClimbingState())
-        {
-            b_lose_control = false;
-        }
-    }
-
-    if ((b_jumping && b_good_graund) ||
-        (m_elevator_state.ClimbingState() && b_valide_wall_contact)) 
-        b_jumping = false;
-
-    if (!b_on_ground && !m_elevator_state.ClimbingState())
-    {
-        Fvector dif;
-        dif.sub(current_pos, m_depart_position);
-        if (dif.square_magnitude() > LOSE_CONTROL_DISTANCE * LOSE_CONTROL_DISTANCE && _abs(dif.y) > 0.1f)
-        {
-            b_lose_control = true;
-            b_depart_control = true;
-        }
-    }
-
-    ValidateWalkOn();
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, velocity);
 
     if (b_jump)
     {
-        b_lose_control = true;
-        b_depart_control = true;
-        GetPhysicsCore()->SetBodyLinearVelocity(m_body, m_jump_accel);
-        m_jump_depart_position.set(current_pos);
+        velocity.set(m_jump_accel);
         b_jump = false;
         b_jumping = true;
-        m_elevator_state.Depart();
-        Enable();
     }
-
-    b_lose_ground = !(b_good_graund || m_elevator_state.ClimbingState()) || b_lose_control;
-
-    ApplyAcceleration();
-
-    float mass = GetPhysicsCore()->GetBodyMass(m_body);
+    
     if (is_control)
     {
-        Fvector sidedir;
-        Fvector y = {0.f, 1.f, 0.f};
-        sidedir.crossproduct(m_control_force, y);
-        sidedir.normalize_safe();
-        float vProj = sidedir.dotproduct(velocity);
-
-        GetPhysicsCore()->ApplyForce(m_body, m_control_force); 
-        
-        if (!b_lose_control || b_clamb_jump) 
+        if (m_elevator_state.ClimbingState())
         {
-            Fvector damp_force;
-            damp_force.x = -sidedir.x * vProj * (500.f + 200.f * b_clamb_jump) * m_friction_factor;
-            damp_force.y = -mass * (50.f) * (!b_lose_control && !(is_contact || (b_any_contacts))); 
-            damp_force.z = -sidedir.z * vProj * (500.f + 200.f * b_clamb_jump) * m_friction_factor;
-            GetPhysicsCore()->ApplyForce(m_body, damp_force);
+            velocity = m_acceleration;
+        }
+        else
+        {
+            velocity.x = m_acceleration.x;
+            velocity.z = m_acceleration.z;
         }
     }
-
-    if (b_jumping)
+    else
     {
-        float air_factor = 1.f;
-        if (b_lose_control && CastActorCharacter())
-            air_factor = 10.f * m_air_control_factor;
-
-        float proj = m_acceleration.x * velocity.x + m_acceleration.z * velocity.z;
-
-        Fvector dif;
-        dif.sub(current_pos, m_jump_depart_position);
-        float amag = _sqrt(m_acceleration.x * m_acceleration.x + m_acceleration.z * m_acceleration.z);
-        if (amag > 0.f)
+        if (m_elevator_state.ClimbingState())
         {
-            if (dif.x * m_acceleration.x / amag + dif.z * m_acceleration.z / amag < 0.3f)
-            {
-                Fvector jump_fv = m_acceleration;
-                jump_fv.mul(1000.f / amag * air_factor);
-                GetPhysicsCore()->ApplyForce(m_body, Fvector().set(jump_fv.x, 0, jump_fv.z));
-            }
-            if (proj < 0.f)
-            {
-                float vmag = velocity.x * velocity.x + velocity.z * velocity.z;
-                if (vmag > 0.f)
-                {
-                    Fvector jump_fv = velocity;
-                    jump_fv.mul(3000.f * air_factor / vmag / amag * proj);
-                    GetPhysicsCore()->ApplyForce(m_body, Fvector().set(jump_fv.x, 0, jump_fv.z));
-                }
-            }
+            velocity.set(0,0,0);
+        }
+        else 
+        {
+            velocity.x = 0;
+            velocity.z = 0;
         }
     }
 
-    BodyCutForce(m_body, 5.f, 0.f);
+    if (b_on_ground && velocity.y < 0.0f)
+    {
+        velocity.y = ground_state.ground_velocity.y; // reset downward velocity accumulation
+    }
+
+    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, velocity);
 }
 
 void CPHSimpleCharacter::ValidateWalkOn()
@@ -501,7 +346,7 @@ bool CPHSimpleCharacter::ValidateWalkOnObject()
     if (b_clamb_jump)
     {
         Fvector current_pos;
-        GetPhysicsCore()->GetBodyPosition(m_body, current_pos);
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, current_pos);
         Fvector dif;
         dif.sub(current_pos, m_clamb_depart_position);
         if (_abs(dif.y) > CLAMB_DISTANCE)
@@ -524,7 +369,7 @@ bool CPHSimpleCharacter::ValidateWalkOnObject()
                 (m_wall_contact_position.z - m_ground_contact_position.z)) > 0.05f && 
             m_wall_contact_position.y - m_ground_contact_position.y > 0.01f)
         {
-            GetPhysicsCore()->GetBodyPosition(m_body, m_clamb_depart_position);
+            GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, m_clamb_depart_position);
         }
             
     return b_clamb_jump;
@@ -553,67 +398,7 @@ void CPHSimpleCharacter::SetCamDir(const Fvector& cam_dir) { m_cam_dir.set(cam_d
 
 static const float pull_force = 25.f;
 
-void CPHSimpleCharacter::ApplyAcceleration()
-{
-    m_control_force.set(0, 0, 0);
-    float mass = GetPhysicsCore()->GetBodyMass(m_body);
-
-    if (b_lose_control)
-    {
-        m_control_force = m_acceleration;
-        m_control_force.mul(mass * m_air_control_factor);
-        return;
-    }
-
-    Fvector accel = {m_acceleration.x, 0.f, m_acceleration.z};
-    if (m_elevator_state.Active())
-    {
-        if (m_elevator_state.NearState())
-            m_elevator_state.GetControlDir(accel);
-        if (m_elevator_state.ClimbingState())
-        {
-            if (m_elevator_state.GetControlDir(m_control_force))
-            {
-                m_control_force.mul(m_friction_factor * mass * pull_force * 2.f);
-                return;
-            }
-        }
-    }
-
-    Fvector fvdir, sidedir;
-    Fvector y = {0.f, 1.f, 0.f};
-    sidedir.crossproduct(y, accel);
-    
-    if (b_clamb_jump && b_valide_wall_contact)
-    {
-        fvdir.crossproduct(sidedir, m_wall_contact_normal);
-        fvdir.normalize_safe();
-        m_control_force.mad(fvdir, mass * pull_force);
-    }
-    else
-    {
-        if (b_valide_ground_contact && (m_ground_contact_normal.y > M_SQRT1_2))
-        { 
-            fvdir.crossproduct(sidedir, m_ground_contact_normal);
-            fvdir.normalize_safe();
-            m_control_force.mad(fvdir, mass * pull_force);
-        }
-        else
-        {
-            fvdir.set(accel);
-            fvdir.normalize_safe();
-            m_control_force.mad(fvdir, mass * pull_force * 1.5f);
-        }
-    }
-    if (!m_elevator_state.ClimbingState() && b_clamb_jump)
-    { 
-        m_control_force.mul(4.f);
-        m_control_force.y = _abs(m_control_force.y);
-        m_control_force.x = m_control_force.x * accel.x >= 0.f ? m_control_force.x : -m_control_force.x;
-        m_control_force.z = m_control_force.z * accel.z >= 0.f ? m_control_force.z : -m_control_force.z;
-    }
-    m_control_force.mul(m_friction_factor);
-}
+void CPHSimpleCharacter::ApplyAcceleration() {}
 
 void CPHSimpleCharacter::IPosition(Fvector& pos)
 {
@@ -623,7 +408,7 @@ void CPHSimpleCharacter::IPosition(Fvector& pos)
     }
     else
     {
-        m_body_interpolation.InterpolatePosition(pos);
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
         pos.y -= m_radius;
     }
     VERIFY_BOUNDARIES(pos, phBoundaries, PhysicsRefObject());
@@ -637,16 +422,16 @@ void CPHSimpleCharacter::SetPosition(const Fvector& pos)
         return;
 
     float full_height = m_cyl_hight + 2.f * m_radius;
-    float center_y = pos.y;
+    float center_y = pos.y + m_radius;
 
     m_death_position.set(pos.x, center_y, pos.z);
     m_safe_position.set(pos.x, center_y, pos.z);
     b_death_pos = false;
 
-    GetPhysicsCore()->SetBodyPosition(m_body, Fvector().set(pos.x, center_y, pos.z));
+    GetPhysicsCore()->SetCharacterVirtualPosition(m_char_handle, Fvector().set(pos.x, center_y, pos.z));
     
     CPHDisablingTranslational::Reinit();
-    m_body_interpolation.ResetPositions();
+    m_char_handle_interpolation.ResetPositions();
     CPHObject::spatial_move();
 }
 
@@ -654,11 +439,11 @@ void CPHSimpleCharacter::GetPosition(Fvector& vpos)
 {
     if (!b_exist)
     {
-        vpos.set(m_safe_position.x, m_safe_position.y - m_radius, m_safe_position.z);
+        vpos.set(m_safe_position);
     }
     else
     {
-        GetPhysicsCore()->GetBodyPosition(m_body, vpos);
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, vpos);
         vpos.y -= m_radius;
     }
 
@@ -669,7 +454,7 @@ void CPHSimpleCharacter::GetPreviousPosition(Fvector& pos)
 {
     VERIFY(b_exist);
     VERIFY(!ph_world->Processing());
-    m_body_interpolation.GetPosition(pos, 0);
+    m_char_handle_interpolation.GetPosition(pos, 0);
 }
 
 void CPHSimpleCharacter::GetVelocity(Fvector& vvel) const
@@ -679,7 +464,7 @@ void CPHSimpleCharacter::GetVelocity(Fvector& vvel) const
         vvel.set(m_safe_velocity);
         return;
     }
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, vvel);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, vvel);
 }
 
 void CPHSimpleCharacter::SetVelocity(Fvector vel)
@@ -692,17 +477,17 @@ void CPHSimpleCharacter::SetVelocity(Fvector vel)
         float mag = _sqrt(sq_mag);
         vel.mul(default_l_limit / mag);
     }
-    GetPhysicsCore()->SetBodyLinearVelocity(m_body, vel);
+    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, vel);
 }
 
 void CPHSimpleCharacter::SetMas(float mass)
 {
     m_mass = mass;
-    if (!b_exist || m_body == INVALID_BODY_HANDLE)
+    if (!b_exist || m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
         return;
         
     // В Jolt масса настраивается через свойства тела
-    // GetPhysicsCore()->SetBodyMass(m_body, mass);
+    // GetPhysicsCore()->SetBodyMass(m_char_handle, mass);
 }
 
 EEnvironment CPHSimpleCharacter::CheckInvironment()
@@ -718,12 +503,16 @@ EEnvironment CPHSimpleCharacter::CheckInvironment()
 void CPHSimpleCharacter::SetPhysicsRefObject(IPhysicsShellHolder* ref_object)
 {
     m_phys_ref_object = ref_object;
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        GetPhysicsCore()->SetCharacterVirtualUserData(m_char_handle, ref_object);
+    }
 }
 
 void CPHSimpleCharacter::SafeAndLimitVelocity()
 {
     Fvector linear_velocity;
-    GetPhysicsCore()->GetBodyLinearVelocity(m_body, linear_velocity);
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, linear_velocity);
     
     float mag = linear_velocity.magnitude();
     float l_limit;
@@ -763,7 +552,7 @@ void CPHSimpleCharacter::SafeAndLimitVelocity()
             {
                 linear_velocity.x /= f;
                 linear_velocity.z /= f;
-                GetPhysicsCore()->SetBodyLinearVelocity(m_body, linear_velocity);
+                GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
             }
             else
                 CutVelocity(l_limit, 0.f);
@@ -775,23 +564,23 @@ void CPHSimpleCharacter::SafeAndLimitVelocity()
                 new_pos.y = m_safe_position.y + linear_velocity.y * fixed_step;
                 new_pos.z = m_safe_position.z + linear_velocity.z * fixed_step;
                 
-                GetPhysicsCore()->SetBodyPosition(m_body, new_pos);
+                GetPhysicsCore()->SetCharacterVirtualPosition(m_char_handle, new_pos);
                 VERIFY_BOUNDARIES(new_pos, phBoundaries, PhysicsRefObject());
             }
         }
         else
-            GetPhysicsCore()->SetBodyLinearVelocity(m_body, Fvector().set(0, 0, 0));
+            GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, Fvector().set(0, 0, 0));
     }
 
     Fvector body_pos;
-    GetPhysicsCore()->GetBodyPosition(m_body, body_pos);
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, body_pos);
     if (!_valid(body_pos))
     {
         Fvector fallback;
         fallback.x = m_safe_position.x - m_safe_velocity.x * fixed_step;
         fallback.y = m_safe_position.y - m_safe_velocity.y * fixed_step;
         fallback.z = m_safe_position.z - m_safe_velocity.z * fixed_step;
-        GetPhysicsCore()->SetBodyPosition(m_body, fallback);
+        GetPhysicsCore()->SetCharacterVirtualPosition(m_char_handle, fallback);
         body_pos = fallback;
     }
 
@@ -810,6 +599,11 @@ void CPHSimpleCharacter::RemoveObjectContactCallback(ObjectContactCallbackFun* c
 
 void CPHSimpleCharacter::Disable()
 {
+    if (!b_exist)
+        return;
+    m_is_active = false;
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
     CPHCharacter::Disable();
 }
 
@@ -817,6 +611,9 @@ void CPHSimpleCharacter::Enable()
 {
     if (!b_exist)
         return;
+    m_is_active = true;
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
     CPHCharacter::Enable();
 }
 
@@ -864,8 +661,8 @@ void CPHSimpleCharacter::InitContact(bool& do_collide, bool bo1, float depth, CP
         is_contact = true;
     }
     
-    bool object = (my_geom && my_geom->get_body() != INVALID_BODY_HANDLE) && 
-                  (oposite_geom && oposite_geom->get_body() != INVALID_BODY_HANDLE);
+    bool object = (my_geom && my_geom->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE) && 
+                  (oposite_geom && oposite_geom->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE);
                   
     b_on_object = b_on_object || object;
 
@@ -873,7 +670,7 @@ void CPHSimpleCharacter::InitContact(bool& do_collide, bool bo1, float depth, CP
     
     if (object)
     {
-        BodyHandle b = bo1 ? oposite_geom->get_body() : my_geom->get_body();
+        CharacterVirtualHandle b = bo1 ? oposite_geom->get_body() : my_geom->get_body();
         u16 obj_material_idx = bo1 ? material_idx_2 : material_idx_1;
         UpdateDynamicDamage(Fvector().set(0,1,0), Fvector().set(0,0,0), b, obj_material_idx, bo1);
         contact_material = obj_material_idx;
@@ -945,10 +742,10 @@ void CPHSimpleCharacter::set_State(const SPHNetState& state) { CPHCharacter::set
 void CPHSimpleCharacter::get_spatial_params()
 {
     // В Jolt пространственные параметры можно получить через AABB тела
-    if (m_body != INVALID_BODY_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         Fvector c, d;
-        GetPhysicsCore()->GetBodyAABB(m_body, c, d);
+        GetPhysicsCore()->GetBodyAABB(m_char_handle, c, d);
         spatial.sphere.P = c;
         spatial.sphere.R = d.magnitude();
         AABB.set(d);
@@ -972,7 +769,7 @@ void CPHSimpleCharacter::DeathPosition(Fvector& deathPos)
         deathPos.set(m_death_position);
     else
     {
-        GetPhysicsCore()->GetBodyPosition(m_body, deathPos);
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, deathPos);
         if (!_valid(deathPos))
             deathPos.set(m_safe_position);
     }

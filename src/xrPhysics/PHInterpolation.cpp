@@ -9,44 +9,41 @@ extern float fixed_step;
 
 CPHInterpolation::CPHInterpolation()
 {
-    m_body = INVALID_BODY_HANDLE;
+    m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
 }
 
-void CPHInterpolation::SetBody(BodyHandle body)
+void CPHInterpolation::SetBody(CharacterVirtualHandle body)
 {
-    if (body == INVALID_BODY_HANDLE)
+    if (body == INVALID_CHARACTER_VIRTUAL_HANDLE)
         return;
         
-    m_body = body;
+    m_char_handle = body;
     
-    Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    Fvector pos;
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
     
-    qPositions.fill_in(transform.c);
+    qPositions.fill_in(pos);
     
     Fquaternion fQ;
-    fQ.set(transform);
+    fQ.identity();
     qRotations.fill_in(fQ);
 }
 
 void CPHInterpolation::UpdatePositions()
 {
-    if (m_body == INVALID_BODY_HANDLE) return;
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
     
-    Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
-    qPositions.push_back(transform.c);
+    Fvector pos;
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
+    qPositions.push_back(pos);
 }
 
 void CPHInterpolation::UpdateRotations()
 {
-    if (m_body == INVALID_BODY_HANDLE) return;
-    
-    Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
     
     Fquaternion fQ;
-    fQ.set(transform);
+    fQ.identity();
     qRotations.push_back(fQ);
 }
 
@@ -68,22 +65,19 @@ void CPHInterpolation::InterpolateRotation(Fmatrix& rot)
 
 void CPHInterpolation::ResetPositions()
 {
-    if (m_body == INVALID_BODY_HANDLE) return;
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
     
-    Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
-    qPositions.fill_in(transform.c);
+    Fvector pos;
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
+    qPositions.fill_in(pos);
 }
 
 void CPHInterpolation::ResetRotations()
 {
-    if (m_body == INVALID_BODY_HANDLE) return;
-    
-    Fmatrix transform;
-    GetPhysicsCore()->GetBodyTransform(m_body, transform);
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
     
     Fquaternion fQ;
-    fQ.set(transform);
+    fQ.identity();
     qRotations.fill_in(fQ);
 }
 

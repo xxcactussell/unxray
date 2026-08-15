@@ -7,6 +7,7 @@
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Physics/Constraints/Constraint.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 
 #include <unordered_map>
 
@@ -22,6 +23,9 @@ private:
 
     std::unordered_map<JointHandle, JPH::Ref<JPH::Constraint>> m_constraints;
     JointHandle m_next_joint_handle = 1;
+
+    std::unordered_map<CharacterVirtualHandle, JPH::Ref<JPH::CharacterVirtual>> m_characters;
+    CharacterVirtualHandle m_next_character_handle = 1;
 
 public:
     JoltPhysicsCore() = default;
@@ -126,4 +130,19 @@ public:
     BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) override;
     virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) override;
     virtual BodyHandle CreateBodyFromShape(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) override;
+
+    PhysicsShapeHandle CreateCapsuleShape(float radius, float half_height) override;
+    CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos) override;
+    void DestroyCharacterVirtual(CharacterVirtualHandle handle) override;
+    virtual void SetCharacterVirtualVelocity(CharacterVirtualHandle handle, const Fvector& velocity) override;
+    virtual void GetCharacterVirtualVelocity(CharacterVirtualHandle handle, Fvector& velocity) const override;
+    virtual void SetCharacterVirtualUserData(CharacterVirtualHandle handle, void* data) override;
+    virtual void GetCharacterVirtualGroundState(CharacterVirtualHandle handle, SJoltCharacterGroundState& out_state) const override;
+    virtual void GetCharacterVirtualPosition(CharacterVirtualHandle handle, Fvector& position) const override;
+    void SetCharacterVirtualPosition(CharacterVirtualHandle handle, const Fvector& position) override;
+    void SetCharacterVirtualShape(CharacterVirtualHandle handle, PhysicsShapeHandle shape) override;
+    void ActivateCharacterVirtual(CharacterVirtualHandle handle) override;
+    void DeactivateCharacterVirtual(CharacterVirtualHandle handle) override;
+    bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const override;
+    void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) override;
 };

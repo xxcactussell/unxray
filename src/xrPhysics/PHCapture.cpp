@@ -37,9 +37,9 @@ void phcapture_destroy(IPHCapture*& c)
 void CPHCapture::CreateBody()
 {
     // В Jolt Physics мы больше не создаем фейковое твердое тело для захвата.
-    // Вместо этого мы будем использовать привязку к статичному пространству (INVALID_BODY_HANDLE)
+    // Вместо этого мы будем использовать привязку к статичному пространству (INVALID_CHARACTER_VIRTUAL_HANDLE)
     // в нашем FullControlJoint и просто будем обновлять его параметры мотора.
-    m_body = INVALID_BODY_HANDLE;
+    m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
 }
 
 CPHCapture::~CPHCapture() 
@@ -96,7 +96,7 @@ void CPHCapture::PhTune(float step)
     {
         if (b_disabled)
         {
-            if (m_taget_element->get_body() != INVALID_BODY_HANDLE)
+            if (m_taget_element->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE)
                 GetPhysicsCore()->DeactivateBody(m_taget_element->get_body());
         }
     }
@@ -140,9 +140,9 @@ void CPHCapture::PullingUpdate()
         CreateBody();
         
         CPHElement* e = static_cast<CPHElement*>(m_taget_element);
-        BodyHandle target_body = e->get_body();
+        CharacterVirtualHandle target_body = e->get_body();
         
-        if (target_body == INVALID_BODY_HANDLE) 
+        if (target_body == INVALID_CHARACTER_VIRTUAL_HANDLE) 
         {
             Release();
             return;
@@ -176,7 +176,7 @@ void CPHCapture::CapturedUpdate()
     }
     
     CPHElement* e = static_cast<CPHElement*>(m_taget_element);
-    BodyHandle target_body = e->get_body();
+    CharacterVirtualHandle target_body = e->get_body();
 
     // Простая проверка разрыва: если цель отдалилась от точки захвата слишком сильно
     Fvector target_pos;

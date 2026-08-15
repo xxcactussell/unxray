@@ -315,10 +315,10 @@ float NonElasticCollisionEnergy(CPhysicsElement* e1, CPhysicsElement* e2, const 
     VERIFY(e1);
     VERIFY(e2);
     
-    BodyHandle b1 = static_cast<CPHElement*>(e1)->get_body();
-    BodyHandle b2 = static_cast<CPHElement*>(e2)->get_body();
+    CharacterVirtualHandle b1 = static_cast<CPHElement*>(e1)->get_body();
+    CharacterVirtualHandle b2 = static_cast<CPHElement*>(e2)->get_body();
     
-    if (b1 == INVALID_BODY_HANDLE || b2 == INVALID_BODY_HANDLE) return 0.f;
+    if (b1 == INVALID_CHARACTER_VIRTUAL_HANDLE || b2 == INVALID_CHARACTER_VIRTUAL_HANDLE) return 0.f;
 
     // В Jolt Physics энергия вычисляется через разницу скоростей (приблизительная формула)
     Fvector v1, v2;

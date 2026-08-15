@@ -278,8 +278,12 @@ void CPHSimpleCharacter::PhTune(float step)
     if (b_on_ground) {
         b_valide_ground_contact = true;
         m_ground_contact_normal = ground_state.ground_normal;
+        b_lose_control = false;
+        b_lose_ground = false;
         m_ground_contact_position = current_pos;
     } else {
+        b_lose_control = true;
+        b_lose_ground = true;
         b_valide_ground_contact = false;
         m_ground_contact_normal.set(0, 1, 0);
     }

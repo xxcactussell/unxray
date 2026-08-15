@@ -1005,7 +1005,7 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCapsuleShape(float radius, float half_
     JPH::RefConst<JPH::Shape> capsule = new JPH::CapsuleShape(half_height, radius);
     
     JPH::RefConst<JPH::Shape> translated_capsule = JPH::RotatedTranslatedShapeSettings(
-        JPH::Vec3(0, half_height + radius, 0),
+        JPH::Vec3(0, half_height, 0),
         JPH::Quat::sIdentity(),
         capsule
     ).Create().Get();
@@ -1151,6 +1151,12 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
         JPH::CharacterVirtual::ExtendedUpdateSettings update_settings;
         update_settings.mStickToFloorStepDown = -character->GetUp() * 0.2f;
         update_settings.mWalkStairsStepUp = character->GetUp() * 0.4f;
+
+        // X-Ray doesn't automatically apply gravity to velocity when not on ground
+        // CharacterVirtual requires us to explicitly add gravity to mLinearVelocity
+        JPH::Vec3 current_vel = character->GetLinearVelocity();
+        current_vel += JPH::Vec3(gravity.x, gravity.y, gravity.z) * delta_time;
+        character->SetLinearVelocity(current_vel);
 
         JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
 

@@ -112,6 +112,7 @@ protected:
     bool b_on_ground;
     bool b_lose_ground;
     bool b_collision_restrictor_touch;
+    u32 m_air_frames;
     u32 m_contact_count;
 
     bool is_control;

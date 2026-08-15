@@ -1056,7 +1056,9 @@ void JoltPhysicsCore::GetCharacterVirtualVelocity(CharacterVirtualHandle handle,
 void JoltPhysicsCore::GetCharacterVirtualPosition(CharacterVirtualHandle handle, Fvector& position) const {
     auto it = m_characters.find(handle);
     if (it != m_characters.end()) {
-        JPH::RVec3 pos = it->second->GetPosition();
+        JPH::CharacterVirtual* character = it->second.GetPtr();
+        JPH::RVec3 pos = character->GetPosition();
+        pos -= character->GetUp() * character->GetCharacterPadding();
         position.set(pos.GetX(), pos.GetY(), pos.GetZ());
     }
 }
@@ -1064,7 +1066,10 @@ void JoltPhysicsCore::GetCharacterVirtualPosition(CharacterVirtualHandle handle,
 void JoltPhysicsCore::SetCharacterVirtualPosition(CharacterVirtualHandle handle, const Fvector& position) {
     auto it = m_characters.find(handle);
     if (it != m_characters.end()) {
-        it->second->SetPosition(JPH::RVec3(position.x, position.y, position.z));
+        JPH::CharacterVirtual* character = it->second.GetPtr();
+        JPH::RVec3 pos(position.x, position.y, position.z);
+        pos += character->GetUp() * character->GetCharacterPadding();
+        character->SetPosition(pos);
     }
 }
 
@@ -1105,7 +1110,8 @@ void JoltPhysicsCore::GetCharacterVirtualGroundState(CharacterVirtualHandle hand
     if (it != m_characters.end()) {
         JPH::CharacterVirtual* character = it->second.GetPtr();
         
-        out_state.on_ground = (character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround);
+        out_state.on_ground = (character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround || 
+                               character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnSteepGround);
         
         JPH::Vec3 normal = character->GetGroundNormal();
         out_state.ground_normal.set(normal.GetX(), normal.GetY(), normal.GetZ());
@@ -1149,7 +1155,7 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
         JPH::CharacterVirtual* character = it->second.GetPtr();
         
         JPH::CharacterVirtual::ExtendedUpdateSettings update_settings;
-        update_settings.mStickToFloorStepDown = -character->GetUp() * 0.2f;
+        update_settings.mStickToFloorStepDown = -character->GetUp() * 0.6f;
         update_settings.mWalkStairsStepUp = character->GetUp() * 0.4f;
 
         // X-Ray doesn't automatically apply gravity to velocity when not on ground

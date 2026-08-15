@@ -75,7 +75,10 @@ CPHSimpleCharacter::CPHSimpleCharacter()
     m_air_control_factor = 0;
     m_safe_velocity.set(0,0,0);
     m_collision_damage_factor = 1.f;
+    b_on_ground = false;
+    b_lose_ground = true;
     b_collision_restrictor_touch = false;
+    m_air_frames = 0;
     b_foot_mtl_check = true;
     b_non_interactive = false;
 }
@@ -237,7 +240,7 @@ void CPHSimpleCharacter::ApplyForce(const Fvector& dir, float force)
 
 void CPHSimpleCharacter::PhDataUpdate(float step)
 {
-    // SafeAndLimitVelocity(); // Disabled for Jolt: it clamps velocity incorrectly
+    SafeAndLimitVelocity(); // Enable velocity limiting for Jolt, but only clamp horizontal velocity
     if (!IsEnabled()) return;
     
     Fvector vel_before;
@@ -274,7 +277,15 @@ void CPHSimpleCharacter::PhTune(float step)
     IPhysicsCore::SJoltCharacterGroundState ground_state;
     GetPhysicsCore()->GetCharacterVirtualGroundState(m_char_handle, ground_state);
     
-    b_on_ground = ground_state.on_ground;
+    if (ground_state.on_ground) {
+        m_air_frames = 0;
+    } else {
+        m_air_frames++;
+    }
+
+    // 4 frames of "coyote time" to hide micro-bounces from the game logic
+    b_on_ground = (m_air_frames < 4);
+    
     if (b_on_ground) {
         b_valide_ground_contact = true;
         m_ground_contact_normal = ground_state.ground_normal;
@@ -517,8 +528,11 @@ void CPHSimpleCharacter::SafeAndLimitVelocity()
 {
     Fvector linear_velocity;
     GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, linear_velocity);
+
+    Fvector horiz_vel;
+    horiz_vel.set(linear_velocity.x, 0, linear_velocity.z);
+    float mag = horiz_vel.magnitude();
     
-    float mag = linear_velocity.magnitude();
     float l_limit;
     if (is_control && !b_lose_control)
         l_limit = m_max_velocity / phTimefactor;
@@ -546,34 +560,22 @@ void CPHSimpleCharacter::SafeAndLimitVelocity()
     }
 
     m_mean_y = m_mean_y * 0.9999f + linear_velocity.y * 0.0001f;
+    
     if (mag > l_limit)
-    { 
-        if (!fis_zero(l_limit))
+    {
+        if (!fis_zero(l_limit) && !fis_zero(mag))
         {
-            float f = mag / l_limit;
-
-            if (b_lose_ground && linear_velocity.y < 0.f && linear_velocity.y > -default_l_limit)
-            {
-                linear_velocity.x /= f;
-                linear_velocity.z /= f;
-                GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
-            }
-            else
-                CutVelocity(l_limit, 0.f);
-
-            if (is_control && !b_lose_control)
-            {
-                Fvector new_pos;
-                new_pos.x = m_safe_position.x + linear_velocity.x * fixed_step;
-                new_pos.y = m_safe_position.y + linear_velocity.y * fixed_step;
-                new_pos.z = m_safe_position.z + linear_velocity.z * fixed_step;
-                
-                GetPhysicsCore()->SetCharacterVirtualPosition(m_char_handle, new_pos);
-                VERIFY_BOUNDARIES(new_pos, phBoundaries, PhysicsRefObject());
-            }
+            float f = l_limit / mag;
+            linear_velocity.x *= f;
+            linear_velocity.z *= f;
+            GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
         }
         else
-            GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, Fvector().set(0, 0, 0));
+        {
+            linear_velocity.x = 0;
+            linear_velocity.z = 0;
+            GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
+        }
     }
 
     Fvector body_pos;

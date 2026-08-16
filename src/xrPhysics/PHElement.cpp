@@ -67,12 +67,22 @@ void CPHElement::build()
 
         for (CPhysicsGeom* geom : m_geoms)
         {
+            if (!geom->geometry())
+            {
+                geom->init();
+            }
+
             if (geom->geometry())
             {
                 shapes.push_back(geom->geometry());
                 
                 Fmatrix local_xform;
                 geom->get_local_form(local_xform);
+
+                // In ODE, dGeomSetBody automatically calculated the offset relative to the body.
+                // In Jolt, we must pass the explicit offset relative to m_mass_center.
+                local_xform.c.sub(m_mass_center);
+                
                 local_transforms.push_back(local_xform);
             }
         }

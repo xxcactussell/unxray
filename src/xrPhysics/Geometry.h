@@ -90,10 +90,10 @@ public:
     void set_ph_object(CPHObject* o);
 
 protected:
-    void init();
     virtual PhysicsShapeHandle create() = 0;
 
 public:
+    void init();
     void build(const Fvector& ref_point);
     virtual void set_build_position(const Fvector& ref_point);
     void clear_motion_history(bool set_unspecified);

@@ -10,7 +10,8 @@ class CPHInterpolation
 public:
     CPHInterpolation();
     
-    void SetBody(CharacterVirtualHandle body);
+    void SetBody(BodyHandle body);
+    void SetCharacter(CharacterVirtualHandle character);
     
     static const u16 PH_INTERPOLATION_POINTS = 2;
     
@@ -27,7 +28,9 @@ public:
     void SetPosition(const Fvector& p, u16 num);
 
 private:
-    CharacterVirtualHandle m_char_handle;
+    enum class HandleType { None, Body, Character };
+    HandleType m_handle_type;
+    uint32_t m_handle;
     CCycleConstStorage<Fvector, PH_INTERPOLATION_POINTS> qPositions;
     CCycleConstStorage<Fquaternion, PH_INTERPOLATION_POINTS> qRotations;
 };

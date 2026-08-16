@@ -9,21 +9,41 @@ extern float fixed_step;
 
 CPHInterpolation::CPHInterpolation()
 {
-    m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
+    m_handle_type = HandleType::None;
+    m_handle = 0;
 }
 
-void CPHInterpolation::SetBody(CharacterVirtualHandle body)
+void CPHInterpolation::SetBody(BodyHandle body)
 {
-    if (body == INVALID_CHARACTER_VIRTUAL_HANDLE)
+    if (body == INVALID_BODY_HANDLE)
         return;
-        
-    m_char_handle = body;
-    
+
+    m_handle_type = HandleType::Body;
+    m_handle = body;
+
+    Fmatrix tr;
+    GetPhysicsCore()->GetBodyTransform(m_handle, tr);
+
+    qPositions.fill_in(tr.c);
+
+    Fquaternion fQ;
+    fQ.set(tr);
+    qRotations.fill_in(fQ);
+}
+
+void CPHInterpolation::SetCharacter(CharacterVirtualHandle character)
+{
+    if (character == INVALID_CHARACTER_VIRTUAL_HANDLE)
+        return;
+
+    m_handle_type = HandleType::Character;
+    m_handle = character;
+
     Fvector pos;
-    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
-    
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_handle, pos);
+
     qPositions.fill_in(pos);
-    
+
     Fquaternion fQ;
     fQ.identity();
     qRotations.fill_in(fQ);
@@ -31,19 +51,31 @@ void CPHInterpolation::SetBody(CharacterVirtualHandle body)
 
 void CPHInterpolation::UpdatePositions()
 {
-    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
-    
+    if (m_handle_type == HandleType::None) return;
+
     Fvector pos;
-    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
+    if (m_handle_type == HandleType::Body) {
+        Fmatrix tr;
+        GetPhysicsCore()->GetBodyTransform(m_handle, tr);
+        pos = tr.c;
+    } else {
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_handle, pos);
+    }
     qPositions.push_back(pos);
 }
 
 void CPHInterpolation::UpdateRotations()
 {
-    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
-    
+    if (m_handle_type == HandleType::None) return;
+
     Fquaternion fQ;
-    fQ.identity();
+    if (m_handle_type == HandleType::Body) {
+        Fmatrix tr;
+        GetPhysicsCore()->GetBodyTransform(m_handle, tr);
+        fQ.set(tr);
+    } else {
+        fQ.identity();
+    }
     qRotations.push_back(fQ);
 }
 
@@ -65,19 +97,31 @@ void CPHInterpolation::InterpolateRotation(Fmatrix& rot)
 
 void CPHInterpolation::ResetPositions()
 {
-    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
-    
+    if (m_handle_type == HandleType::None) return;
+
     Fvector pos;
-    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, pos);
+    if (m_handle_type == HandleType::Body) {
+        Fmatrix tr;
+        GetPhysicsCore()->GetBodyTransform(m_handle, tr);
+        pos = tr.c;
+    } else {
+        GetPhysicsCore()->GetCharacterVirtualPosition(m_handle, pos);
+    }
     qPositions.fill_in(pos);
 }
 
 void CPHInterpolation::ResetRotations()
 {
-    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
-    
+    if (m_handle_type == HandleType::None) return;
+
     Fquaternion fQ;
-    fQ.identity();
+    if (m_handle_type == HandleType::Body) {
+        Fmatrix tr;
+        GetPhysicsCore()->GetBodyTransform(m_handle, tr);
+        fQ.set(tr);
+    } else {
+        fQ.identity();
+    }
     qRotations.fill_in(fQ);
 }
 

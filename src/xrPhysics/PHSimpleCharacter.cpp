@@ -140,7 +140,7 @@ void CPHSimpleCharacter::Create(Fvector sizes)
     PhysicsShapeHandle shape = GetPhysicsCore()->CreateCapsuleShape(m_radius, m_cyl_hight / 2.f);
     m_char_handle = GetPhysicsCore()->CreateCharacterVirtual(shape, Fvector().set(0.f, 0.f, 0.f));
 
-    m_char_handle_interpolation.SetBody(m_char_handle);
+    m_char_handle_interpolation.SetCharacter(m_char_handle);
     
     if (m_phys_ref_object)
     {
@@ -295,11 +295,6 @@ void CPHSimpleCharacter::PhTune(float step)
 
     bool stick_to_floor = !(b_jump || b_jumping);
     GetPhysicsCore()->SetCharacterVirtualStickToFloor(m_char_handle, stick_to_floor);
-
-    static u32 tick = 0;
-    if (tick++ % 10 == 0)
-        Msg("~ [JOLT] PhTune: stick_to_floor=%d, b_jump=%d, b_on_ground=%d", 
-            stick_to_floor, b_jump, b_on_ground);
 
     if (b_on_ground) {
         b_valide_ground_contact = true;

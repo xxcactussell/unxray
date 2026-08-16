@@ -141,7 +141,8 @@ void CPhysicsGeom::build(const Fvector& ref_point)
 
 void CPhysicsGeom::init()
 {
-    m_geom_shape = create();
+    if (!m_geom_shape)
+        m_geom_shape = create();
 }
 
 void CPhysicsGeom::destroy()
@@ -155,7 +156,9 @@ void CPhysicsGeom::destroy()
 
 void CPhysicsGeom::set_local_form_bt(const Fmatrix& xform)
 {
-    set_local_form(xform);
+    // В Jolt Physics геометрия добавляется в составную форму (CompoundShape)
+    // с нужным оффсетом изначально при создании тела. Нам не нужно
+    // и нельзя менять m_box (исходные данные кости), как это делалось в ODE.
 }
 
 // ============================================================================
@@ -235,9 +238,7 @@ void CBoxGeom::set_local_form(const Fmatrix& form)
 
 PhysicsShapeHandle CBoxGeom::create()
 {
-    // Jolt-формы будут создаваться напрямую в CPHElement из этих параметров,
-    // поэтому здесь мы возвращаем nullptr.
-    return nullptr;
+    return GetPhysicsCore()->CreateBoxShape(m_box.m_halfsize);
 }
 
 void CBoxGeom::set_size(const Fvector& half_size)
@@ -302,7 +303,7 @@ void CSphereGeom::set_local_form(const Fmatrix& form)
     m_sphere.P.set(form.c); 
 }
 
-PhysicsShapeHandle CSphereGeom::create() { return nullptr; }
+PhysicsShapeHandle CSphereGeom::create() { return GetPhysicsCore()->CreateSphereShape(m_sphere.R); }
 
 void CSphereGeom::set_build_position(const Fvector& ref_point)
 {
@@ -364,7 +365,7 @@ void CCylinderGeom::set_local_form(const Fmatrix& form)
     m_cylinder.m_direction.set(form.j);
 }
 
-PhysicsShapeHandle CCylinderGeom::create() { return nullptr; }
+PhysicsShapeHandle CCylinderGeom::create() { return GetPhysicsCore()->CreateCylinderShape(m_cylinder.m_radius, m_cylinder.m_height * 0.5f); }
 
 void CCylinderGeom::set_build_position(const Fvector& ref_point)
 {

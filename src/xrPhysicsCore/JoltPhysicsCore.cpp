@@ -274,7 +274,6 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCompoundShape(PhysicsShapeHandle* shap
 
         JPH::Quat rotation(x, y, z, w);
         rotation = rotation.Normalized();
-
         // Добавляем форму с ее локальным смещением
         compound_settings.AddShape(position, rotation, jph_shape);
     }
@@ -282,8 +281,8 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCompoundShape(PhysicsShapeHandle* shap
     JPH::ShapeSettings::ShapeResult result = compound_settings.Create();
     if (result.HasError())
     {
-        Msg("! [Jolt] Failed to create compound shape: %s", result.GetError().c_str());
-        return nullptr;
+        Msg("! [JOLT] CreateCompoundShape ERROR: %s, falling back to BoxShape", result.GetError().c_str());
+        return CreateBoxShape({0.5f, 0.5f, 0.5f});
     }
 
     JPH::Shape* final_shape = result.Get().GetPtr();
@@ -310,11 +309,13 @@ BodyHandle JoltPhysicsCore::CreateBodyFromShape(PhysicsShapeHandle shape_handle,
     body_settings.mMassPropertiesOverride.mMass = mass;
 
     JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
-    if (!body) return INVALID_BODY_HANDLE;
+    if (!body) {
+        return INVALID_BODY_HANDLE;
+    }
 
     m_physics_system->GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);
     
-    return static_cast<BodyHandle>(body->GetID().GetIndex());
+    return static_cast<BodyHandle>(body->GetID().GetIndexAndSequenceNumber());
 }
 
 BodyHandle JoltPhysicsCore::CreateBox(const Fvector& half_extents, const Fvector& position, float mass) {
@@ -442,6 +443,9 @@ void JoltPhysicsCore::GetBodyTransform(BodyHandle body_handle, Fmatrix& out_matr
     out_matrix.j.set(axis_y.GetX(), axis_y.GetY(), axis_y.GetZ());
     out_matrix.k.set(axis_z.GetX(), axis_z.GetY(), axis_z.GetZ());
     out_matrix.c.set(pos.GetX(), pos.GetY(), pos.GetZ());
+
+    // For safety, initialize the projection part to standard values
+    out_matrix._14_ = 0.0f; out_matrix._24_ = 0.0f; out_matrix._34_ = 0.0f; out_matrix._44_ = 1.0f;
 }
 
 void JoltPhysicsCore::SetBodyTransform(BodyHandle body_handle, const Fmatrix& matrix) {
@@ -1001,8 +1005,34 @@ void JoltPhysicsCore::SetBodyUserData(BodyHandle body_handle, void* data) {
     }
 }
 
+PhysicsShapeHandle JoltPhysicsCore::CreateBoxShape(const Fvector& half_extents) {
+    float hx = std::max(half_extents.x, 0.001f);
+    float hy = std::max(half_extents.y, 0.001f);
+    float hz = std::max(half_extents.z, 0.001f);
+    JPH::RefConst<JPH::Shape> shape = new JPH::BoxShape(JPH::Vec3(hx, hy, hz));
+    shape->AddRef();
+    return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(shape.GetPtr()));
+}
+
+PhysicsShapeHandle JoltPhysicsCore::CreateSphereShape(float radius) {
+    float r = std::max(radius, 0.001f);
+    JPH::RefConst<JPH::Shape> shape = new JPH::SphereShape(r);
+    shape->AddRef();
+    return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(shape.GetPtr()));
+}
+
+PhysicsShapeHandle JoltPhysicsCore::CreateCylinderShape(float radius, float half_height) {
+    float hh = std::max(half_height, 0.001f);
+    float r = std::max(radius, 0.001f);
+    JPH::RefConst<JPH::Shape> shape = new JPH::CylinderShape(hh, r);
+    shape->AddRef();
+    return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(shape.GetPtr()));
+}
+
 PhysicsShapeHandle JoltPhysicsCore::CreateCapsuleShape(float radius, float half_height) {
-    JPH::RefConst<JPH::Shape> capsule = new JPH::CapsuleShape(half_height, radius);
+    float hh = std::max(half_height, 0.001f);
+    float r = std::max(radius, 0.001f);
+    JPH::RefConst<JPH::Shape> capsule = new JPH::CapsuleShape(hh, r);
     
     JPH::RefConst<JPH::Shape> translated_capsule = JPH::RotatedTranslatedShapeSettings(
         JPH::Vec3(0, half_height, 0),

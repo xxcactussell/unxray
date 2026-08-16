@@ -139,7 +139,9 @@ public:
     virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) = 0;
     virtual BodyHandle CreateBodyFromShape(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) = 0;
 
-    // --- CharacterVirtual ---
+    virtual PhysicsShapeHandle CreateBoxShape(const Fvector& half_extents) = 0;
+    virtual PhysicsShapeHandle CreateSphereShape(float radius) = 0;
+    virtual PhysicsShapeHandle CreateCylinderShape(float radius, float half_height) = 0;
     virtual PhysicsShapeHandle CreateCapsuleShape(float radius, float half_height) = 0;
     virtual CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos) = 0;
     virtual void DestroyCharacterVirtual(CharacterVirtualHandle handle) = 0;

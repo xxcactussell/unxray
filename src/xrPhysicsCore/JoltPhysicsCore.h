@@ -132,6 +132,9 @@ public:
     virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) override;
     virtual BodyHandle CreateBodyFromShape(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) override;
 
+    PhysicsShapeHandle CreateBoxShape(const Fvector& half_extents) override;
+    PhysicsShapeHandle CreateSphereShape(float radius) override;
+    PhysicsShapeHandle CreateCylinderShape(float radius, float half_height) override;
     PhysicsShapeHandle CreateCapsuleShape(float radius, float half_height) override;
     CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos) override;
     void DestroyCharacterVirtual(CharacterVirtualHandle handle) override;

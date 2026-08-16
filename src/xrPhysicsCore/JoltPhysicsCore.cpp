@@ -101,6 +101,20 @@ void JoltPhysicsCore::Destroy()
     }
 }
 
+#ifdef JPH_DEBUG_RENDERER
+class DistanceBodyFilter : public JPH::BodyDrawFilter {
+    JPH::Vec3 m_camera_pos;
+    float m_max_dist_sq;
+public:
+    DistanceBodyFilter(JPH::Vec3 camera_pos, float max_dist)
+        : m_camera_pos(camera_pos), m_max_dist_sq(max_dist * max_dist) {}
+
+    virtual bool ShouldDraw(const JPH::Body& inBody) const override {
+        return (inBody.GetCenterOfMassPosition() - m_camera_pos).LengthSq() <= m_max_dist_sq;
+    }
+};
+#endif
+
 void JoltPhysicsCore::DebugDraw(const Fvector& camera_pos)
 {
 #ifdef JPH_DEBUG_RENDERER
@@ -122,6 +136,8 @@ void JoltPhysicsCore::DebugDraw(const Fvector& camera_pos)
                 camera_pos.x, camera_pos.y, camera_pos.z);
         }
 
+        DistanceBodyFilter filter(JPH::Vec3(camera_pos.x, camera_pos.y, camera_pos.z), m_debug_draw_distance);
+
         JPH::BodyManager::DrawSettings draw_settings;
         draw_settings.mDrawShape = (m_debug_draw_flags & 1) != 0;
         draw_settings.mDrawShapeWireframe = true; // Force wireframe for reliable rendering
@@ -130,10 +146,21 @@ void JoltPhysicsCore::DebugDraw(const Fvector& camera_pos)
         draw_settings.mDrawMassAndInertia = (m_debug_draw_flags & 8) != 0;
         draw_settings.mDrawCenterOfMassTransform = (m_debug_draw_flags & 8) != 0;
         
-        m_physics_system->DrawBodies(draw_settings, m_debug_renderer);
+        m_physics_system->DrawBodies(draw_settings, m_debug_renderer, &filter);
         
         if ((m_debug_draw_flags & 4) != 0) {
             m_physics_system->DrawConstraints(m_debug_renderer);
+            m_physics_system->DrawConstraintLimits(m_debug_renderer);
+            m_physics_system->DrawConstraintReferenceFrame(m_debug_renderer);
+        }
+        
+        // Draw virtual characters
+        for (const auto& [handle, character] : m_characters) {
+            if ((character->GetPosition() - JPH::Vec3(camera_pos.x, camera_pos.y, camera_pos.z)).LengthSq() <= m_debug_draw_distance * m_debug_draw_distance) {
+                if ((m_debug_draw_flags & 1) != 0) {
+                    character->GetShape()->Draw(m_debug_renderer, character->GetCenterOfMassTransform(), JPH::Vec3::sOne(), JPH::Color::sYellow, false, true);
+                }
+            }
         }
 
         if (log_counter % 300 == 0) {
@@ -153,6 +180,11 @@ void JoltPhysicsCore::DebugDraw(const Fvector& camera_pos)
 void JoltPhysicsCore::SetDebugDrawFlags(u32 flags)
 {
     m_debug_draw_flags = flags;
+}
+
+void JoltPhysicsCore::SetDebugDrawDistance(float distance)
+{
+    m_debug_draw_distance = distance;
 }
 
 struct CDB_TRI_Mock {

@@ -145,6 +145,7 @@ extern float dbg_imotion_draw_velocity_scale;
 #endif
 int g_AI_inactive_time = 0;
 int g_jolt_debug_mode = 0;
+float g_jolt_debug_distance = 100.0f;
 Flags32 g_uCommonFlags;
 enum E_COMMON_FLAGS
 {
@@ -2568,6 +2569,7 @@ void CCC_RegisterCommands()
     CMD4(CCC_Float, "con_sensitive", &g_console_sensitive, 0.01f, 1.0f);
     CMD4(CCC_Integer, "wpn_aim_toggle", &b_toggle_weapon_aim, 0, 1);
     CMD4(CCC_Integer, "jolt_debug", &g_jolt_debug_mode, 0, 255);
+    CMD4(CCC_Float, "jolt_debug_distance", &g_jolt_debug_distance, 1.0f, 1000.0f);
 
     CMD1(CCC_UIStyle, "ui_style");
     CMD1(CCC_UIRestart, "ui_restart");

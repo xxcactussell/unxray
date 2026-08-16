@@ -626,6 +626,7 @@ extern Flags32 dbg_net_Draw_Flags;
 #endif
 
 extern int g_jolt_debug_mode;
+extern float g_jolt_debug_distance;
 
 void CLevel::OnRender()
 {
@@ -651,6 +652,7 @@ void CLevel::OnRender()
     {
         if (IPhysicsCore* core = GetPhysicsCore()) {
             core->SetDebugDrawFlags(g_jolt_debug_mode);
+            core->SetDebugDrawDistance(g_jolt_debug_distance);
             core->DebugDraw(Device.vCameraPosition);
         }
     }

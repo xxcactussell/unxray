@@ -21,6 +21,7 @@ private:
     CXRayJoltDebugRenderer* m_debug_renderer = nullptr;
 #endif
     u32 m_debug_draw_flags = 0;
+    float m_debug_draw_distance = 100.0f;
 
     BPLayerInterfaceImpl m_broad_phase_layer_interface;
     ObjectVsBroadPhaseLayerFilterImpl m_object_vs_broadphase_layer_filter;
@@ -62,6 +63,7 @@ public:
 
     void DebugDraw(const Fvector& camera_pos) override;
     void SetDebugDrawFlags(u32 flags) override;
+    void SetDebugDrawDistance(float distance) override;
 
     PhysicsShapeHandle BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris, u32 t_cnt, const u32* tri_indices = nullptr, u32 tri_indices_cnt = 0) override;
     void DestroyCDBModel(PhysicsShapeHandle handle) override;

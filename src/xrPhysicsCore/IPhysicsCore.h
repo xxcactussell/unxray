@@ -48,6 +48,7 @@ public:
 
     virtual void DebugDraw(const Fvector& camera_pos) = 0;
     virtual void SetDebugDrawFlags(u32 flags) = 0;
+    virtual void SetDebugDrawDistance(float distance) = 0;
 
     virtual PhysicsShapeHandle BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris, u32 t_cnt, const u32* tri_indices = nullptr, u32 tri_indices_cnt = 0) = 0;
     virtual void DestroyCDBModel(PhysicsShapeHandle handle) = 0;

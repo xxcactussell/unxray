@@ -16,15 +16,17 @@ IRender_Sector::sector_id_t R_dsgraph_structure::detect_sector(const Fvector& P)
 
 IRender_Sector::sector_id_t R_dsgraph_structure::detect_sector(const Fvector& P, Fvector& dir)
 {
+    thread_local xrXRC thread_xrc("dsgraph_detect_sector");
+
     // Portals model
     int id1 = -1;
     float range1 = 500.f;
     if (RImplementation.rmPortals)
     {
-        Sectors_xrc.ray_query(CDB::OPT_ONLYNEAREST, RImplementation.rmPortals, P, dir, range1);
-        if (Sectors_xrc.r_count())
+        thread_xrc.ray_query(CDB::OPT_ONLYNEAREST, RImplementation.rmPortals, P, dir, range1);
+        if (thread_xrc.r_count())
         {
-            CDB::RESULT* RP1 = Sectors_xrc.r_begin();
+            CDB::RESULT* RP1 = thread_xrc.r_begin();
             id1 = RP1->id;
             range1 = RP1->range;
         }
@@ -33,10 +35,10 @@ IRender_Sector::sector_id_t R_dsgraph_structure::detect_sector(const Fvector& P,
     // Geometry model
     int id2 = -1;
     float range2 = range1;
-    Sectors_xrc.ray_query(CDB::OPT_ONLYNEAREST, g_pGameLevel->ObjectSpace.GetStaticModel(), P, dir, range2);
-    if (Sectors_xrc.r_count())
+    thread_xrc.ray_query(CDB::OPT_ONLYNEAREST, g_pGameLevel->ObjectSpace.GetStaticModel(), P, dir, range2);
+    if (thread_xrc.r_count())
     {
-        CDB::RESULT* RP2 = Sectors_xrc.r_begin();
+        CDB::RESULT* RP2 = thread_xrc.r_begin();
         id2 = RP2->id;
         range2 = RP2->range;
     }

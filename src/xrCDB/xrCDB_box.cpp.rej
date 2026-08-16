@@ -1,0 +1,16 @@
+--- src/xrCDB/xrCDB_box.cpp
++++ src/xrCDB/xrCDB_box.cpp
+@@ -10,6 +10,13 @@
+     ZoneScoped;
+     m_def->syncronize();
+     r_clear();
++    
++    // Protect against NaN and incredibly large boxes (e.g. from exploding ragdolls)
++    if (!_valid(b_center) || !_valid(b_dim))
++        return;
++        
++    if (b_dim.x > 10000.f || b_dim.y > 10000.f || b_dim.z > 10000.f)
++        return;
+ 
+     if (!m_def->get_shape_handle())
+         return;

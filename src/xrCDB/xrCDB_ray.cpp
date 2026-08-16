@@ -13,6 +13,12 @@ void COLLIDER::ray_query(u32 ray_mode, const MODEL* m_def, const Fvector& r_star
     m_def->syncronize();
     r_clear();
 
+    if (!_valid(r_start) || !_valid(r_dir) || !_valid(r_range))
+        return;
+
+    if (r_range > 100000.f)
+        r_range = 100000.f;
+
     if (!m_def->get_shape_handle()) 
         return;
 

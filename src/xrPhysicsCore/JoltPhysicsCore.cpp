@@ -228,6 +228,12 @@ void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle,
                 mesh_shape->GetTriangleUserData(hit.mSubShapeID2) 
             });
         }
+        std::sort(out_hits.begin(), out_hits.end(), [](const CDBRaycastHit& a, const CDBRaycastHit& b) {
+            return a.tri_index < b.tri_index;
+        });
+        out_hits.erase(std::unique(out_hits.begin(), out_hits.end(), [](const CDBRaycastHit& a, const CDBRaycastHit& b) {
+            return a.tri_index == b.tri_index;
+        }), out_hits.end());
     }
 }
 
@@ -587,6 +593,8 @@ void JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
             // Читаем UserData
             out_tri_indices.push_back(mesh_shape->GetTriangleUserData(hit.mSubShapeID2));
         }
+        std::sort(out_tri_indices.begin(), out_tri_indices.end());
+        out_tri_indices.erase(std::unique(out_tri_indices.begin(), out_tri_indices.end()), out_tri_indices.end());
     }
 }
 

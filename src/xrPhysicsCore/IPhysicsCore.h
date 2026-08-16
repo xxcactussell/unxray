@@ -143,7 +143,7 @@ public:
     virtual PhysicsShapeHandle CreateSphereShape(float radius) = 0;
     virtual PhysicsShapeHandle CreateCylinderShape(float radius, float half_height) = 0;
     virtual PhysicsShapeHandle CreateCapsuleShape(float radius, float half_height) = 0;
-    virtual CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos) = 0;
+    virtual CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) = 0;
     virtual void DestroyCharacterVirtual(CharacterVirtualHandle handle) = 0;
     virtual void SetCharacterVirtualVelocity(CharacterVirtualHandle handle, const Fvector& velocity) = 0;
     virtual void GetCharacterVirtualPosition(CharacterVirtualHandle handle, Fvector& position) const = 0;

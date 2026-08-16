@@ -1044,11 +1044,12 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCapsuleShape(float radius, float half_
     return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(translated_capsule.GetPtr()));
 }
 
-CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos) {
+CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) {
     JPH::Shape* jolt_shape = reinterpret_cast<JPH::Shape*>(shape);
 
     JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
     settings->mShape = jolt_shape;
+    settings->mMass = mass;
     settings->mMaxSlopeAngle = JPH::DegreesToRadians(45.0f);
     settings->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -0.1f);
     

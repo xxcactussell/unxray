@@ -136,7 +136,7 @@ public:
     PhysicsShapeHandle CreateSphereShape(float radius) override;
     PhysicsShapeHandle CreateCylinderShape(float radius, float half_height) override;
     PhysicsShapeHandle CreateCapsuleShape(float radius, float half_height) override;
-    CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos) override;
+    CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) override;
     void DestroyCharacterVirtual(CharacterVirtualHandle handle) override;
     virtual void SetCharacterVirtualVelocity(CharacterVirtualHandle handle, const Fvector& velocity) override;
     virtual void GetCharacterVirtualVelocity(CharacterVirtualHandle handle, Fvector& velocity) const override;

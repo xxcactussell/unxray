@@ -525,7 +525,7 @@ void CPHElement::applyImpulseVsMC(const Fvector& pos, const Fvector& dir, float 
         
     Fvector impulse;
     impulse.set(dir);
-    impulse.mul(val / fixed_step);
+    impulse.mul(val); // Jolt takes direct impulse, not force (val / fixed_step)
     
     Fmatrix tr;
     GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
@@ -545,7 +545,7 @@ void CPHElement::applyImpulseVsGF(const Fvector& pos, const Fvector& dir, float 
         
     Fvector impulse;
     impulse.set(dir);
-    impulse.mul(val / fixed_step);
+    impulse.mul(val);
     
     GetPhysicsCore()->ApplyPointImpulse(m_char_handle, impulse, pos);
 }
@@ -914,7 +914,7 @@ void CPHElement::applyImpulse(const Fvector& dir, float val)
         
     Fvector impulse;
     impulse.set(dir);
-    impulse.mul(val / fixed_step);
+    impulse.mul(val);
     GetPhysicsCore()->ApplyLinearImpulse(m_char_handle, impulse);
 }
 

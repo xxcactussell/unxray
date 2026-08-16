@@ -55,7 +55,7 @@ public:
     void Step(float delta_time) override;
     void Destroy() override;
 
-    PhysicsShapeHandle BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris, u32 t_cnt) override;
+    PhysicsShapeHandle BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris, u32 t_cnt, const u32* tri_indices = nullptr, u32 tri_indices_cnt = 0) override;
     void DestroyCDBModel(PhysicsShapeHandle handle) override;
     
     void RaycastCDBModel(PhysicsShapeHandle handle, const Fvector& start, const Fvector& dir, float range, std::vector<CDBRaycastHit>& out_hits) override;

@@ -112,6 +112,8 @@ public:
 
     void set_model_crc32(u32 value) { model_crc32 = value; }
     void load_geom(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt);
+    void build_physics_model(const u32* tri_indices = nullptr, u32 tri_indices_cnt = 0);
+
     bool serialize(pcstr fileName, serialize_callback callback = nullptr) const;
     bool deserialize(pcstr fileName, bool skipCrc32Check = false, deserialize_callback callback = nullptr);
     void deserialize_tree(IReader* rstream);

@@ -42,7 +42,7 @@ public:
     virtual void Step(float delta_time) = 0;
     virtual void Destroy() = 0;
 
-    virtual PhysicsShapeHandle BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris, u32 t_cnt) = 0;
+    virtual PhysicsShapeHandle BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris, u32 t_cnt, const u32* tri_indices = nullptr, u32 tri_indices_cnt = 0) = 0;
     virtual void DestroyCDBModel(PhysicsShapeHandle handle) = 0;
     virtual void RaycastCDBModel(PhysicsShapeHandle handle, const Fvector& start, const Fvector& dir, float range, std::vector<CDBRaycastHit>& out_hits) = 0;
     virtual void RaycastCDBModel(PhysicsShapeHandle handle, 

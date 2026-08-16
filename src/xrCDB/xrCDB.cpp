@@ -102,16 +102,6 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
 
     // Release data pointers
     status = S_BUILD;
-
-    shape_handle = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count);
-    if (!shape_handle)
-    {
-        xr_free(verts);
-        xr_free(tris);
-        return;
-    }
-
-    GetPhysicsCore()->CreateStaticBody(shape_handle, Fvector().set(0.f, 0.f, 0.f));
 }
 
 void MODEL::load_geom(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt)
@@ -128,6 +118,24 @@ void MODEL::load_geom(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt)
     tris_count = Tcnt;
     tris = xr_alloc<TRI>(tris_count);
     CopyMemory(tris, T, static_cast<size_t>(tris_count) * sizeof(TRI));
+}
+
+void MODEL::build_physics_model(const u32* tri_indices, u32 tri_indices_cnt)
+{
+    if (shape_handle)
+    {
+        GetPhysicsCore()->DestroyCDBModel(shape_handle);
+        shape_handle = nullptr;
+    }
+
+    if (!verts || !tris || verts_count == 0 || tris_count == 0)
+        return;
+
+    shape_handle = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count, tri_indices, tri_indices_cnt);
+    if (shape_handle)
+    {
+        GetPhysicsCore()->CreateStaticBody(shape_handle, Fvector().set(0.f, 0.f, 0.f));
+    }
 }
 
 /*
@@ -240,16 +248,6 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
     CopyMemory(tris, rstream->pointer(), trisSize);
     rstream->advance(trisSize);
 
-    // ИСПРАВЛЕНИЕ: Сохраняем хэндл в поле экземпляра
-    shape_handle = GetPhysicsCore()->BuildCDBModel(verts, verts_count, tris, tris_count);
-    if (!shape_handle)
-    {
-        FS.r_close(rstream);
-        return false;
-    }
-
-    GetPhysicsCore()->CreateStaticBody(shape_handle, Fvector().set(0.f, 0.f, 0.f));
-    
     status = S_READY;
 
     FS.r_close(rstream);

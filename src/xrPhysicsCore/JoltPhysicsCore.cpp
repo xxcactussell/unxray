@@ -96,7 +96,7 @@ struct CDB_TRI_Mock {
     u32 dummy;
 };
 
-PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris_raw, u32 t_cnt) 
+PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris_raw, u32 t_cnt, const u32* tri_indices, u32 tri_indices_cnt) 
 {
     const CDB_TRI_Mock* tris = static_cast<const CDB_TRI_Mock*>(tris_raw);
 
@@ -106,15 +106,18 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
         jolt_vertices.push_back(JPH::Float3(verts[i].x, verts[i].y, verts[i].z));
     }
 
+    u32 actual_t_cnt = tri_indices ? tri_indices_cnt : t_cnt;
     JPH::IndexedTriangleList jolt_triangles;
-    jolt_triangles.reserve(t_cnt);
-    for (u32 i = 0; i < t_cnt; ++i) {
+    jolt_triangles.reserve(actual_t_cnt);
+    
+    for (u32 i = 0; i < actual_t_cnt; ++i) {
+        u32 original_index = tri_indices ? tri_indices[i] : i;
         jolt_triangles.push_back(JPH::IndexedTriangle(
-            tris[i].verts[0], 
-            tris[i].verts[1],
-            tris[i].verts[2],
+            tris[original_index].verts[0], 
+            tris[original_index].verts[1],
+            tris[original_index].verts[2],
             0,
-            i
+            original_index
         ));
     }
 

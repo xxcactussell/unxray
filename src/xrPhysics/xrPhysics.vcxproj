@@ -64,6 +64,7 @@
     <ClCompile Include="PHJointDestroyInfo.cpp" />
     <ClCompile Include="PHObject.cpp" />
     <ClCompile Include="PHScriptCall.cpp" />
+    <ClCompile Include="ActiveRagdoll.cpp" />
     <ClCompile Include="PHShell.cpp" />
     <ClCompile Include="PHShellActivate.cpp" />
     <ClCompile Include="PHShellNetState.cpp" />
@@ -141,6 +142,7 @@
     <ClInclude Include="PHObject.h" />
     <ClInclude Include="PHReqComparer.h" />
     <ClInclude Include="PHScriptCall.h" />
+    <ClInclude Include="ActiveRagdoll.h" />
     <ClInclude Include="PHShell.h" />
     <ClInclude Include="PHShellBuildJoint.h" />
     <ClInclude Include="PHShellSplitter.h" />

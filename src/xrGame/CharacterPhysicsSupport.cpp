@@ -3,11 +3,13 @@
 #include "CharacterPhysicsSupport.h"
 #include "alife_space.h"
 #include "Hit.h"
+#include "physicsshellholder.h"
+#include "Include/xrRender/Kinematics.h"
+#include "Include/xrRender/KinematicsAnimated.h"
+#include "xrPhysics/ActiveRagdoll.h"
 #include "PHDestroyable.h"
 #include "PHMovementControl.h"
 #include "CustomMonster.h"
-
-#include "Include/xrRender/KinematicsAnimated.h"
 
 #include "xrPhysics/PhysicsShell.h"
 #include "xrPhysics/IActivationShape.h"
@@ -64,6 +66,11 @@ CCharacterPhysicsSupport::~CCharacterPhysicsSupport()
         if (m_physics_skeleton)
             m_physics_skeleton->Deactivate();
         xr_delete(m_physics_skeleton); //! b_skeleton_in_shell
+    }
+    
+    if (m_active_ragdoll) {
+        CActiveRagdollManager::GetInstance().UnregisterRagdoll(m_active_ragdoll);
+        m_active_ragdoll = nullptr;
     }
     xr_delete(m_PhysicMovementControl);
     xr_delete(m_collision_activating_delay);
@@ -555,6 +562,12 @@ void CCharacterPhysicsSupport::in_UpdateCL()
     {
         return;
     }
+    
+    if (m_active_ragdoll) {
+        m_active_ragdoll->Update(Device.fTimeDelta);
+        m_active_ragdoll->SyncToPhysics();
+        m_active_ragdoll->SyncFromPhysics();
+    }
 #ifdef DEBUG
     if (dbg_draw_character_bones)
         dbg_draw_geoms(m_weapon_geoms);
@@ -652,6 +665,11 @@ void CCharacterPhysicsSupport::CreateSkeleton(CPhysicsShell*& pShell)
     pShell->set_DisableParams(disable_params);
 
     pShell->Build();
+
+    // Register Active Ragdoll
+    if (!m_active_ragdoll) {
+        m_active_ragdoll = CActiveRagdollManager::GetInstance().RegisterRagdoll(k, &m_EntityAlife);
+    }
 
 #ifdef DEBUG
     Msg("shell for %s[%d] created in %f ms", m_EntityAlife.cName().c_str(), m_EntityAlife.ID(), t.GetElapsed_sec() * 1000.f);
@@ -1354,6 +1372,10 @@ bool CCharacterPhysicsSupport::can_drop_active_weapon()
 
 void CCharacterPhysicsSupport::in_Die()
 {
+    if (m_active_ragdoll) {
+        m_active_ragdoll->OnDeath();
+    }
+
     if (m_hit_valide_time < Device.dwTimeGlobal || !m_sv_hit.is_valide())
     {
         ActivateShell(NULL);

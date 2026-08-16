@@ -20,6 +20,7 @@ class physics_shell_animated;
 class CPhysicsGeom;
 class CPhysicsElement;
 class activating_character_delay;
+class CActiveRagdollController;
 
 class CCharacterPhysicsSupport : public CPHSkeleton, public CPHDestroyable
 {
@@ -83,6 +84,7 @@ private:
     xr_vector<anim_bone_fix*> m_weapon_bone_fixes;
     CPhysicsElement* m_weapon_attach_bone{};
     CPhysicsShellHolder* m_active_item_obj{};
+    CActiveRagdollController* m_active_ragdoll{};
     SHit m_sv_hit;
     u32 m_hit_valide_time{ u32(-1) };
     u32 m_physics_shell_animated_time_destroy{ u32(-1) };

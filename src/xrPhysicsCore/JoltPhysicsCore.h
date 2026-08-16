@@ -9,6 +9,7 @@
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/Character/CharacterVirtual.h>
+#include <Jolt/Physics/Ragdoll/Ragdoll.h>
 
 #include <unordered_map>
 
@@ -52,6 +53,10 @@ private:
     std::unordered_map<CharacterVirtualHandle, JPH::Ref<JPH::CharacterVirtual>> m_characters;
     std::unordered_map<CharacterVirtualHandle, bool> m_stick_to_floor;
     CharacterVirtualHandle m_next_character_handle = 1;
+
+    std::unordered_map<RagdollHandle, JPH::Ref<JPH::Ragdoll>> m_ragdolls;
+    std::unordered_map<RagdollHandle, JPH::Ref<JPH::RagdollSettings>> m_ragdoll_settings;
+    RagdollHandle m_next_ragdoll_handle = 1;
 
 public:
     JoltPhysicsCore() = default;
@@ -179,4 +184,19 @@ public:
     bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const override;
     void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) override;
     void SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) override;
+
+    RagdollHandle CreateRagdoll(const SRagdollSettings& settings) override;
+    void DestroyRagdoll(RagdollHandle handle) override;
+    void AddRagdollToWorld(RagdollHandle handle, bool activate) override;
+    void RemoveRagdollFromWorld(RagdollHandle handle) override;
+    void SetRagdollTargetPose(RagdollHandle handle, const Fquaternion* target_rotations, u32 count) override;
+    void SetRagdollRootKinematic(RagdollHandle handle, bool kinematic) override;
+    void SetRagdollRootTransform(RagdollHandle handle, const Fvector& position, const Fquaternion& rotation) override;
+    void SetRagdollMotorStiffness(RagdollHandle handle, float stiffness) override;
+    void SetRagdollMotorDamping(RagdollHandle handle, float damping) override;
+    void SetRagdollConstraintMotor(RagdollHandle handle, u32 constraint_index, float stiffness, float damping) override;
+    void GetRagdollPartTransform(RagdollHandle handle, u32 part_index, Fvector& out_position, Fquaternion& out_rotation) const override;
+    void GetRagdollAllTransforms(RagdollHandle handle, Fvector* out_positions, Fquaternion* out_rotations, u32 count) const override;
+    u32 GetRagdollPartCount(RagdollHandle handle) const override;
+    void SetRagdollCollisionGroup(RagdollHandle handle, u32 group_id) override;
 };

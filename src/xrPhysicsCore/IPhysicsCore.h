@@ -2,6 +2,7 @@
 
 #include "Common/Common.hpp"
 #include "xrCore/xrCore.h"
+#include "xrCore/_quaternion.h"
 #include <vector>
 
 #ifdef _MSC_VER
@@ -24,6 +25,40 @@ constexpr JointHandle INVALID_JOINT_HANDLE = 0xFFFFFFFF;
 
 typedef uint32_t CharacterVirtualHandle;
 constexpr CharacterVirtualHandle INVALID_CHARACTER_VIRTUAL_HANDLE = 0xFFFFFFFF;
+
+typedef uint32_t RagdollHandle;
+constexpr RagdollHandle INVALID_RAGDOLL_HANDLE = 0xFFFFFFFF;
+
+struct SRagdollPartDesc {
+    PhysicsShapeHandle shape;
+    Fvector position;
+    Fquaternion rotation;
+    float mass;
+    u16 bone_id;
+    int parent_index; // -1 for root
+};
+
+struct SRagdollConstraintDesc {
+    int child_index;
+    Fvector twist_axis;
+    Fvector plane_axis;
+    float swing_limit_y;
+    float swing_limit_z;
+    float twist_limit_min;
+    float twist_limit_max;
+    float max_friction_torque;
+};
+
+struct SRagdollMotorSettings {
+    float stiffness;
+    float damping;
+};
+
+struct SRagdollSettings {
+    std::vector<SRagdollPartDesc> parts;
+    std::vector<SRagdollConstraintDesc> constraints;
+    SRagdollMotorSettings default_motor;
+};
 
 struct CDBRaycastHit {
     float range;
@@ -172,6 +207,28 @@ public:
     virtual bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const = 0;
     virtual void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) = 0;
     virtual void SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) = 0;
+
+    // --- Active Ragdoll API ---
+    virtual RagdollHandle CreateRagdoll(const SRagdollSettings& settings) = 0;
+    virtual void DestroyRagdoll(RagdollHandle handle) = 0;
+    
+    virtual void AddRagdollToWorld(RagdollHandle handle, bool activate) = 0;
+    virtual void RemoveRagdollFromWorld(RagdollHandle handle) = 0;
+    
+    virtual void SetRagdollTargetPose(RagdollHandle handle, const Fquaternion* target_rotations, u32 count) = 0;
+    
+    virtual void SetRagdollRootKinematic(RagdollHandle handle, bool kinematic) = 0;
+    virtual void SetRagdollRootTransform(RagdollHandle handle, const Fvector& position, const Fquaternion& rotation) = 0;
+    
+    virtual void SetRagdollMotorStiffness(RagdollHandle handle, float stiffness) = 0;
+    virtual void SetRagdollMotorDamping(RagdollHandle handle, float damping) = 0;
+    virtual void SetRagdollConstraintMotor(RagdollHandle handle, u32 constraint_index, float stiffness, float damping) = 0;
+    
+    virtual void GetRagdollPartTransform(RagdollHandle handle, u32 part_index, Fvector& out_position, Fquaternion& out_rotation) const = 0;
+    virtual void GetRagdollAllTransforms(RagdollHandle handle, Fvector* out_positions, Fquaternion* out_rotations, u32 count) const = 0;
+    virtual u32 GetRagdollPartCount(RagdollHandle handle) const = 0;
+    
+    virtual void SetRagdollCollisionGroup(RagdollHandle handle, u32 group_id) = 0;
 };
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore();

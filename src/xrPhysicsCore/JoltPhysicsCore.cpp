@@ -22,6 +22,10 @@
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <Jolt/Physics/Constraints/SliderConstraint.h>
 #include <Jolt/Physics/Constraints/SixDOFConstraint.h>
+#include <Jolt/Physics/Constraints/SwingTwistConstraint.h>
+#include <Jolt/Physics/Collision/GroupFilterTable.h>
+#include <Jolt/Skeleton/Skeleton.h>
+#include <Jolt/Physics/Ragdoll/Ragdoll.h>
 
 #ifdef _MSC_VER
 #   define PHYSICS_CORE_API __declspec(dllexport)
@@ -1389,6 +1393,226 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
 void JoltPhysicsCore::SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) {
     if (m_stick_to_floor.find(handle) != m_stick_to_floor.end()) {
         m_stick_to_floor[handle] = stick_to_floor;
+    }
+}
+
+RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
+    if (!m_physics_system || settings.parts.empty()) return INVALID_RAGDOLL_HANDLE;
+
+    JPH::Ref<JPH::RagdollSettings> jph_settings = new JPH::RagdollSettings();
+    jph_settings->mSkeleton = new JPH::Skeleton();
+
+    // 1. Build Skeleton & Parts
+    jph_settings->mParts.resize(settings.parts.size());
+    for (size_t i = 0; i < settings.parts.size(); ++i) {
+        const auto& part = settings.parts[i];
+        
+        JPH::Skeleton::Joint joint;
+        joint.mName = "joint_" + std::to_string(part.bone_id);
+        joint.mParentName = part.parent_index != -1 ? "joint_" + std::to_string(settings.parts[part.parent_index].bone_id) : "";
+        joint.mParentJointIndex = part.parent_index;
+        jph_settings->mSkeleton->GetJoints().push_back(joint);
+        
+        JPH::RagdollSettings::Part& jph_part = jph_settings->mParts[i];
+        jph_part.SetShape(static_cast<JPH::Shape*>(part.shape));
+        jph_part.mPosition = JPH::Vec3(part.position.x, part.position.y, part.position.z);
+        jph_part.mRotation = JPH::Quat(part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w);
+        
+        // Root is kinematic, others are dynamic
+        if (part.parent_index == -1) {
+            jph_part.mMotionType = JPH::EMotionType::Kinematic;
+        } else {
+            jph_part.mMotionType = JPH::EMotionType::Dynamic;
+        }
+        
+        jph_part.mObjectLayer = Layers::RAGDOLL;
+    }
+    
+    // 2. Build Constraints
+    for (const auto& c_desc : settings.constraints) {
+        if (c_desc.child_index < 0 || c_desc.child_index >= settings.parts.size()) continue;
+        
+        JPH::Ref<JPH::SwingTwistConstraintSettings> constraint = new JPH::SwingTwistConstraintSettings();
+        constraint->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+        
+        // In Local space, we set twist/plane axis for both bodies
+        constraint->mTwistAxis1 = constraint->mTwistAxis2 = JPH::Vec3(c_desc.twist_axis.x, c_desc.twist_axis.y, c_desc.twist_axis.z);
+        constraint->mPlaneAxis1 = constraint->mPlaneAxis2 = JPH::Vec3(c_desc.plane_axis.x, c_desc.plane_axis.y, c_desc.plane_axis.z);
+        
+        constraint->mNormalHalfConeAngle = c_desc.swing_limit_y;
+        constraint->mPlaneHalfConeAngle = c_desc.swing_limit_z;
+        constraint->mTwistMinAngle = c_desc.twist_limit_min;
+        constraint->mTwistMaxAngle = c_desc.twist_limit_max;
+        constraint->mMaxFrictionTorque = c_desc.max_friction_torque;
+        
+        // Motor settings
+        constraint->mSwingMotorSettings = JPH::MotorSettings(settings.default_motor.stiffness, settings.default_motor.damping);
+        constraint->mTwistMotorSettings = JPH::MotorSettings(settings.default_motor.stiffness, settings.default_motor.damping);
+        
+        // Attach to part
+        jph_settings->mParts[c_desc.child_index].mToParent = constraint;
+    }
+    
+    jph_settings->DisableParentChildCollisions();
+    jph_settings->Stabilize();
+    jph_settings->CalculateBodyIndexToConstraintIndex();
+    jph_settings->CalculateConstraintIndexToBodyIdxPair();
+    
+    JPH::Ragdoll* ragdoll = jph_settings->CreateRagdoll(0, 0, m_physics_system);
+    if (!ragdoll) return INVALID_RAGDOLL_HANDLE;
+    
+    RagdollHandle handle = m_next_ragdoll_handle++;
+    m_ragdolls[handle] = ragdoll;
+    m_ragdoll_settings[handle] = jph_settings;
+    
+    return handle;
+}
+
+void JoltPhysicsCore::DestroyRagdoll(RagdollHandle handle) {
+    if (m_ragdolls.find(handle) != m_ragdolls.end()) {
+        RemoveRagdollFromWorld(handle);
+        m_ragdolls.erase(handle);
+        m_ragdoll_settings.erase(handle);
+    }
+}
+
+void JoltPhysicsCore::AddRagdollToWorld(RagdollHandle handle, bool activate) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        it->second->AddToPhysicsSystem(JPH::EActivation::Activate);
+    }
+}
+
+void JoltPhysicsCore::RemoveRagdollFromWorld(RagdollHandle handle) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        it->second->RemoveFromPhysicsSystem();
+    }
+}
+
+void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fquaternion* target_rotations, u32 count) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && target_rotations) {
+        JPH::SkeletonPose target_pose;
+        target_pose.SetSkeleton(m_ragdoll_settings[handle]->mSkeleton);
+        
+        u32 j_count = target_pose.GetJointMatrices().size();
+        u32 it_count = (count < j_count) ? count : j_count;
+        for (u32 i = 0; i < it_count; ++i) {
+            target_pose.GetJointMatrices()[i] = JPH::Mat44::sRotation(JPH::Quat(target_rotations[i].x, target_rotations[i].y, target_rotations[i].z, target_rotations[i].w));
+        }
+        
+        target_pose.CalculateJointStates();
+        it->second->DriveToPoseUsingMotors(target_pose);
+    }
+}
+
+void JoltPhysicsCore::SetRagdollRootKinematic(RagdollHandle handle, bool kinematic) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::BodyID root_id = it->second->GetBodyID(0);
+        if (!root_id.IsInvalid()) {
+            m_physics_system->GetBodyInterface().SetMotionType(root_id, kinematic ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic, JPH::EActivation::Activate);
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollRootTransform(RagdollHandle handle, const Fvector& position, const Fquaternion& rotation) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::BodyID root_id = it->second->GetBodyID(0);
+        if (!root_id.IsInvalid()) {
+            m_physics_system->GetBodyInterface().SetPositionAndRotation(root_id, JPH::Vec3(position.x, position.y, position.z), JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w), JPH::EActivation::DontActivate);
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollMotorStiffness(RagdollHandle handle, float stiffness) {
+    // We will update this per-constraint in the future if needed, or we can iterate
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end()) {
+        for (u32 i = 1; i < it->second->GetConstraintCount(); ++i) {
+            JPH::TwoBodyConstraint* c = it->second->GetConstraint(i);
+            if (c && c->GetSubType() == JPH::EConstraintSubType::SwingTwist) {
+                JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
+                st->GetSwingMotorSettings().mSpringSettings.mStiffness = stiffness;
+                st->GetTwistMotorSettings().mSpringSettings.mStiffness = stiffness;
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollMotorDamping(RagdollHandle handle, float damping) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end()) {
+        for (u32 i = 1; i < it->second->GetConstraintCount(); ++i) {
+            JPH::TwoBodyConstraint* c = it->second->GetConstraint(i);
+            if (c && c->GetSubType() == JPH::EConstraintSubType::SwingTwist) {
+                JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
+                st->GetSwingMotorSettings().mSpringSettings.mDamping = damping;
+                st->GetTwistMotorSettings().mSpringSettings.mDamping = damping;
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollConstraintMotor(RagdollHandle handle, u32 constraint_index, float stiffness, float damping) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end()) {
+        if (constraint_index < it->second->GetConstraintCount()) {
+            JPH::TwoBodyConstraint* c = it->second->GetConstraint(constraint_index);
+            if (c && c->GetSubType() == JPH::EConstraintSubType::SwingTwist) {
+                JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
+                st->GetSwingMotorSettings().mSpringSettings.mStiffness = stiffness;
+                st->GetSwingMotorSettings().mSpringSettings.mDamping = damping;
+                st->GetTwistMotorSettings().mSpringSettings.mStiffness = stiffness;
+                st->GetTwistMotorSettings().mSpringSettings.mDamping = damping;
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::GetRagdollPartTransform(RagdollHandle handle, u32 part_index, Fvector& out_position, Fquaternion& out_rotation) const {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::BodyID body_id = it->second->GetBodyID(part_index);
+        if (!body_id.IsInvalid()) {
+            JPH::Vec3 pos = m_physics_system->GetBodyInterface().GetPosition(body_id);
+            JPH::Quat rot = m_physics_system->GetBodyInterface().GetRotation(body_id);
+            out_position.set(pos.GetX(), pos.GetY(), pos.GetZ());
+            out_rotation.set(rot.GetX(), rot.GetY(), rot.GetZ(), rot.GetW());
+        }
+    }
+}
+
+void JoltPhysicsCore::GetRagdollAllTransforms(RagdollHandle handle, Fvector* out_positions, Fquaternion* out_rotations, u32 count) const {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        u32 max_parts = std::min(count, (u32)it->second->GetBodyCount());
+        for (u32 i = 0; i < max_parts; ++i) {
+            JPH::BodyID body_id = it->second->GetBodyID(i);
+            if (!body_id.IsInvalid()) {
+                JPH::Vec3 pos = m_physics_system->GetBodyInterface().GetPosition(body_id);
+                JPH::Quat rot = m_physics_system->GetBodyInterface().GetRotation(body_id);
+                out_positions[i].set(pos.GetX(), pos.GetY(), pos.GetZ());
+                out_rotations[i].set(rot.GetX(), rot.GetY(), rot.GetZ(), rot.GetW());
+            }
+        }
+    }
+}
+
+u32 JoltPhysicsCore::GetRagdollPartCount(RagdollHandle handle) const {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end()) {
+        return (u32)it->second->GetBodyCount();
+    }
+    return 0;
+}
+
+void JoltPhysicsCore::SetRagdollCollisionGroup(RagdollHandle handle, u32 group_id) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end()) {
+        it->second->SetGroupID(group_id);
     }
 }
 

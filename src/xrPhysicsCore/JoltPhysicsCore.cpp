@@ -43,6 +43,10 @@ void JoltPhysicsCore::Initialize()
     m_temp_allocator = new JPH::TempAllocatorImpl(10 * 1024 * 1024);
     m_job_system = new JPH::JobSystemThreadPool(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, std::thread::hardware_concurrency() - 1);
 
+#ifdef JPH_DEBUG_RENDERER
+    m_debug_renderer = new CXRayJoltDebugRenderer();
+#endif
+
     m_physics_system = new JPH::PhysicsSystem();
     const uint32_t cMaxBodies = 10240;
     const uint32_t cNumBodyMutexes = 1024; 
@@ -77,6 +81,12 @@ void JoltPhysicsCore::Destroy()
         delete m_physics_system;
         m_physics_system = nullptr;
     }
+
+#ifdef JPH_DEBUG_RENDERER
+    delete m_debug_renderer;
+    m_debug_renderer = nullptr;
+#endif
+
     if (m_job_system) {
         delete m_job_system;
         m_job_system = nullptr;
@@ -89,6 +99,60 @@ void JoltPhysicsCore::Destroy()
         delete JPH::Factory::sInstance;
         JPH::Factory::sInstance = nullptr;
     }
+}
+
+void JoltPhysicsCore::DebugDraw(const Fvector& camera_pos)
+{
+#ifdef JPH_DEBUG_RENDERER
+    if (m_physics_system && m_debug_renderer && m_debug_draw_flags > 0) {
+        m_debug_renderer->SetCameraPos(JPH::Vec3(camera_pos.x, camera_pos.y, camera_pos.z));
+
+        // Reset per-frame counters
+        m_debug_renderer->m_draw_line_count = 0;
+        m_debug_renderer->m_draw_tri_count = 0;
+
+        // Extended diagnostic: count bodies actually in broadphase
+        u32 total_bodies = m_physics_system->GetNumBodies();
+        u32 active_bodies = m_physics_system->GetNumActiveBodies(JPH::EBodyType::RigidBody);
+
+        static u32 log_counter = 0;
+        if (log_counter % 300 == 0) { // Log every ~5 seconds at 60fps
+            Msg("! [JOLT DEBUG] Flags: %u, Total bodies: %u, Active bodies: %u, Camera: (%.1f, %.1f, %.1f)",
+                m_debug_draw_flags, total_bodies, active_bodies,
+                camera_pos.x, camera_pos.y, camera_pos.z);
+        }
+
+        JPH::BodyManager::DrawSettings draw_settings;
+        draw_settings.mDrawShape = (m_debug_draw_flags & 1) != 0;
+        draw_settings.mDrawShapeWireframe = true; // Force wireframe for reliable rendering
+        draw_settings.mDrawBoundingBox = (m_debug_draw_flags & 2) != 0;
+        draw_settings.mDrawGetSupportFunction = false;
+        draw_settings.mDrawMassAndInertia = (m_debug_draw_flags & 8) != 0;
+        draw_settings.mDrawCenterOfMassTransform = (m_debug_draw_flags & 8) != 0;
+        
+        m_physics_system->DrawBodies(draw_settings, m_debug_renderer);
+        
+        if ((m_debug_draw_flags & 4) != 0) {
+            m_physics_system->DrawConstraints(m_debug_renderer);
+        }
+
+        if (log_counter % 300 == 0) {
+            Msg("! [JOLT DEBUG] After DrawBodies: lines=%u, tris=%u",
+                m_debug_renderer->m_draw_line_count, m_debug_renderer->m_draw_tri_count);
+        }
+        
+        // Call NextFrame to release unused cached geometry
+        m_debug_renderer->NextFrame();
+        
+        log_counter++;
+    }
+#endif
+}
+
+
+void JoltPhysicsCore::SetDebugDrawFlags(u32 flags)
+{
+    m_debug_draw_flags = flags;
 }
 
 struct CDB_TRI_Mock {

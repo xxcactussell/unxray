@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef DEBUG
-
 #include "Include/xrRender/DebugRender.h"
 
 namespace xray::render::RENDER_NAMESPACE
@@ -28,9 +26,7 @@ public:
     virtual void SetDebugShader(dbgShaderHandle shdHandle);
     virtual void DestroyDebugShader(dbgShaderHandle shdHandle);
 
-#ifdef DEBUG
     virtual void dbg_DrawTRI(Fmatrix& T, Fvector& p1, Fvector& p2, Fvector& p3, u32 C);
-#endif //	DEBUG
 
     virtual void Register() {}
     virtual void Unregister() {}
@@ -60,4 +56,3 @@ private:
 extern dxDebugRender DebugRenderImpl;
 extern dxDebugRender* rdebug_render;
 } // namespace xray::render::RENDER_NAMESPACE
-#endif // DEBUG

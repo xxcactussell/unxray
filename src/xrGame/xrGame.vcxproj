@@ -3364,6 +3364,9 @@
     <ProjectReference Include="$(SolutionDir)xrPhysics\xrPhysics.vcxproj">
       <Project>{98d24a3d-7666-4c11-9d6e-b10393ce8cba}</Project>
     </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)xrPhysicsCore\xrPhysicsCore.vcxproj">
+      <Project>{D998578B-020F-4626-85EE-D69D54A56812}</Project>
+    </ProjectReference>
     <ProjectReference Include="$(SolutionDir)xrSound\xrSound.vcxproj">
       <Project>{ccca7859-eb86-493e-9b53-c4235f45b3c5}</Project>
     </ProjectReference>

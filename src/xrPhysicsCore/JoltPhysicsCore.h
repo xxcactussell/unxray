@@ -1,6 +1,7 @@
 #pragma once
 #include "xrPhysicsCore/IPhysicsCore.h"
 #include "JoltLayers.h"
+#include "JoltDebugRenderer.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/PhysicsSystem.h>
@@ -16,6 +17,10 @@ private:
     JPH::PhysicsSystem* m_physics_system = nullptr;
     JPH::TempAllocatorImpl* m_temp_allocator = nullptr;
     JPH::JobSystemThreadPool* m_job_system = nullptr;
+#ifdef JPH_DEBUG_RENDERER
+    CXRayJoltDebugRenderer* m_debug_renderer = nullptr;
+#endif
+    u32 m_debug_draw_flags = 0;
 
     BPLayerInterfaceImpl m_broad_phase_layer_interface;
     ObjectVsBroadPhaseLayerFilterImpl m_object_vs_broadphase_layer_filter;
@@ -54,6 +59,9 @@ public:
     void Initialize() override;
     void Step(float delta_time) override;
     void Destroy() override;
+
+    void DebugDraw(const Fvector& camera_pos) override;
+    void SetDebugDrawFlags(u32 flags) override;
 
     PhysicsShapeHandle BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris, u32 t_cnt, const u32* tri_indices = nullptr, u32 tri_indices_cnt = 0) override;
     void DestroyCDBModel(PhysicsShapeHandle handle) override;

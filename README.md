@@ -197,3 +197,11 @@ Thank you for your support!
   * [PVS-Studio LLC](https://pvs-studio.com/pvs-studio/?utm_source=website&utm_medium=github&utm_campaign=open_source) – thanks for proving us a [free licence](https://pvs-studio.ru/ru/order/open-source-license/?utm_source=website&utm_medium=github&utm_campaign=open_source) for PVS-Studio, a static analyzer for C, C++, C#, and Java code.
 
 If your work is being used in our project and you are not mentioned here or in the [contributors page](https://github.com/OpenXRay/xray-16/graphs/contributors), please, write to us and we will add you. Or send us a pull request with you added to this list ;)
+
+## Jolt Physics Debug
+To enable Jolt Physics debug rendering, use the `jolt_debug` console command. The value is a bitmask:
+* `1` - Draw shapes (colliders)
+* `2` - Draw bounding boxes (AABB)
+* `4` - Draw constraints (joints)
+* `8` - Draw center of mass and inertia
+Combine values to enable multiple debug options (e.g. `jolt_debug 5` for shapes and constraints).

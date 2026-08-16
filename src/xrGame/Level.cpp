@@ -50,6 +50,7 @@
 #include "xrPhysics/console_vars.h"
 #include "xrNetServer/NET_Messages.h"
 #include "xrEngine/GameFont.h"
+#include "xrPhysicsCore/IPhysicsCore.h"
 
 #ifdef DEBUG
 #include "level_debug.h"
@@ -624,6 +625,8 @@ void test_precise_path();
 extern Flags32 dbg_net_Draw_Flags;
 #endif
 
+extern int g_jolt_debug_mode;
+
 void CLevel::OnRender()
 {
     ZoneScoped;
@@ -643,6 +646,14 @@ void CLevel::OnRender()
     // Device.Statistic->TEST1.Begin();
     BulletManager().Render();
     // Device.Statistic->TEST1.End();
+
+    if (g_jolt_debug_mode > 0)
+    {
+        if (IPhysicsCore* core = GetPhysicsCore()) {
+            core->SetDebugDrawFlags(g_jolt_debug_mode);
+            core->DebugDraw(Device.vCameraPosition);
+        }
+    }
 
     GEnv.Render->AfterWorldRender(); //--#SM+#-- +SecondVP+
     WorldRendered(true);

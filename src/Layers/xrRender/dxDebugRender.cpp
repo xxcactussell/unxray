@@ -1,7 +1,5 @@
 #include "stdafx.h"
 
-#ifdef DEBUG
-
 #include "dxDebugRender.h"
 #include "dxUIShader.h"
 
@@ -136,6 +134,7 @@ struct RDebugRender : public dxDebugRender, public pureRender
 private:
     xr_vector<u16> _line_indices;
     xr_vector<FVF::L> _line_vertices;
+    static constexpr u32 MAX_VERTS_PER_BATCH = 60000; // Stay well within u16 range (65535)
 
 public:
     void Register() override
@@ -148,22 +147,35 @@ public:
         Device.seqRender.Remove(this);
     }
 
+    void FlushBatch()
+    {
+        if (_line_vertices.empty())
+            return;
+
+        m_line_vertices = _line_vertices;
+        m_line_indices = _line_indices;
+        Render();
+
+        _line_vertices.resize(0);
+        _line_indices.resize(0);
+    }
+
     void OnRender()
     {
-        m_line_indices = _line_indices;
-        m_line_vertices = _line_vertices;
-
-        Render();
+        FlushBatch();
     }
+
     virtual void add_lines(
         Fvector const* vertices, u32 const& vertex_count, u16 const* pairs, u32 const& pair_count, u32 const& color)
     {
-        _line_indices.resize(0);
-        _line_vertices.resize(0);
+        // Flush before overflow of u16 index range
+        if (_line_vertices.size() + vertex_count >= MAX_VERTS_PER_BATCH)
+        {
+            FlushBatch();
+        }
         _add_lines(_line_vertices, _line_indices, vertices, vertex_count, pairs, pair_count, color);
     }
 } rdebug_render_impl;
 dxDebugRender* rdebug_render = &rdebug_render_impl;
 
 } // namespace xray::render::RENDER_NAMESPACE
-#endif //	DEBUG

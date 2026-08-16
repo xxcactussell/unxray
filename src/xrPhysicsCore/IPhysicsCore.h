@@ -5,7 +5,11 @@
 #include <vector>
 
 #ifdef _MSC_VER
-#   define PHYSICS_CORE_API __declspec(dllexport)
+#   ifdef XRPHYSICSCORE_EXPORTS
+#       define PHYSICS_CORE_API __declspec(dllexport)
+#   else
+#       define PHYSICS_CORE_API __declspec(dllimport)
+#   endif
 #else
 #   define PHYSICS_CORE_API __attribute__((visibility("default")))
 #endif
@@ -41,6 +45,9 @@ public:
     virtual void Initialize() = 0;
     virtual void Step(float delta_time) = 0;
     virtual void Destroy() = 0;
+
+    virtual void DebugDraw(const Fvector& camera_pos) = 0;
+    virtual void SetDebugDrawFlags(u32 flags) = 0;
 
     virtual PhysicsShapeHandle BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris, u32 t_cnt, const u32* tri_indices = nullptr, u32 tri_indices_cnt = 0) = 0;
     virtual void DestroyCDBModel(PhysicsShapeHandle handle) = 0;

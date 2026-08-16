@@ -144,6 +144,7 @@ extern BOOL dbg_imotion_collide_debug;
 extern float dbg_imotion_draw_velocity_scale;
 #endif
 int g_AI_inactive_time = 0;
+int g_jolt_debug_mode = 0;
 Flags32 g_uCommonFlags;
 enum E_COMMON_FLAGS
 {
@@ -2552,7 +2553,7 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "dbg_imotion_collide_debug", &dbg_imotion_collide_debug, FALSE, TRUE);
 
     CMD4(CCC_Integer, "dbg_imotion_draw_skeleton", &dbg_imotion_draw_skeleton, FALSE, TRUE);
-    CMD4(CCC_Float, "dbg_imotion_draw_velocity_scale", &dbg_imotion_draw_velocity_scale, 0.0001f, 100.0f);
+    CMD4(CCC_Float, "dbg_imotion_draw_velocity_scale", &dbg_imotion_draw_velocity_scale, 0.0001f, 10000.0f);
 
     CMD4(CCC_Integer, "dbg_show_ani_info", &g_ShowAnimationInfo, 0, 1);
     CMD4(CCC_Integer, "dbg_dump_physics_step", &ph_console::g_bDebugDumpPhysicsStep, 0, 1);
@@ -2566,6 +2567,7 @@ void CCC_RegisterCommands()
 #endif
     CMD4(CCC_Float, "con_sensitive", &g_console_sensitive, 0.01f, 1.0f);
     CMD4(CCC_Integer, "wpn_aim_toggle", &b_toggle_weapon_aim, 0, 1);
+    CMD4(CCC_Integer, "jolt_debug", &g_jolt_debug_mode, 0, 255);
 
     CMD1(CCC_UIStyle, "ui_style");
     CMD1(CCC_UIRestart, "ui_restart");

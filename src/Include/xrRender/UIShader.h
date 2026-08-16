@@ -2,6 +2,8 @@
 #define UIShader_included
 #pragma once
 
+struct xrImTextureData;
+
 class IUIShader
 {
 public:

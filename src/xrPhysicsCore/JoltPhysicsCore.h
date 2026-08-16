@@ -21,6 +21,25 @@ private:
     ObjectVsBroadPhaseLayerFilterImpl m_object_vs_broadphase_layer_filter;
     ObjectLayerPairFilterImpl m_object_vs_object_layer_filter;
 
+    std::unordered_map<JPH::BodyID, std::vector<JPH::BodyID>> m_connected_bodies;
+
+    class MyContactListener : public JPH::ContactListener {
+        JoltPhysicsCore* m_core;
+    public:
+        MyContactListener(JoltPhysicsCore* core) : m_core(core) {}
+        virtual JPH::ValidateResult OnContactValidate(const JPH::Body& inBody1, const JPH::Body& inBody2, JPH::RVec3Arg inBaseOffset, const JPH::CollideShapeResult& inCollisionResult) override {
+            auto it = m_core->m_connected_bodies.find(inBody1.GetID());
+            if (it != m_core->m_connected_bodies.end()) {
+                const auto& connected = it->second;
+                if (std::find(connected.begin(), connected.end(), inBody2.GetID()) != connected.end()) {
+                    return JPH::ValidateResult::RejectAllContactsForThisBodyPair;
+                }
+            }
+            return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
+        }
+    };
+    MyContactListener m_contact_listener{this};
+
     std::unordered_map<JointHandle, JPH::Ref<JPH::Constraint>> m_constraints;
     JointHandle m_next_joint_handle = 1;
 

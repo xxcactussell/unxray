@@ -94,6 +94,7 @@ void CPHJoint::CreateHinge()
     axis0.set(0, 0, 0);
     
     CalcAxis(0, axis0, lo, hi, first_matrix, second_matrix, rotate);
+    
     CharacterVirtualHandle b1 = body_for_joint(first);
     if (b1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis0.invert();
 

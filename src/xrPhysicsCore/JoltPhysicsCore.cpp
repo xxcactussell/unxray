@@ -1183,9 +1183,17 @@ PhysicsShapeHandle JoltPhysicsCore::CreateSphereShape(float radius) {
 PhysicsShapeHandle JoltPhysicsCore::CreateCylinderShape(float radius, float half_height) {
     float hh = std::max(half_height, 0.001f);
     float r = std::max(radius, 0.001f);
-    JPH::RefConst<JPH::Shape> shape = new JPH::CylinderShape(hh, r);
+    JPH::RefConst<JPH::Shape> cylinder_shape = new JPH::CylinderShape(hh, r);
+
+    // В X-Ray кости вытянуты вдоль оси X. Jolt создает цилиндр вдоль оси Y.
+    // Поворачиваем на 90 градусов вокруг оси Z, чтобы цилиндр лег вдоль X.
+    JPH::RotatedTranslatedShapeSettings settings(JPH::Vec3::sZero(), JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), -0.5f * JPH::JPH_PI), cylinder_shape);
+    JPH::ShapeSettings::ShapeResult result = settings.Create();
+    if (result.HasError()) return nullptr;
+
+    JPH::Shape* shape = result.Get().GetPtr();
     shape->AddRef();
-    return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(shape.GetPtr()));
+    return reinterpret_cast<PhysicsShapeHandle>(shape);
 }
 
 PhysicsShapeHandle JoltPhysicsCore::CreateCapsuleShape(float radius, float half_height) {

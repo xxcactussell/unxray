@@ -1348,14 +1348,20 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
         JPH::Vec3 jolt_gravity(gravity.x, gravity.y, gravity.z);
         JPH::Vec3 applied_gravity = jolt_gravity * gravity_factor;
 
-        if (character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround) {
+        auto ground_state = character->GetGroundState();
+
+        if (ground_state == JPH::CharacterVirtual::EGroundState::OnGround || 
+            ground_state == JPH::CharacterVirtual::EGroundState::OnSteepGround) 
+        {
             if (current_vel.GetY() < 0.0f) {
                 current_vel.SetY(0.0f);
             }
-            // For ExtendedUpdate, we still pass gravity direction so slope sliding works, 
-            // but we don't accumulate it in velocity.
         } else {
             current_vel += applied_gravity * delta_time;
+            // ЖЕСТКИЙ ЛИМИТ: Не даем скорости падения превысить 100 м/с, чтобы не пробить геометрию
+            if (current_vel.GetY() < -100.0f) {
+                current_vel.SetY(-100.0f);
+            }
         }
 
         character->SetLinearVelocity(current_vel);

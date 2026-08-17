@@ -738,10 +738,18 @@ void CCharacterPhysicsSupport::in_UpdateCL()
     // ActivateShell( NULL );
     // m_PhysicMovementControl->DestroyCharacter( );
     //}
-    else if (ik_controller())
+    else
     {
-        update_interactive_anims();
-        ik_controller()->Update();
+        if (m_active_ragdoll && m_active_ragdoll->GetState() == ERagdollState::Dead && !m_flags.test(fl_death_anim_on))
+        {
+            m_flags.set(fl_death_anim_on, TRUE);
+        }
+        
+        if (ik_controller())
+        {
+            update_interactive_anims();
+            ik_controller()->Update();
+        }
     }
 
 #ifdef DEBUG
@@ -1511,7 +1519,13 @@ void CCharacterPhysicsSupport::in_Die()
 
     if (m_hit_valide_time < Device.dwTimeGlobal || !m_sv_hit.is_valide())
     {
-        ActivateShell(NULL);
+        if (!m_active_ragdoll) {
+            ActivateShell(NULL);
+        } else if (m_eState != esDead) {
+            m_eState = esDead;
+            m_flags.set(fl_death_anim_on, FALSE);
+            m_flags.set(fl_skeleton_in_shell, TRUE);
+        }
         m_PhysicMovementControl->DestroyCharacter();
         return;
     }

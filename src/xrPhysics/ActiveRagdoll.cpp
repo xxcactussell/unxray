@@ -534,7 +534,20 @@ void CActiveRagdollController::SyncToPhysics() {
     for (u32 i = 0; i < m_mapper.m_part_to_bone.size(); ++i) {
         u16 bone_id = m_mapper.PartToBone(i);
         const CBoneInstance& B = m_kinematics->LL_GetBoneInstance(bone_id);
-        m_target_matrices[i].mul_43(obj_xform, B.mTransform);
+
+        auto is_matrix_invalid = [](const Fmatrix& m) {
+            return _isnan(m.c.x) || _isnan(m.c.y) || _isnan(m.c.z) ||
+                _isnan(m.i.x) || _isnan(m.i.y) || _isnan(m.i.z) ||
+                _isnan(m.j.x) || _isnan(m.j.y) || _isnan(m.j.z) ||
+                _isnan(m.k.x) || _isnan(m.k.y) || _isnan(m.k.z);
+        };
+
+        if (is_matrix_invalid(B.mTransform)) {
+            m_target_matrices[i].identity();
+            m_target_matrices[i].c = obj_xform.c;
+        } else {
+            m_target_matrices[i].mul_43(obj_xform, B.mTransform);
+        }
     }
     
     GetPhysicsCore()->SetRagdollTargetPose(m_ragdoll_handle, m_target_matrices.data(), (u32)m_target_matrices.size());

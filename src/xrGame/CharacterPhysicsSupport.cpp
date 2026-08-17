@@ -435,6 +435,7 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
         m_eState = esDead;
         m_flags.set(fl_death_anim_on, FALSE);
         m_flags.set(fl_skeleton_in_shell, TRUE);
+        m_PhysicMovementControl->DestroyCharacter();
         return;
     }
 

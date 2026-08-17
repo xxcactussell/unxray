@@ -20,15 +20,20 @@ void CActiveRagdollSkeletonMapper::Build(IKinematics* kinematics) {
     if (!kinematics) return;
     
     u16 bone_count = kinematics->LL_BoneCount();
-    m_bone_to_part.resize(bone_count);
-    m_part_to_bone.resize(bone_count);
+    m_bone_to_part.resize(bone_count, u16(-1));
     m_bind_pose_inv.resize(bone_count);
     
+    u16 part_idx = 0;
     for (u16 bone_id = 0; bone_id < bone_count; ++bone_id) {
-        m_bone_to_part[bone_id] = bone_id;
-        m_part_to_bone[bone_id] = bone_id;
-        
         const IBoneData& bone_data = kinematics->GetBoneData(bone_id);
+        const SBoneShape& shape = bone_data.get_shape();
+        
+        if (shape_is_physic(shape)) {
+            m_bone_to_part[bone_id] = part_idx;
+            m_part_to_bone.push_back(bone_id);
+            part_idx++;
+        }
+        
         Fmatrix bind_transform = bone_data.get_bind_transform();
         Fquaternion bind_rot;
         bind_rot.set(bind_transform);
@@ -58,95 +63,104 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
     
     if (!kinematics) return settings;
     
-    u32 num_parts = kinematics->LL_BoneCount();
+    u32 num_parts = (u32)mapper.m_part_to_bone.size();
     settings.parts.resize(num_parts);
     
     xr_vector<Fmatrix> bind_matrices;
     kinematics->LL_GetBindTransform(bind_matrices);
     
     for (u32 part_idx = 0; part_idx < num_parts; ++part_idx) {
-        u16 bone_id = (u16)part_idx;
+        u16 bone_id = mapper.PartToBone((u16)part_idx);
         const IBoneData& bone_data = kinematics->GetBoneData(bone_id);
         
         SRagdollPartDesc& part_desc = settings.parts[part_idx];
         part_desc.bone_id = bone_id;
         
-        // Parent index in skeleton hierarchy
+        // Ищем родительскую ФИЗИЧЕСКУЮ кость вверх по цепочке
+        part_desc.parent_index = -1;
         u16 parent_bone_id = bone_data.GetParentID();
-        if (parent_bone_id == u16(-1) || parent_bone_id == BI_NONE) {
-            part_desc.parent_index = -1;
-        } else {
-            part_desc.parent_index = (int)parent_bone_id;
-        }
-        
-        // Build Shape with local offset and rotation (RotatedTranslatedShape)
-        part_desc.shape = nullptr;
-        const SBoneShape& shape = bone_data.get_shape();
-        if (shape_is_physic(shape)) {
-            if (shape.type == SBoneShape::stBox) {
-                PhysicsShapeHandle base_box = GetPhysicsCore()->CreateBoxShape(Fvector().set(shape.box.m_halfsize));
-                Fmatrix box_mat;
-                box_mat.i = shape.box.m_rotate.i;
-                box_mat.j = shape.box.m_rotate.j;
-                box_mat.k = shape.box.m_rotate.k;
-                box_mat.c = shape.box.m_translate;
-                Fquaternion box_rot;
-                box_rot.set(box_mat);
-                part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_box, shape.box.m_translate, box_rot);
-            } else if (shape.type == SBoneShape::stSphere) {
-                PhysicsShapeHandle base_sphere = GetPhysicsCore()->CreateSphereShape(shape.sphere.R);
-                part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_sphere, shape.sphere.P, Fquaternion().identity());
-            } else if (shape.type == SBoneShape::stCylinder) {
-                PhysicsShapeHandle base_capsule = GetPhysicsCore()->CreateCapsuleShape(shape.cylinder.m_radius, shape.cylinder.m_height / 2.0f);
-                
-                // Align capsule (which Jolt creates along Y axis) with cylinder.m_direction
-                Fmatrix cyl_mat;
-                Fvector norm = shape.cylinder.m_direction;
-                if (norm.square_magnitude() > 0.0001f) {
-                    norm.normalize();
-                } else {
-                    norm.set(0.f, 1.f, 0.f);
-                }
-                Fvector y = norm;
-                Fvector x, z;
-                if (_abs(y.x) > 0.9f) z.set(0, 0, 1); else z.set(1, 0, 0);
-                x.crossproduct(y, z); x.normalize();
-                z.crossproduct(x, y); z.normalize();
-                cyl_mat.i = x; cyl_mat.j = y; cyl_mat.k = z; cyl_mat.c = shape.cylinder.m_center;
-                
-                Fquaternion cyl_rot;
-                cyl_rot.set(cyl_mat);
-                part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_capsule, shape.cylinder.m_center, cyl_rot);
+        while (parent_bone_id != u16(-1) && parent_bone_id != BI_NONE) {
+            u16 parent_part = mapper.BoneToPart(parent_bone_id);
+            if (parent_part != u16(-1)) {
+                part_desc.parent_index = (int)parent_part;
+                break;
             }
+            parent_bone_id = kinematics->GetBoneData(parent_bone_id).GetParentID();
         }
         
-        if (!part_desc.shape) {
-            // Micro dummy shape for bones without direct collision to maintain 1:1 skeleton hierarchy
-            part_desc.shape = GetPhysicsCore()->CreateSphereShape(0.01f);
-            part_desc.mass = 0.05f;
-        } else {
-            part_desc.mass = std::max(bone_data.get_mass(), 0.05f);
+        // Создаем Shape (тут у нас гарантированно физическая кость)
+        const SBoneShape& shape = bone_data.get_shape();
+        Fvector bone_direction = Fvector().set(0.f, 1.f, 0.f);
+        
+        if (shape.type == SBoneShape::stBox) {
+            PhysicsShapeHandle base_box = GetPhysicsCore()->CreateBoxShape(Fvector().set(shape.box.m_halfsize));
+            Fmatrix box_mat;
+            box_mat.i = shape.box.m_rotate.i;
+            box_mat.j = shape.box.m_rotate.j;
+            box_mat.k = shape.box.m_rotate.k;
+            box_mat.c = shape.box.m_translate;
+            Fquaternion box_rot;
+            box_rot.set(box_mat);
+            part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_box, shape.box.m_translate, box_rot);
+            bone_direction = Fvector().set(shape.box.m_rotate.k).normalize();
+        } else if (shape.type == SBoneShape::stSphere) {
+            PhysicsShapeHandle base_sphere = GetPhysicsCore()->CreateSphereShape(shape.sphere.R);
+            part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_sphere, shape.sphere.P, Fquaternion().identity());
+        } else if (shape.type == SBoneShape::stCylinder) {
+            float half_height = (shape.cylinder.m_height - 2.0f * shape.cylinder.m_radius) / 2.0f;
+            if (half_height < 0.01f) half_height = 0.01f;
+            PhysicsShapeHandle base_capsule = GetPhysicsCore()->CreateCapsuleShape(shape.cylinder.m_radius, half_height);
+            
+            Fmatrix cyl_mat;
+            Fvector norm = shape.cylinder.m_direction;
+            if (norm.square_magnitude() > 0.0001f) {
+                norm.normalize();
+                bone_direction.set(norm);
+            } else {
+                norm.set(0.f, 1.f, 0.f);
+            }
+            Fvector y = norm;
+            Fvector x, z;
+            if (_abs(y.x) > 0.9f) z.set(0, 0, 1); else z.set(1, 0, 0);
+            x.crossproduct(y, z); x.normalize();
+            z.crossproduct(x, y); z.normalize();
+            cyl_mat.i = x; cyl_mat.j = y; cyl_mat.k = z; cyl_mat.c = shape.cylinder.m_center;
+            
+            Fquaternion cyl_rot;
+            cyl_rot.set(cyl_mat);
+            part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_capsule, shape.cylinder.m_center, cyl_rot);
         }
         
-        // Cumulative Model-Space Rest Pose
-        if (part_idx < bind_matrices.size()) {
-            part_desc.position = bind_matrices[part_idx].c;
-            part_desc.rotation.set(bind_matrices[part_idx]);
+        part_desc.mass = std::max(bone_data.get_mass(), 0.5f); // честная минимальная масса
+        
+        // Model-Space Rest Pose
+        if (bone_id < bind_matrices.size()) {
+            part_desc.position = bind_matrices[bone_id].c;
+            part_desc.rotation.set(bind_matrices[bone_id]);
         } else {
             part_desc.position.set(0, 0, 0);
             part_desc.rotation.identity();
         }
         
-        // Constraint with parent
+        // Настройка суставов с родителем
         if (part_desc.parent_index != -1) {
             const SJointIKData& ik_data = bone_data.get_IK_data();
             
             SRagdollConstraintDesc c_desc;
             c_desc.child_index = (int)part_idx;
             
-            // Longitudinal twist axis along bone length (Y axis in Model Space)
-            c_desc.twist_axis = Fvector().set(0.f, 1.f, 0.f);
-            c_desc.plane_axis = Fvector().set(0.f, 0.f, 1.f);
+            c_desc.twist_axis = bone_direction;
+            
+            Fvector temp_up = Fvector().set(0.f, 1.f, 0.f);
+            if (_abs(bone_direction.y) > 0.9f) { 
+                temp_up.set(1.f, 0.f, 0.f);
+            }
+            
+            Fvector plane_axis;
+            plane_axis.crossproduct(bone_direction, temp_up);
+            plane_axis.normalize();
+            
+            c_desc.plane_axis = plane_axis;
             
             if (ik_data.type == jtRigid || ik_data.type == jtNone) {
                 c_desc.swing_limit_y = 0.f;
@@ -203,12 +217,22 @@ void CActiveRagdollController::Initialize(IKinematics* kinematics, IPhysicsShell
         
         // 2. Set user data on ragdoll bodies so CharacterVirtual ignores self collisions
         GetPhysicsCore()->SetRagdollUserData(m_ragdoll_handle, m_holder);
-        
+
+        xr_vector<Fmatrix> physical_bind_matrices(part_count);
+        for (u32 i = 0; i < part_count; ++i) {
+            u16 bone_id = m_mapper.PartToBone((u16)i);
+            if (bone_id < bind_matrices.size()) {
+                physical_bind_matrices[i] = bind_matrices[bone_id];
+            } else {
+                physical_bind_matrices[i].identity();
+            }
+        }
+
         // 3. Add ragdoll to world
         GetPhysicsCore()->AddRagdollToWorld(m_ragdoll_handle, true);
         
         // 4. Instantly position all bodies at the character's world spawn pose and reset constraint strain
-        GetPhysicsCore()->SetRagdollWorldPose(m_ragdoll_handle, m_holder->ObjectXFORM(), bind_matrices.data(), (u32)bind_matrices.size());
+        GetPhysicsCore()->SetRagdollWorldPose(m_ragdoll_handle, m_holder->ObjectXFORM(), physical_bind_matrices.data(), part_count);
         
         // 5. Read back synchronized world positions immediately
         GetPhysicsCore()->GetRagdollAllTransforms(m_ragdoll_handle, m_simulated_positions.data(), m_simulated_rotations.data(), part_count);
@@ -238,11 +262,10 @@ void CActiveRagdollController::Deactivate() {
     m_state = ERagdollState::Inactive;
     
     // Clear callbacks
-    if (m_kinematics && !m_cb_data.empty()) {
-        for (u32 i = 0; i < m_cb_data.size(); ++i) {
-            u16 bone_id = m_cb_data[i].bone_id;
-            CBoneInstance& B = m_kinematics->LL_GetBoneInstance(bone_id);
-            if (B.callback_param() == &m_cb_data[i]) {
+    if (m_kinematics) {
+        for (auto& cb : m_cb_data) {
+            if (cb.bone_id < m_kinematics->LL_BoneCount()) {
+                CBoneInstance& B = m_kinematics->LL_GetBoneInstance(cb.bone_id);
                 B.reset_callback();
             }
         }
@@ -545,7 +568,7 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
                 
                 if (controller->m_holder) {
                     Fmatrix obj_xform_inv;
-                    obj_xform_inv.invert(controller->m_holder->ObjectXFORM());
+                    obj_xform_inv.invert_b(controller->m_holder->ObjectXFORM());
                     B->mTransform.mul_43(obj_xform_inv, part_world);
                 } else {
                     B->mTransform = part_world;
@@ -566,7 +589,7 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
         
         if (controller->m_holder) {
             Fmatrix obj_xform_inv;
-            obj_xform_inv.invert(controller->m_holder->ObjectXFORM());
+            obj_xform_inv.invert_b(controller->m_holder->ObjectXFORM());
             B->mTransform.mul_43(obj_xform_inv, part_world);
         } else {
             B->mTransform = part_world;

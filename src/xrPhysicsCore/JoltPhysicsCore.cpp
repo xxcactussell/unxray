@@ -1346,7 +1346,18 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
         // CharacterVirtual requires us to explicitly add gravity to mLinearVelocity
         JPH::Vec3 current_vel = character->GetLinearVelocity();
         JPH::Vec3 jolt_gravity(gravity.x, gravity.y, gravity.z);
-        current_vel += jolt_gravity * gravity_factor * delta_time;
+        JPH::Vec3 applied_gravity = jolt_gravity * gravity_factor;
+
+        if (character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround) {
+            if (current_vel.GetY() < 0.0f) {
+                current_vel.SetY(0.0f);
+            }
+            // For ExtendedUpdate, we still pass gravity direction so slope sliding works, 
+            // but we don't accumulate it in velocity.
+        } else {
+            current_vel += applied_gravity * delta_time;
+        }
+
         character->SetLinearVelocity(current_vel);
 
         JPH::CharacterVirtual::ExtendedUpdateSettings update_settings;

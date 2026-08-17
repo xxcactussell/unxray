@@ -138,6 +138,7 @@ void CPHSimpleCharacter::Create(Fvector sizes)
     b_exist = true;
 
     PhysicsShapeHandle shape = GetPhysicsCore()->CreateCapsuleShape(m_radius, m_cyl_hight / 2.f);
+    shape = GetPhysicsCore()->CreateRotatedTranslatedShape(shape, Fvector().set(0.f, m_cyl_hight / 2.f, 0.f), Fquaternion().identity());
     m_char_handle = GetPhysicsCore()->CreateCharacterVirtual(shape, Fvector().set(0.f, 0.f, 0.f), m_mass);
 
     m_char_handle_interpolation.SetCharacter(m_char_handle);

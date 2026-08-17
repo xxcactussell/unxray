@@ -1175,13 +1175,7 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCylinderShape(float radius, float half
     float r = std::max(radius, 0.001f);
     JPH::RefConst<JPH::Shape> cylinder_shape = new JPH::CylinderShape(hh, r);
 
-    // В X-Ray кости вытянуты вдоль оси X. Jolt создает цилиндр вдоль оси Y.
-    // Поворачиваем на 90 градусов вокруг оси Z, чтобы цилиндр лег вдоль X.
-    JPH::RotatedTranslatedShapeSettings settings(JPH::Vec3::sZero(), JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), -0.5f * JPH::JPH_PI), cylinder_shape);
-    JPH::ShapeSettings::ShapeResult result = settings.Create();
-    if (result.HasError()) return nullptr;
-
-    JPH::Shape* shape = result.Get().GetPtr();
+    JPH::Shape* shape = const_cast<JPH::Shape*>(cylinder_shape.GetPtr());
     shape->AddRef();
     return reinterpret_cast<PhysicsShapeHandle>(shape);
 }
@@ -1457,12 +1451,29 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
     for (const auto& c_desc : settings.constraints) {
         if (c_desc.child_index < 0 || c_desc.child_index >= settings.parts.size()) continue;
         
+        const auto& part_child = settings.parts[c_desc.child_index];
+        const auto& part_parent = settings.parts[part_child.parent_index];
+        
         JPH::Ref<JPH::SwingTwistConstraintSettings> constraint = new JPH::SwingTwistConstraintSettings();
         constraint->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
         
-        // In Local space, we set twist/plane axis for both bodies
-        constraint->mTwistAxis1 = constraint->mTwistAxis2 = JPH::Vec3(c_desc.twist_axis.x, c_desc.twist_axis.y, c_desc.twist_axis.z);
-        constraint->mPlaneAxis1 = constraint->mPlaneAxis2 = JPH::Vec3(c_desc.plane_axis.x, c_desc.plane_axis.y, c_desc.plane_axis.z);
+        JPH::Quat rot_parent(part_parent.rotation.x, part_parent.rotation.y, part_parent.rotation.z, part_parent.rotation.w);
+        JPH::Quat rot_child(part_child.rotation.x, part_child.rotation.y, part_child.rotation.z, part_child.rotation.w);
+        
+        JPH::Vec3 pos_parent(part_parent.position.x, part_parent.position.y, part_parent.position.z);
+        JPH::Vec3 pos_child(part_child.position.x, part_child.position.y, part_child.position.z);
+        
+        // The constraint is located at the child's origin.
+        constraint->mPosition1 = rot_parent.Conjugated() * (pos_child - pos_parent);
+        constraint->mPosition2 = JPH::Vec3::sZero();
+        
+        JPH::Vec3 twist_world = rot_child * JPH::Vec3(c_desc.twist_axis.x, c_desc.twist_axis.y, c_desc.twist_axis.z);
+        JPH::Vec3 plane_world = rot_child * JPH::Vec3(c_desc.plane_axis.x, c_desc.plane_axis.y, c_desc.plane_axis.z);
+        
+        constraint->mTwistAxis1 = rot_parent.Conjugated() * twist_world;
+        constraint->mPlaneAxis1 = rot_parent.Conjugated() * plane_world;
+        constraint->mTwistAxis2 = JPH::Vec3(c_desc.twist_axis.x, c_desc.twist_axis.y, c_desc.twist_axis.z);
+        constraint->mPlaneAxis2 = JPH::Vec3(c_desc.plane_axis.x, c_desc.plane_axis.y, c_desc.plane_axis.z);
         
         constraint->mNormalHalfConeAngle = c_desc.swing_limit_y;
         constraint->mPlaneHalfConeAngle = c_desc.swing_limit_z;
@@ -1575,8 +1586,16 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* 
             target_pose.SetSkeleton(m_ragdoll_settings[handle]->mSkeleton);
             u32 j_count = (u32)target_pose.GetJointMatrices().size();
             u32 it_count = (count < j_count) ? count : j_count;
+            
             for (u32 i = 0; i < it_count; ++i) {
-                target_pose.GetJointMatrices()[i] = jph_matrices[i];
+                int parent_idx = m_ragdoll_settings[handle]->mSkeleton->GetJoint(i).mParentJointIndex;
+                if (parent_idx != -1 && parent_idx < it_count) {
+                    JPH::Mat44 parent_world = jph_matrices[parent_idx];
+                    JPH::Mat44 child_world = jph_matrices[i];
+                    target_pose.GetJointMatrices()[i] = parent_world.InversedRotationTranslation() * child_world;
+                } else {
+                    target_pose.GetJointMatrices()[i] = jph_matrices[i];
+                }
             }
             
             target_pose.CalculateJointStates();

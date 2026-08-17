@@ -149,18 +149,8 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             SRagdollConstraintDesc c_desc;
             c_desc.child_index = (int)part_idx;
             
-            c_desc.twist_axis = bone_direction;
-            
-            Fvector temp_up = Fvector().set(0.f, 1.f, 0.f);
-            if (_abs(bone_direction.y) > 0.9f) { 
-                temp_up.set(1.f, 0.f, 0.f);
-            }
-            
-            Fvector plane_axis;
-            plane_axis.crossproduct(bone_direction, temp_up);
-            plane_axis.normalize();
-            
-            c_desc.plane_axis = plane_axis;
+            c_desc.twist_axis = Fvector().set(1.f, 0.f, 0.f);
+            c_desc.plane_axis = Fvector().set(0.f, 1.f, 0.f);
             
             if (ik_data.type == jtRigid || ik_data.type == jtNone) {
                 c_desc.swing_limit_y = 0.f;
@@ -168,12 +158,12 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
                 c_desc.twist_limit_min = 0.f;
                 c_desc.twist_limit_max = 0.f;
             } else {
-                float lim_x = std::max(0.01f, ik_data.limits[0].limit.y - ik_data.limits[0].limit.x) * 0.5f;
                 float lim_y = std::max(0.01f, ik_data.limits[1].limit.y - ik_data.limits[1].limit.x) * 0.5f;
-                c_desc.swing_limit_y = std::min(lim_x, float(M_PI * 0.5f));
-                c_desc.swing_limit_z = std::min(lim_y, float(M_PI * 0.5f));
-                c_desc.twist_limit_min = ik_data.limits[2].limit.x;
-                c_desc.twist_limit_max = ik_data.limits[2].limit.y;
+                float lim_z = std::max(0.01f, ik_data.limits[2].limit.y - ik_data.limits[2].limit.x) * 0.5f;
+                c_desc.swing_limit_y = std::min(lim_y, float(M_PI * 0.5f));
+                c_desc.swing_limit_z = std::min(lim_z, float(M_PI * 0.5f));
+                c_desc.twist_limit_min = ik_data.limits[0].limit.x;
+                c_desc.twist_limit_max = ik_data.limits[0].limit.y;
             }
             c_desc.max_friction_torque = ik_data.friction;
             settings.constraints.push_back(c_desc);
@@ -278,6 +268,9 @@ void CActiveRagdollController::OnDeath() {
     if (m_state == ERagdollState::Active) {
         m_state = ERagdollState::Dying;
         m_death_decay_timer = 0.f;
+        
+        GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
+        GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, true);
     }
 }
 

@@ -81,6 +81,7 @@ public:
     virtual CharacterVirtualHandle get_body() { return m_char_handle; }
     virtual void fix_body_rotation();
     virtual void get_body_position(Fvector& p);
+    virtual void UpdateL1() override;
     virtual void Disable();
     virtual void ReEnable() { ; }
     virtual void Enable(); 
@@ -129,7 +130,7 @@ public:
     virtual void SetApplyGravity(BOOL flag) 
     { 
         if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
-            GetPhysicsCore()->SetBodyGravityFactor(m_char_handle, flag ? 1.0f : 0.0f);
+            GetPhysicsCore()->SetCharacterVirtualGravityFactor(m_char_handle, flag ? 1.0f : 0.0f);
     }
     
     virtual void SetObjectContactCallbackData(void* callback) = 0;

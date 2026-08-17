@@ -186,6 +186,7 @@ public:
     virtual PhysicsShapeHandle CreateSphereShape(float radius) = 0;
     virtual PhysicsShapeHandle CreateCylinderShape(float radius, float half_height) = 0;
     virtual PhysicsShapeHandle CreateCapsuleShape(float radius, float half_height) = 0;
+    virtual PhysicsShapeHandle CreateRotatedTranslatedShape(PhysicsShapeHandle base_shape, const Fvector& position, const Fquaternion& rotation) = 0;
     virtual CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) = 0;
     virtual void DestroyCharacterVirtual(CharacterVirtualHandle handle) = 0;
     virtual void SetCharacterVirtualVelocity(CharacterVirtualHandle handle, const Fvector& velocity) = 0;
@@ -195,6 +196,8 @@ public:
     virtual void ActivateCharacterVirtual(CharacterVirtualHandle handle) = 0;
     virtual void DeactivateCharacterVirtual(CharacterVirtualHandle handle) = 0;
     virtual void GetCharacterVirtualVelocity(CharacterVirtualHandle handle, Fvector& velocity) const = 0;
+    virtual void GetCharacterVirtualAABB(CharacterVirtualHandle handle, Fvector& center, Fvector& half_extents) const = 0;
+    virtual void SetCharacterVirtualGravityFactor(CharacterVirtualHandle handle, float factor) = 0;
     virtual void SetCharacterVirtualUserData(CharacterVirtualHandle handle, void* data) = 0;
     
     struct SJoltCharacterGroundState {
@@ -216,16 +219,32 @@ public:
     virtual void RemoveRagdollFromWorld(RagdollHandle handle) = 0;
     
     virtual void SetRagdollTargetPose(RagdollHandle handle, const Fquaternion* target_rotations, u32 count) = 0;
+    virtual void SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* target_matrices, u32 count) = 0;
+    virtual void SetRagdollWorldPose(RagdollHandle handle, const Fmatrix& world_transform, const Fmatrix* bone_model_matrices, u32 count) = 0;
     
     virtual void SetRagdollRootKinematic(RagdollHandle handle, bool kinematic) = 0;
     virtual void SetRagdollRootTransform(RagdollHandle handle, const Fvector& position, const Fquaternion& rotation) = 0;
     
+    virtual void SetRagdollMotorState(RagdollHandle handle, bool enabled) = 0;
+    virtual void SetRagdollConstraintMotorState(RagdollHandle handle, u32 constraint_index, bool enabled) = 0;
     virtual void SetRagdollMotorStiffness(RagdollHandle handle, float stiffness) = 0;
     virtual void SetRagdollMotorDamping(RagdollHandle handle, float damping) = 0;
     virtual void SetRagdollConstraintMotor(RagdollHandle handle, u32 constraint_index, float stiffness, float damping) = 0;
+    virtual void SetRagdollPartMotor(RagdollHandle handle, u32 part_index, float stiffness, float damping) = 0;
+    
+    virtual void SetRagdollPartMotionType(RagdollHandle handle, u32 part_index, bool kinematic) = 0;
+    virtual void SetRagdollAllPartsKinematic(RagdollHandle handle, bool kinematic) = 0;
+    virtual void SetRagdollUserData(RagdollHandle handle, void* user_data) = 0;
+    virtual void SetRagdollGroupID(RagdollHandle handle, u32 group_id) = 0;
+    
+    virtual void SetRagdollPartTransform(RagdollHandle handle, u32 part_index, const Fvector& position, const Fquaternion& rotation) = 0;
+    virtual void ApplyRagdollImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse, const Fvector& point) = 0;
+    virtual void ApplyRagdollLinearImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse) = 0;
     
     virtual void GetRagdollPartTransform(RagdollHandle handle, u32 part_index, Fvector& out_position, Fquaternion& out_rotation) const = 0;
     virtual void GetRagdollAllTransforms(RagdollHandle handle, Fvector* out_positions, Fquaternion* out_rotations, u32 count) const = 0;
+    virtual void GetRagdollPartVelocity(RagdollHandle handle, u32 part_index, Fvector& out_linear_vel, Fvector& out_angular_vel) const = 0;
+    virtual float GetRagdollTotalEnergy(RagdollHandle handle) const = 0;
     virtual u32 GetRagdollPartCount(RagdollHandle handle) const = 0;
     
     virtual void SetRagdollCollisionGroup(RagdollHandle handle, u32 group_id) = 0;

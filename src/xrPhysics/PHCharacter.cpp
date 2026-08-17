@@ -48,19 +48,11 @@ void CPHCharacter::UnFreezeContent()
 
 void CPHCharacter::getForce(Fvector& force)
 {
-    if (!b_exist || m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
-    {
-        force.set(0, 0, 0);
-        return;
-    }
-    GetPhysicsCore()->GetBodyForce(m_char_handle, force);
+    force.set(0, 0, 0);
 }
 
 void CPHCharacter::setForce(const Fvector& force)
 {
-    if (!b_exist || m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
-        return;
-    GetPhysicsCore()->SetBodyForce(m_char_handle, force);
 }
 
 void CPHCharacter::get_State(SPHNetState& state)
@@ -137,8 +129,6 @@ void CPHCharacter::CutVelocity(float l_limit, float a_limit)
         linear_velocity.mul(l_limit / mag);
         GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
     }
-    
-    GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, Fvector().set(0.f, 0.f, 0.f));
 }
 
 const Fmatrix& CPHCharacter::XFORM() const
@@ -168,6 +158,20 @@ void CPHCharacter::get_body_position(Fvector& p)
     GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, p);
 }
 
+void CPHCharacter::UpdateL1()
+{
+    m_stateL1.Reset();
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
+
+    Fvector position;
+    GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, position);
+
+    Fvector velocity;
+    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, velocity);
+
+    CPHDisablingBase::UpdateValues(position, velocity);
+}
+
 void virtual_move_collide_callback(
     bool& do_colide, bool bo1, 
     CPhysicsGeom* my_geom, CPhysicsGeom* oposite_geom, 
@@ -183,9 +187,8 @@ void CPHCharacter::fix_body_rotation()
 {
     if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, Fvector().set(0.f, 0.f, 0.f));
         // Для Jolt можно также принудительно обнулить кватернион вращения, если требуется,
-        // но обычно для Character используется LockRotations.
+        // но обычно для Character используется LockRotations, поэтому здесь ничего не делаем.
     }
 }
 

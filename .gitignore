@@ -27,3 +27,5 @@ RENDER_ISSUES_REPORT.md
 doc/jolt_character_migration_guide.md
 JoltVCImplementation.md
 JoltVirtualCharacterControllerExample.md
+tasks_phases.md
+all_changes.diff

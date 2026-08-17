@@ -133,13 +133,6 @@ void JoltPhysicsCore::DebugDraw(const Fvector& camera_pos)
         u32 total_bodies = m_physics_system->GetNumBodies();
         u32 active_bodies = m_physics_system->GetNumActiveBodies(JPH::EBodyType::RigidBody);
 
-        static u32 log_counter = 0;
-        if (log_counter % 300 == 0) { // Log every ~5 seconds at 60fps
-            Msg("! [JOLT DEBUG] Flags: %u, Total bodies: %u, Active bodies: %u, Camera: (%.1f, %.1f, %.1f)",
-                m_debug_draw_flags, total_bodies, active_bodies,
-                camera_pos.x, camera_pos.y, camera_pos.z);
-        }
-
         DistanceBodyFilter filter(JPH::Vec3(camera_pos.x, camera_pos.y, camera_pos.z), m_debug_draw_distance);
 
         JPH::BodyManager::DrawSettings draw_settings;
@@ -166,16 +159,9 @@ void JoltPhysicsCore::DebugDraw(const Fvector& camera_pos)
                 }
             }
         }
-
-        if (log_counter % 300 == 0) {
-            Msg("! [JOLT DEBUG] After DrawBodies: lines=%u, tris=%u",
-                m_debug_renderer->m_draw_line_count, m_debug_renderer->m_draw_tri_count);
-        }
         
         // Call NextFrame to release unused cached geometry
         m_debug_renderer->NextFrame();
-        
-        log_counter++;
     }
 #endif
 }
@@ -1204,15 +1190,8 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCapsuleShape(float radius, float half_
     float hh = std::max(half_height, 0.001f);
     float r = std::max(radius, 0.001f);
     JPH::RefConst<JPH::Shape> capsule = new JPH::CapsuleShape(hh, r);
-    
-    JPH::RefConst<JPH::Shape> translated_capsule = JPH::RotatedTranslatedShapeSettings(
-        JPH::Vec3(0, half_height, 0),
-        JPH::Quat::sIdentity(),
-        capsule
-    ).Create().Get();
-
-    translated_capsule->AddRef();
-    return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(translated_capsule.GetPtr()));
+    capsule->AddRef();
+    return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(capsule.GetPtr()));
 }
 
 CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) {
@@ -1358,10 +1337,16 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
     if (it != m_characters.end()) {
         JPH::CharacterVirtual* character = it->second.GetPtr();
         
+        float gravity_factor = 1.0f;
+        if (m_character_gravity_factors.find(handle) != m_character_gravity_factors.end()) {
+            gravity_factor = m_character_gravity_factors[handle];
+        }
+
         // X-Ray doesn't automatically apply gravity to velocity when not on ground
         // CharacterVirtual requires us to explicitly add gravity to mLinearVelocity
         JPH::Vec3 current_vel = character->GetLinearVelocity();
-        current_vel += JPH::Vec3(gravity.x, gravity.y, gravity.z) * delta_time;
+        JPH::Vec3 jolt_gravity(gravity.x, gravity.y, gravity.z);
+        current_vel += jolt_gravity * gravity_factor * delta_time;
         character->SetLinearVelocity(current_vel);
 
         JPH::CharacterVirtual::ExtendedUpdateSettings update_settings;
@@ -1381,7 +1366,7 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
 
         character->ExtendedUpdate(
             delta_time,
-            JPH::Vec3(gravity.x, gravity.y, gravity.z),
+            jolt_gravity * gravity_factor,
             update_settings,
             m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
             m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
@@ -1394,6 +1379,23 @@ void JoltPhysicsCore::SetCharacterVirtualStickToFloor(CharacterVirtualHandle han
     if (m_stick_to_floor.find(handle) != m_stick_to_floor.end()) {
         m_stick_to_floor[handle] = stick_to_floor;
     }
+}
+
+PhysicsShapeHandle JoltPhysicsCore::CreateRotatedTranslatedShape(PhysicsShapeHandle base_shape, const Fvector& position, const Fquaternion& rotation) {
+    if (!base_shape) return nullptr;
+    JPH::Shape* inner = reinterpret_cast<JPH::Shape*>(base_shape);
+    JPH::RotatedTranslatedShapeSettings settings(
+        JPH::Vec3(position.x, position.y, position.z),
+        JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w),
+        inner
+    );
+    JPH::ShapeSettings::ShapeResult result = settings.Create();
+    if (result.IsValid()) {
+        JPH::Shape* shape = result.Get().GetPtr();
+        shape->AddRef();
+        return reinterpret_cast<PhysicsShapeHandle>(shape);
+    }
+    return base_shape;
 }
 
 RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
@@ -1418,6 +1420,10 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         jph_part.mPosition = JPH::Vec3(part.position.x, part.position.y, part.position.z);
         jph_part.mRotation = JPH::Quat(part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w);
         
+        float mass = std::max(part.mass, 0.05f);
+        jph_part.mMassPropertiesOverride.mMass = mass;
+        jph_part.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+        
         // Root is kinematic, others are dynamic
         if (part.parent_index == -1) {
             jph_part.mMotionType = JPH::EMotionType::Kinematic;
@@ -1427,6 +1433,8 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         
         jph_part.mObjectLayer = Layers::RAGDOLL;
     }
+    
+    jph_settings->mSkeleton->CalculateParentJointIndices();
     
     // 2. Build Constraints
     for (const auto& c_desc : settings.constraints) {
@@ -1454,6 +1462,7 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
     }
     
     jph_settings->DisableParentChildCollisions();
+    jph_settings->CalculateConstraintPriorities();
     jph_settings->Stabilize();
     jph_settings->CalculateBodyIndexToConstraintIndex();
     jph_settings->CalculateConstraintIndexToBodyIdxPair();
@@ -1496,7 +1505,7 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fquaterni
         JPH::SkeletonPose target_pose;
         target_pose.SetSkeleton(m_ragdoll_settings[handle]->mSkeleton);
         
-        u32 j_count = target_pose.GetJointMatrices().size();
+        u32 j_count = (u32)target_pose.GetJointMatrices().size();
         u32 it_count = (count < j_count) ? count : j_count;
         for (u32 i = 0; i < it_count; ++i) {
             target_pose.GetJointMatrices()[i] = JPH::Mat44::sRotation(JPH::Quat(target_rotations[i].x, target_rotations[i].y, target_rotations[i].z, target_rotations[i].w));
@@ -1504,6 +1513,106 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fquaterni
         
         target_pose.CalculateJointStates();
         it->second->DriveToPoseUsingMotors(target_pose);
+    }
+}
+
+void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* target_matrices, u32 count) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && target_matrices && m_physics_system) {
+        JPH::Ragdoll* ragdoll = it->second;
+        
+        std::vector<JPH::Mat44> jph_matrices(count);
+        for (u32 i = 0; i < count; ++i) {
+            const Fmatrix& m = target_matrices[i];
+            jph_matrices[i] = JPH::Mat44(
+                JPH::Vec4(m._11, m._12, m._13, 0.0f),
+                JPH::Vec4(m._21, m._22, m._23, 0.0f),
+                JPH::Vec4(m._31, m._32, m._33, 0.0f),
+                JPH::Vec3(m._41, m._42, m._43)
+            );
+        }
+        
+        // Check if there are kinematic vs dynamic bodies
+        bool has_dynamic = false;
+        bool has_kinematic = false;
+        for (u32 i = 0; i < ragdoll->GetBodyCount(); ++i) {
+            JPH::BodyID id = ragdoll->GetBodyID(i);
+            if (!id.IsInvalid()) {
+                JPH::EMotionType mt = m_physics_system->GetBodyInterface().GetMotionType(id);
+                if (mt == JPH::EMotionType::Kinematic) {
+                    has_kinematic = true;
+                } else if (mt == JPH::EMotionType::Dynamic) {
+                    has_dynamic = true;
+                }
+            }
+        }
+        
+        // 1. Smoothly drive kinematic bodies to the world target pose
+        if (has_kinematic) {
+            ragdoll->DriveToPoseUsingKinematics(JPH::RVec3::sZero(), jph_matrices.data(), 1.0f / 60.0f);
+        }
+        
+        // 2. Drive dynamic bodies using motors only if dynamic bodies actually exist (prevents 0/0 divide in constraints)
+        if (has_dynamic) {
+            JPH::SkeletonPose target_pose;
+            target_pose.SetSkeleton(m_ragdoll_settings[handle]->mSkeleton);
+            u32 j_count = (u32)target_pose.GetJointMatrices().size();
+            u32 it_count = (count < j_count) ? count : j_count;
+            for (u32 i = 0; i < it_count; ++i) {
+                target_pose.GetJointMatrices()[i] = jph_matrices[i];
+            }
+            
+            target_pose.CalculateJointStates();
+            ragdoll->DriveToPoseUsingMotors(target_pose);
+        }
+    }
+}
+
+static inline void MatrixMul43(Fmatrix& dest, const Fmatrix& A, const Fmatrix& B) {
+    dest.m[0][0] = A.m[0][0] * B.m[0][0] + A.m[1][0] * B.m[0][1] + A.m[2][0] * B.m[0][2];
+    dest.m[0][1] = A.m[0][1] * B.m[0][0] + A.m[1][1] * B.m[0][1] + A.m[2][1] * B.m[0][2];
+    dest.m[0][2] = A.m[0][2] * B.m[0][0] + A.m[1][2] * B.m[0][1] + A.m[2][2] * B.m[0][2];
+    dest.m[0][3] = 0.0f;
+
+    dest.m[1][0] = A.m[0][0] * B.m[1][0] + A.m[1][0] * B.m[1][1] + A.m[2][0] * B.m[1][2];
+    dest.m[1][1] = A.m[0][1] * B.m[1][0] + A.m[1][1] * B.m[1][1] + A.m[2][1] * B.m[1][2];
+    dest.m[1][2] = A.m[0][2] * B.m[1][0] + A.m[1][2] * B.m[1][1] + A.m[2][2] * B.m[1][2];
+    dest.m[1][3] = 0.0f;
+
+    dest.m[2][0] = A.m[0][0] * B.m[2][0] + A.m[1][0] * B.m[2][1] + A.m[2][0] * B.m[2][2];
+    dest.m[2][1] = A.m[0][1] * B.m[2][0] + A.m[1][1] * B.m[2][1] + A.m[2][1] * B.m[2][2];
+    dest.m[2][2] = A.m[0][2] * B.m[2][0] + A.m[1][2] * B.m[2][1] + A.m[2][2] * B.m[2][2];
+    dest.m[2][3] = 0.0f;
+
+    dest.m[3][0] = A.m[0][0] * B.m[3][0] + A.m[1][0] * B.m[3][1] + A.m[2][0] * B.m[3][2] + A.m[3][0];
+    dest.m[3][1] = A.m[0][1] * B.m[3][0] + A.m[1][1] * B.m[3][1] + A.m[2][1] * B.m[3][2] + A.m[3][1];
+    dest.m[3][2] = A.m[0][2] * B.m[3][0] + A.m[1][2] * B.m[3][1] + A.m[2][2] * B.m[3][2] + A.m[3][2];
+    dest.m[3][3] = 1.0f;
+}
+
+void JoltPhysicsCore::SetRagdollWorldPose(RagdollHandle handle, const Fmatrix& world_transform, const Fmatrix* bone_model_matrices, u32 count) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system && bone_model_matrices) {
+        JPH::Ragdoll* ragdoll = it->second;
+        
+        JPH::RVec3 root_offset(world_transform.c.x, world_transform.c.y, world_transform.c.z);
+        
+        std::vector<JPH::Mat44> jph_matrices(count);
+        for (u32 i = 0; i < count; ++i) {
+            Fmatrix bone_world;
+            MatrixMul43(bone_world, world_transform, bone_model_matrices[i]);
+            
+            jph_matrices[i] = JPH::Mat44(
+                JPH::Vec4(bone_world._11, bone_world._12, bone_world._13, 0.0f),
+                JPH::Vec4(bone_world._21, bone_world._22, bone_world._23, 0.0f),
+                JPH::Vec4(bone_world._31, bone_world._32, bone_world._33, 0.0f),
+                JPH::Vec3(bone_world._41 - root_offset.GetX(), bone_world._42 - root_offset.GetY(), bone_world._43 - root_offset.GetZ())
+            );
+        }
+        
+        ragdoll->SetPose(root_offset, jph_matrices.data());
+        ragdoll->ResetWarmStart();
+        ragdoll->SetLinearAndAngularVelocity(JPH::Vec3::sZero(), JPH::Vec3::sZero());
     }
 }
 
@@ -1527,11 +1636,40 @@ void JoltPhysicsCore::SetRagdollRootTransform(RagdollHandle handle, const Fvecto
     }
 }
 
-void JoltPhysicsCore::SetRagdollMotorStiffness(RagdollHandle handle, float stiffness) {
-    // We will update this per-constraint in the future if needed, or we can iterate
+void JoltPhysicsCore::SetRagdollMotorState(RagdollHandle handle, bool enabled) {
     auto it = m_ragdolls.find(handle);
     if (it != m_ragdolls.end()) {
-        for (u32 i = 1; i < it->second->GetConstraintCount(); ++i) {
+        JPH::EMotorState state = enabled ? JPH::EMotorState::Position : JPH::EMotorState::Off;
+        for (u32 i = 0; i < it->second->GetConstraintCount(); ++i) {
+            JPH::TwoBodyConstraint* c = it->second->GetConstraint(i);
+            if (c && c->GetSubType() == JPH::EConstraintSubType::SwingTwist) {
+                JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
+                st->SetSwingMotorState(state);
+                st->SetTwistMotorState(state);
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollConstraintMotorState(RagdollHandle handle, u32 constraint_index, bool enabled) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end()) {
+        if (constraint_index < it->second->GetConstraintCount()) {
+            JPH::TwoBodyConstraint* c = it->second->GetConstraint(constraint_index);
+            if (c && c->GetSubType() == JPH::EConstraintSubType::SwingTwist) {
+                JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
+                JPH::EMotorState state = enabled ? JPH::EMotorState::Position : JPH::EMotorState::Off;
+                st->SetSwingMotorState(state);
+                st->SetTwistMotorState(state);
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollMotorStiffness(RagdollHandle handle, float stiffness) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end()) {
+        for (u32 i = 0; i < it->second->GetConstraintCount(); ++i) {
             JPH::TwoBodyConstraint* c = it->second->GetConstraint(i);
             if (c && c->GetSubType() == JPH::EConstraintSubType::SwingTwist) {
                 JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
@@ -1545,7 +1683,7 @@ void JoltPhysicsCore::SetRagdollMotorStiffness(RagdollHandle handle, float stiff
 void JoltPhysicsCore::SetRagdollMotorDamping(RagdollHandle handle, float damping) {
     auto it = m_ragdolls.find(handle);
     if (it != m_ragdolls.end()) {
-        for (u32 i = 1; i < it->second->GetConstraintCount(); ++i) {
+        for (u32 i = 0; i < it->second->GetConstraintCount(); ++i) {
             JPH::TwoBodyConstraint* c = it->second->GetConstraint(i);
             if (c && c->GetSubType() == JPH::EConstraintSubType::SwingTwist) {
                 JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
@@ -1568,6 +1706,109 @@ void JoltPhysicsCore::SetRagdollConstraintMotor(RagdollHandle handle, u32 constr
                 st->GetTwistMotorSettings().mSpringSettings.mStiffness = stiffness;
                 st->GetTwistMotorSettings().mSpringSettings.mDamping = damping;
             }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollPartMotor(RagdollHandle handle, u32 part_index, float stiffness, float damping) {
+    auto it_settings = m_ragdoll_settings.find(handle);
+    auto it_ragdoll = m_ragdolls.find(handle);
+    if (it_settings != m_ragdoll_settings.end() && it_ragdoll != m_ragdolls.end()) {
+        const auto& b2c = it_settings->second->GetBodyIndexToConstraintIndex();
+        if (part_index < b2c.size()) {
+            int constraint_idx = it_settings->second->GetConstraintIndexForBodyIndex((int)part_index);
+            if (constraint_idx >= 0 && (size_t)constraint_idx < it_ragdoll->second->GetConstraintCount()) {
+                SetRagdollConstraintMotor(handle, (u32)constraint_idx, stiffness, damping);
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollPartMotionType(RagdollHandle handle, u32 part_index, bool kinematic) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::BodyID body_id = it->second->GetBodyID(part_index);
+        if (!body_id.IsInvalid()) {
+            m_physics_system->GetBodyInterface().SetMotionType(
+                body_id, 
+                kinematic ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic, 
+                JPH::EActivation::Activate
+            );
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollAllPartsKinematic(RagdollHandle handle, bool kinematic) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::EMotionType motion_type = kinematic ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic;
+        for (u32 i = 0; i < it->second->GetBodyCount(); ++i) {
+            JPH::BodyID body_id = it->second->GetBodyID(i);
+            if (!body_id.IsInvalid()) {
+                m_physics_system->GetBodyInterface().SetMotionType(body_id, motion_type, JPH::EActivation::Activate);
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollUserData(RagdollHandle handle, void* user_data) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::uint64 ud = reinterpret_cast<JPH::uint64>(user_data);
+        for (u32 i = 0; i < it->second->GetBodyCount(); ++i) {
+            JPH::BodyID id = it->second->GetBodyID(i);
+            if (!id.IsInvalid()) {
+                m_physics_system->GetBodyInterface().SetUserData(id, ud);
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetRagdollGroupID(RagdollHandle handle, u32 group_id) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end()) {
+        it->second->SetGroupID(static_cast<JPH::CollisionGroup::GroupID>(group_id));
+    }
+}
+
+void JoltPhysicsCore::SetRagdollPartTransform(RagdollHandle handle, u32 part_index, const Fvector& position, const Fquaternion& rotation) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::BodyID body_id = it->second->GetBodyID(part_index);
+        if (!body_id.IsInvalid()) {
+            m_physics_system->GetBodyInterface().SetPositionAndRotation(
+                body_id, 
+                JPH::Vec3(position.x, position.y, position.z), 
+                JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w), 
+                JPH::EActivation::DontActivate
+            );
+        }
+    }
+}
+
+void JoltPhysicsCore::ApplyRagdollImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse, const Fvector& point) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::BodyID body_id = it->second->GetBodyID(part_index);
+        if (!body_id.IsInvalid()) {
+            m_physics_system->GetBodyInterface().AddImpulse(
+                body_id, 
+                JPH::Vec3(impulse.x, impulse.y, impulse.z), 
+                JPH::Vec3(point.x, point.y, point.z)
+            );
+        }
+    }
+}
+
+void JoltPhysicsCore::ApplyRagdollLinearImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::BodyID body_id = it->second->GetBodyID(part_index);
+        if (!body_id.IsInvalid()) {
+            m_physics_system->GetBodyInterface().AddImpulse(
+                body_id, 
+                JPH::Vec3(impulse.x, impulse.y, impulse.z)
+            );
         }
     }
 }
@@ -1601,6 +1842,39 @@ void JoltPhysicsCore::GetRagdollAllTransforms(RagdollHandle handle, Fvector* out
     }
 }
 
+void JoltPhysicsCore::GetRagdollPartVelocity(RagdollHandle handle, u32 part_index, Fvector& out_linear_vel, Fvector& out_angular_vel) const {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::BodyID body_id = it->second->GetBodyID(part_index);
+        if (!body_id.IsInvalid()) {
+            JPH::Vec3 l_vel = m_physics_system->GetBodyInterface().GetLinearVelocity(body_id);
+            JPH::Vec3 a_vel = m_physics_system->GetBodyInterface().GetAngularVelocity(body_id);
+            out_linear_vel.set(l_vel.GetX(), l_vel.GetY(), l_vel.GetZ());
+            out_angular_vel.set(a_vel.GetX(), a_vel.GetY(), a_vel.GetZ());
+            return;
+        }
+    }
+    out_linear_vel.set(0.f, 0.f, 0.f);
+    out_angular_vel.set(0.f, 0.f, 0.f);
+}
+
+float JoltPhysicsCore::GetRagdollTotalEnergy(RagdollHandle handle) const {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        float total_energy = 0.0f;
+        for (u32 i = 0; i < it->second->GetBodyCount(); ++i) {
+            JPH::BodyID body_id = it->second->GetBodyID(i);
+            if (!body_id.IsInvalid() && m_physics_system->GetBodyInterface().IsActive(body_id)) {
+                JPH::Vec3 v = m_physics_system->GetBodyInterface().GetLinearVelocity(body_id);
+                JPH::Vec3 w = m_physics_system->GetBodyInterface().GetAngularVelocity(body_id);
+                total_energy += v.LengthSq() + w.LengthSq();
+            }
+        }
+        return total_energy;
+    }
+    return 0.0f;
+}
+
 u32 JoltPhysicsCore::GetRagdollPartCount(RagdollHandle handle) const {
     auto it = m_ragdolls.find(handle);
     if (it != m_ragdolls.end()) {
@@ -1627,4 +1901,29 @@ extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore() {
     }
     
     return g_physics_core;
+}
+
+void JoltPhysicsCore::GetCharacterVirtualAABB(CharacterVirtualHandle handle, Fvector& center, Fvector& half_extents) const {
+    auto it = m_characters.find(handle);
+    if (it != m_characters.end()) {
+        const JPH::Shape* shape = it->second->GetShape();
+        if (shape) {
+            JPH::AABox bounds = shape->GetLocalBounds();
+            JPH::Mat44 transform = JPH::Mat44::sTranslation(it->second->GetPosition());
+            JPH::AABox world_bounds = bounds.Transformed(transform);
+            JPH::Vec3 jph_center = world_bounds.GetCenter();
+            JPH::Vec3 jph_extents = world_bounds.GetExtent();
+            center.set(jph_center.GetX(), jph_center.GetY(), jph_center.GetZ());
+            half_extents.set(jph_extents.GetX(), jph_extents.GetY(), jph_extents.GetZ());
+            return;
+        }
+    }
+    center.set(0.f, 0.f, 0.f);
+    half_extents.set(0.f, 0.f, 0.f);
+}
+
+void JoltPhysicsCore::SetCharacterVirtualGravityFactor(CharacterVirtualHandle handle, float factor) {
+    if (m_character_gravity_factors.find(handle) != m_character_gravity_factors.end() || factor != 1.0f) {
+        m_character_gravity_factors[handle] = factor;
+    }
 }

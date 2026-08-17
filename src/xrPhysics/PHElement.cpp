@@ -124,7 +124,7 @@ void CPHElement::build()
 
 void CPHElement::RunSimulation()
 {
-    GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+    GetPhysicsCore()->ActivateBody(m_char_handle);
 }
 
 void CPHElement::destroy()
@@ -343,13 +343,13 @@ void CPHElement::Activate(const Fmatrix& transform, const Fvector& lin_vel, cons
     Start();
     SetTransform(transform, mh_unspecified);
 
-    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, lin_vel);
+    GetPhysicsCore()->SetBodyLinearVelocity(m_char_handle, lin_vel);
     GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, ang_vel);
 
     m_char_handle_interpolation.SetBody(m_char_handle);
 
     if (disable)
-        GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
+        GetPhysicsCore()->DeactivateBody(m_char_handle);
         
     m_flags.set(flActive, TRUE);
     m_flags.set(flActivating, TRUE);
@@ -417,7 +417,7 @@ void CPHElement::PhDataUpdate(float step)
 
     if (isFixed())
     {
-        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, Fvector().set(0,0,0));
+        GetPhysicsCore()->SetBodyLinearVelocity(m_char_handle, Fvector().set(0,0,0));
         GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, Fvector().set(0,0,0));
         return;
     }
@@ -437,7 +437,7 @@ void CPHElement::PhDataUpdate(float step)
         return;
 
     Fvector linear_velocity, angular_velocity;
-    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, linear_velocity);
+    GetPhysicsCore()->GetBodyLinearVelocity(m_char_handle, linear_velocity);
     GetPhysicsCore()->GetBodyAngularVelocity(m_char_handle, angular_velocity);
 
     VERIFY(dV_valid(linear_velocity));
@@ -448,7 +448,7 @@ void CPHElement::PhDataUpdate(float step)
     
     linear_velocity.div(m_l_scale);
     angular_velocity.div(m_w_scale);
-    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
+    GetPhysicsCore()->SetBodyLinearVelocity(m_char_handle, linear_velocity);
     GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, angular_velocity);
 
     float linear_velocity_mag = linear_velocity.magnitude();
@@ -484,7 +484,7 @@ void CPHElement::Enable()
     if (!isActive())
         return;
     m_shell->EnableObject(0);
-    GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+    GetPhysicsCore()->ActivateBody(m_char_handle);
 }
 
 void CPHElement::Disable()
@@ -492,7 +492,7 @@ void CPHElement::Disable()
     if (!isActive() || !GetPhysicsCore()->IsBodyActive(m_char_handle))
         return;
     FillInterpolation();
-    GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
+    GetPhysicsCore()->DeactivateBody(m_char_handle);
 }
 
 void CPHElement::ReEnable() {}
@@ -503,7 +503,7 @@ void CPHElement::Freeze()
         return;
 
     m_flags.set(flWasEnabledBeforeFreeze, GetPhysicsCore()->IsBodyActive(m_char_handle));
-    GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
+    GetPhysicsCore()->DeactivateBody(m_char_handle);
 }
 
 void CPHElement::UnFreeze()
@@ -511,7 +511,7 @@ void CPHElement::UnFreeze()
     if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
         return;
     if (m_flags.test(flWasEnabledBeforeFreeze))
-        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+        GetPhysicsCore()->ActivateBody(m_char_handle);
 }
 
 bool dbg_draw_ph_force_apply = false;
@@ -521,7 +521,7 @@ void CPHElement::applyImpulseVsMC(const Fvector& pos, const Fvector& dir, float 
     if (!isActive() || m_flags.test(flFixed))
         return;
     if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
-        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+        GetPhysicsCore()->ActivateBody(m_char_handle);
         
     Fvector impulse;
     impulse.set(dir);
@@ -541,7 +541,7 @@ void CPHElement::applyImpulseVsGF(const Fvector& pos, const Fvector& dir, float 
     if (!isActive() || m_flags.test(flFixed))
         return;
     if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
-        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+        GetPhysicsCore()->ActivateBody(m_char_handle);
         
     Fvector impulse;
     impulse.set(dir);
@@ -649,7 +649,7 @@ void CPHElement::build(bool disable)
 
     m_char_handle_interpolation.SetBody(m_char_handle);
     if (disable)
-        GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
+        GetPhysicsCore()->DeactivateBody(m_char_handle);
 }
 
 void CPHElement::RunSimulation(const Fmatrix& start_from)
@@ -739,7 +739,7 @@ bool CPHElement::AnimToVel(float dt, float l_limit, float a_limit)
     put_in_range(lv, l_limit);
     put_in_range(aw, a_limit);
 
-    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, lv);
+    GetPhysicsCore()->SetBodyLinearVelocity(m_char_handle, lv);
     GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, aw);
     return ret;
 }
@@ -842,7 +842,7 @@ void CPHElement::get_LinearVel(Fvector& velocity) const
         velocity.set(0, 0, 0);
         return;
     }
-    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, velocity);
+    GetPhysicsCore()->GetBodyLinearVelocity(m_char_handle, velocity);
 }
 
 void CPHElement::get_AngularVel(Fvector& velocity) const
@@ -862,7 +862,7 @@ void CPHElement::set_LinearVel(const Fvector& velocity)
     VERIFY2(_valid(velocity), "not valid argument velocity");
     Fvector vel = velocity;
     put_in_range(vel, m_l_limit);
-    GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, vel);
+    GetPhysicsCore()->SetBodyLinearVelocity(m_char_handle, vel);
 }
 
 void CPHElement::set_AngularVel(const Fvector& velocity)
@@ -899,7 +899,7 @@ void CPHElement::applyForce(float x, float y, float z)
     if (!isActive() || m_flags.test(flFixed))
         return;
     if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
-        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+        GetPhysicsCore()->ActivateBody(m_char_handle);
         
     GetPhysicsCore()->ApplyForce(m_char_handle, Fvector().set(x, y, z));
     m_shell->EnableObject(0);
@@ -910,7 +910,7 @@ void CPHElement::applyImpulse(const Fvector& dir, float val)
     if (!isActive() || m_flags.test(flFixed))
         return;
     if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
-        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+        GetPhysicsCore()->ActivateBody(m_char_handle);
         
     Fvector impulse;
     impulse.set(dir);
@@ -1036,7 +1036,7 @@ void CPHElement::CreateSimulBase()
 {
     Fvector half_extents = {0.5f, 0.5f, 0.5f};
     m_char_handle = GetPhysicsCore()->CreateBox(half_extents, m_mass_center, m_mass);
-    GetPhysicsCore()->DeactivateCharacterVirtual(m_char_handle);
+    GetPhysicsCore()->DeactivateBody(m_char_handle);
 }
 
 void CPHElement::ReAdjustMassPositions(const Fmatrix& shift_pivot, float density)
@@ -1177,7 +1177,7 @@ void CPHElement::applyGravityAccel(const Fvector& accel)
     if (m_flags.test(flFixed))
         return;
     if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
-        GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+        GetPhysicsCore()->ActivateBody(m_char_handle);
     m_shell->EnableObject(0);
 }
 
@@ -1188,14 +1188,14 @@ void CPHElement::CutVelocity(float l_limit, float a_limit)
     VERIFY(_valid(l_limit) && _valid(a_limit));
     
     Fvector lin_vel, ang_vel;
-    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, lin_vel);
+    GetPhysicsCore()->GetBodyLinearVelocity(m_char_handle, lin_vel);
     GetPhysicsCore()->GetBodyAngularVelocity(m_char_handle, ang_vel);
 
     if (lin_vel.magnitude() > l_limit)
     {
         lin_vel.normalize();
         lin_vel.mul(l_limit);
-        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, lin_vel);
+        GetPhysicsCore()->SetBodyLinearVelocity(m_char_handle, lin_vel);
     }
     if (ang_vel.magnitude() > a_limit)
     {
@@ -1223,7 +1223,7 @@ void CPHElement::dbg_draw_velocity(float scale, u32 color)
     VERIFY(m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE);
     
     Fvector vel;
-    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, vel);
+    GetPhysicsCore()->GetBodyLinearVelocity(m_char_handle, vel);
     debug_output().DBG_DrawPoint(bone.c, 0.01f, color);
     debug_output().DBG_DrawLine(bone.c, Fvector().add(bone.c, vel.mul(scale)), color);
 }

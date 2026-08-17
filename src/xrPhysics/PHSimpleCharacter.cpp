@@ -790,7 +790,7 @@ void CPHSimpleCharacter::get_spatial_params()
     if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         Fvector c, d;
-        GetPhysicsCore()->GetBodyAABB(m_char_handle, c, d);
+        GetPhysicsCore()->GetCharacterVirtualAABB(m_char_handle, c, d);
         spatial.sphere.P = c;
         spatial.sphere.R = d.magnitude();
         AABB.set(d);

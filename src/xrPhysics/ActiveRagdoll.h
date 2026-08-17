@@ -23,9 +23,15 @@ public:
     static SRagdollSettings BuildSettings(IKinematics* kinematics, const CActiveRagdollSkeletonMapper& mapper);
 };
 
+#include "xrCore/fastdelegate.h"
+
 enum class ERagdollState {
     Inactive,
     Active,
+    KnockedDown,        // Full dynamic ragdoll simulation during fall
+    KnockdownResting,   // Settled on ground, preparing to stand up
+    MotorRampingUp,     // Motor stiffness ramping up to blend to get-up pose
+    GettingUp,          // Playing get-up animation, root kinematic restored
     Dying,
     Dead
 };
@@ -38,7 +44,17 @@ struct ActiveRagdollCallbackData {
     u16 bone_id;
 };
 
+struct SPartHitReaction {
+    float flinch_factor = 0.0f;
+    float recovery_duration = 0.35f;
+    float elapsed_time = 0.0f;
+    bool active = false;
+};
+
 class XRPHYSICS_API CActiveRagdollController {
+public:
+    using GetUpCallback = fastdelegate::FastDelegate0<>;
+
 private:
     RagdollHandle m_ragdoll_handle = INVALID_RAGDOLL_HANDLE;
     CActiveRagdollSkeletonMapper m_mapper;
@@ -53,9 +69,24 @@ private:
     float m_death_decay_timer = 0.f;
     float m_death_decay_duration = 2.0f; // 2 seconds to die
     
-    xr_vector<Fquaternion> m_target_rotations;
+    float m_knockdown_timer = 0.0f;
+    float m_min_knockdown_duration = 0.8f;
+    float m_max_knockdown_duration = 3.5f;
+    
+    float m_ramp_up_timer = 0.0f;
+    float m_ramp_up_duration = 0.35f;
+    
+    float m_get_up_timer = 0.0f;
+    float m_get_up_duration = 1.5f;
+    
+    bool m_facing_up = true;
+    
+    GetUpCallback m_get_up_callback;
+    
+    xr_vector<Fmatrix> m_target_matrices;
     xr_vector<Fvector> m_simulated_positions;
     xr_vector<Fquaternion> m_simulated_rotations;
+    xr_vector<SPartHitReaction> m_part_reactions;
     
     xr_vector<ActiveRagdollCallbackData> m_cb_data;
     
@@ -67,6 +98,20 @@ public:
     void Deactivate();
     
     void OnDeath();
+    void KnockDown(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos);
+    void ApplyHit(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos);
+    void ApplyRadialImpulse(const Fvector& center, float radius, float max_impulse);
+    void SetMotorDefaults(float stiffness, float damping);
+    
+    void SetGetUpCallback(GetUpCallback cb) { m_get_up_callback = cb; }
+    void SetGetUpDuration(float duration) { m_get_up_duration = duration; }
+    void OnGetUpFinished() { m_state = ERagdollState::Active; }
+    
+    bool IsFacingUp() const { return m_facing_up; }
+    const Fvector& GetSimulatedPosition(u32 part_idx) const {
+        VERIFY(part_idx < m_simulated_positions.size());
+        return m_simulated_positions[part_idx];
+    }
     
     void Update(float dt);
     void SyncToPhysics();
@@ -76,6 +121,10 @@ public:
     
     RagdollHandle GetHandle() const { return m_ragdoll_handle; }
     ERagdollState GetState() const { return m_state; }
+    const CActiveRagdollSkeletonMapper& GetMapper() const { return m_mapper; }
+    u32 GetPartCount() const { return (u32)m_mapper.m_part_to_bone.size(); }
+    IKinematics* GetKinematics() const { return m_kinematics; }
+    IPhysicsShellHolder* GetHolder() const { return m_holder; }
 };
 
 class XRPHYSICS_API CActiveRagdollManager {

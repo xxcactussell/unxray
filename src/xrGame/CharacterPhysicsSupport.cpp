@@ -259,6 +259,14 @@ void CCharacterPhysicsSupport::SpawnInitPhysics(CSE_Abstract* e)
 
         SpawnCharacterCreate();
 
+        IKinematics* k = smart_cast<IKinematics*>(m_EntityAlife.Visual());
+        if (k && !m_active_ragdoll && m_eType != etActor) {
+            m_active_ragdoll = CActiveRagdollManager::GetInstance().RegisterRagdoll(k, &m_EntityAlife);
+            if (m_active_ragdoll) {
+                m_active_ragdoll->SetGetUpCallback(fastdelegate::MakeDelegate(this, &CCharacterPhysicsSupport::OnActiveRagdollGetUp));
+            }
+        }
+
 #ifdef DEBUG
         if (ph_dbg_draw_mask1.test(ph_m1_DbgTrackObject) &&
             xr_stricmp(PH_DBG_ObjectTrackName(), m_EntityAlife.cName().c_str()) == 0)
@@ -308,6 +316,12 @@ void CCharacterPhysicsSupport::SpawnCharacterCreate()
 void CCharacterPhysicsSupport::destroy_imotion() { destroy(m_interactive_motion); }
 void CCharacterPhysicsSupport::in_NetDestroy()
 {
+    if (m_active_ragdoll)
+    {
+        CActiveRagdollManager::GetInstance().UnregisterRagdoll(m_active_ragdoll);
+        m_active_ragdoll = nullptr;
+    }
+
     destroy(m_interactive_motion);
     m_PhysicMovementControl->DestroyCharacter();
 
@@ -415,9 +429,14 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
     VERIFY(m_EntityAlife.Visual());
     VERIFY(m_EntityAlife.Visual()->dcast_PKinematics());
 
-    // IKinematicsAnimated * KA = m_EntityAlife.Visual( )->dcast_PKinematicsAnimated	();
-    // VERIFY( KA );
-    // KA->SetUpdateTracksCalback( &tracks_disable_update );
+    if (m_active_ragdoll)
+    {
+        m_active_ragdoll->OnDeath();
+        m_eState = esDead;
+        m_flags.set(fl_death_anim_on, FALSE);
+        m_flags.set(fl_skeleton_in_shell, TRUE);
+        return;
+    }
 
     m_character_shell_control.TestForWounded(m_EntityAlife.XFORM(), m_EntityAlife.Visual()->dcast_PKinematics());
     Fmatrix prev_pose;
@@ -471,6 +490,72 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
         m_flags.set(fl_block_hit, TRUE);
     }
 }
+
+void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
+{
+    if (!m_active_ragdoll) return;
+    
+    // Reposition character capsule to the settled pelvis position
+    Fvector pelvis_pos = m_active_ragdoll->GetSimulatedPosition(0);
+    if (m_PhysicMovementControl)
+    {
+        m_PhysicMovementControl->SetPosition(pelvis_pos);
+    }
+    m_EntityAlife.Position() = pelvis_pos;
+    m_EntityAlife.XFORM().c = pelvis_pos;
+    
+    IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
+    if (!ka)
+    {
+        m_active_ragdoll->SetGetUpDuration(0.5f);
+        return;
+    }
+    
+    MotionID get_up_motion;
+    if (m_eType == etStalker)
+    {
+        if (m_active_ragdoll->IsFacingUp())
+        {
+            get_up_motion = ka->LL_MotionID("fake_death_0_2");
+            if (!get_up_motion.valid())
+                get_up_motion = ka->LL_MotionID("trans_lay_to_stand");
+            if (!get_up_motion.valid())
+                get_up_motion = ka->LL_MotionID("help_wounded_stand_up");
+        }
+        else
+        {
+            get_up_motion = ka->LL_MotionID("fake_death_1_2");
+            if (!get_up_motion.valid())
+                get_up_motion = ka->LL_MotionID("trans_lay_to_stand");
+        }
+    }
+    else if (m_eType == etBitting)
+    {
+        get_up_motion = ka->LL_MotionID("lie_to_stand_up_0");
+        if (!get_up_motion.valid())
+            get_up_motion = ka->LL_MotionID("sit_stand_up_0");
+        if (!get_up_motion.valid())
+            get_up_motion = ka->LL_MotionID("fake_death_0_2");
+    }
+    
+    if (get_up_motion.valid())
+    {
+        CBlend* blend = ka->PlayCycle(get_up_motion);
+        if (blend && blend->speed > 0.001f)
+        {
+            m_active_ragdoll->SetGetUpDuration(blend->timeTotal / blend->speed);
+        }
+        else
+        {
+            m_active_ragdoll->SetGetUpDuration(1.5f);
+        }
+    }
+    else
+    {
+        m_active_ragdoll->SetGetUpDuration(0.5f);
+    }
+}
+
 const u32 hit_valide_time = 1000;
 void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
 {
@@ -502,6 +587,54 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
         !m_flags.test(fl_death_anim_on)) //&& Type() == etStalker
     {
         m_hit_animations.PlayHitMotion(H.direction(), H.bone_space_position(), H.bone(), m_EntityAlife);
+    }
+
+    if (m_active_ragdoll)
+    {
+        Fvector hit_pos = H.bone_space_position();
+        IKinematics* k = smart_cast<IKinematics*>(m_EntityAlife.Visual());
+        if (k && H.bone() < k->LL_BoneCount())
+        {
+            const CBoneInstance& bi = k->LL_GetBoneInstance(H.bone());
+            Fmatrix bone_world;
+            bone_world.mul_43(m_EntityAlife.XFORM(), bi.mTransform);
+            bone_world.transform_tiny(hit_pos, H.bone_space_position());
+        }
+        else
+        {
+            hit_pos = m_EntityAlife.Position();
+        }
+
+        if (is_killing || !m_EntityAlife.g_Alive())
+        {
+            m_active_ragdoll->OnDeath();
+            m_active_ragdoll->ApplyHit(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
+        }
+        else
+        {
+            // Check for knockdown triggers
+            bool is_explosion = (H.type() == ALife::eHitTypeExplosion && H.damage() > 30.0f);
+            bool is_heavy_strike = ((H.type() == ALife::eHitTypeStrike || H.type() == ALife::eHitTypePhysicStrike) && H.phys_impulse() > 200.0f);
+            bool is_huge_impulse = (H.phys_impulse() > 300.0f);
+            
+            // Check for leg knockdown
+            bool is_leg_hit = false;
+            if (k && H.bone() < k->LL_BoneCount()) {
+                LPCSTR bone_name = k->LL_BoneName_dbg(H.bone());
+                if (bone_name && (strstr(bone_name, "leg") || strstr(bone_name, "thigh") || strstr(bone_name, "calf") || strstr(bone_name, "foot"))) {
+                    is_leg_hit = (H.phys_impulse() > 140.0f);
+                }
+            }
+
+            if (is_explosion || is_heavy_strike || is_huge_impulse || is_leg_hit)
+            {
+                m_active_ragdoll->KnockDown(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
+            }
+            else
+            {
+                m_active_ragdoll->ApplyHit(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
+            }
+        }
     }
 
     if (!(m_pPhysicsShell && m_pPhysicsShell->isActive()))
@@ -667,7 +800,7 @@ void CCharacterPhysicsSupport::CreateSkeleton(CPhysicsShell*& pShell)
     pShell->Build();
 
     // Register Active Ragdoll
-    if (!m_active_ragdoll) {
+    if (!m_active_ragdoll && m_eType != etActor) {
         m_active_ragdoll = CActiveRagdollManager::GetInstance().RegisterRagdoll(k, &m_EntityAlife);
     }
 

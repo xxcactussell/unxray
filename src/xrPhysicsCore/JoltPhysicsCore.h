@@ -52,6 +52,7 @@ private:
 
     std::unordered_map<CharacterVirtualHandle, JPH::Ref<JPH::CharacterVirtual>> m_characters;
     std::unordered_map<CharacterVirtualHandle, bool> m_stick_to_floor;
+    std::unordered_map<CharacterVirtualHandle, float> m_character_gravity_factors;
     CharacterVirtualHandle m_next_character_handle = 1;
 
     std::unordered_map<RagdollHandle, JPH::Ref<JPH::Ragdoll>> m_ragdolls;
@@ -170,10 +171,13 @@ public:
     PhysicsShapeHandle CreateSphereShape(float radius) override;
     PhysicsShapeHandle CreateCylinderShape(float radius, float half_height) override;
     PhysicsShapeHandle CreateCapsuleShape(float radius, float half_height) override;
+    PhysicsShapeHandle CreateRotatedTranslatedShape(PhysicsShapeHandle base_shape, const Fvector& position, const Fquaternion& rotation) override;
     CharacterVirtualHandle CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) override;
     void DestroyCharacterVirtual(CharacterVirtualHandle handle) override;
     virtual void SetCharacterVirtualVelocity(CharacterVirtualHandle handle, const Fvector& velocity) override;
     virtual void GetCharacterVirtualVelocity(CharacterVirtualHandle handle, Fvector& velocity) const override;
+    virtual void GetCharacterVirtualAABB(CharacterVirtualHandle handle, Fvector& center, Fvector& half_extents) const override;
+    virtual void SetCharacterVirtualGravityFactor(CharacterVirtualHandle handle, float factor) override;
     virtual void SetCharacterVirtualUserData(CharacterVirtualHandle handle, void* data) override;
     virtual void GetCharacterVirtualGroundState(CharacterVirtualHandle handle, SJoltCharacterGroundState& out_state) const override;
     virtual void GetCharacterVirtualPosition(CharacterVirtualHandle handle, Fvector& position) const override;
@@ -190,13 +194,27 @@ public:
     void AddRagdollToWorld(RagdollHandle handle, bool activate) override;
     void RemoveRagdollFromWorld(RagdollHandle handle) override;
     void SetRagdollTargetPose(RagdollHandle handle, const Fquaternion* target_rotations, u32 count) override;
+    void SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* target_matrices, u32 count) override;
+    void SetRagdollWorldPose(RagdollHandle handle, const Fmatrix& world_transform, const Fmatrix* bone_model_matrices, u32 count) override;
     void SetRagdollRootKinematic(RagdollHandle handle, bool kinematic) override;
     void SetRagdollRootTransform(RagdollHandle handle, const Fvector& position, const Fquaternion& rotation) override;
+    void SetRagdollMotorState(RagdollHandle handle, bool enabled) override;
+    void SetRagdollConstraintMotorState(RagdollHandle handle, u32 constraint_index, bool enabled) override;
     void SetRagdollMotorStiffness(RagdollHandle handle, float stiffness) override;
     void SetRagdollMotorDamping(RagdollHandle handle, float damping) override;
     void SetRagdollConstraintMotor(RagdollHandle handle, u32 constraint_index, float stiffness, float damping) override;
+    void SetRagdollPartMotor(RagdollHandle handle, u32 part_index, float stiffness, float damping) override;
+    void SetRagdollPartMotionType(RagdollHandle handle, u32 part_index, bool kinematic) override;
+    void SetRagdollAllPartsKinematic(RagdollHandle handle, bool kinematic) override;
+    void SetRagdollUserData(RagdollHandle handle, void* user_data) override;
+    void SetRagdollGroupID(RagdollHandle handle, u32 group_id) override;
+    void SetRagdollPartTransform(RagdollHandle handle, u32 part_index, const Fvector& position, const Fquaternion& rotation) override;
+    void ApplyRagdollImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse, const Fvector& point) override;
+    void ApplyRagdollLinearImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse) override;
     void GetRagdollPartTransform(RagdollHandle handle, u32 part_index, Fvector& out_position, Fquaternion& out_rotation) const override;
     void GetRagdollAllTransforms(RagdollHandle handle, Fvector* out_positions, Fquaternion* out_rotations, u32 count) const override;
+    void GetRagdollPartVelocity(RagdollHandle handle, u32 part_index, Fvector& out_linear_vel, Fvector& out_angular_vel) const override;
+    float GetRagdollTotalEnergy(RagdollHandle handle) const override;
     u32 GetRagdollPartCount(RagdollHandle handle) const override;
     void SetRagdollCollisionGroup(RagdollHandle handle, u32 group_id) override;
 };

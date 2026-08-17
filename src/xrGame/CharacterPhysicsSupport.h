@@ -129,6 +129,7 @@ public:
     void in_Init();
     void in_Load(LPCSTR section);
     void in_Hit(SHit& H, bool is_killing = false);
+    void OnActiveRagdollGetUp();
     void in_NetSave(NET_Packet& P);
     void in_ChangeVisual();
     void in_Die();

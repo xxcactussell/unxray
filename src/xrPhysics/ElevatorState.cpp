@@ -95,22 +95,7 @@ void CElevatorState::SwitchState(Estate new_state)
 #endif
     VERIFY(m_character);
     
-    // Отключаем гравитацию при нахождении на лестнице
-    if ((m_state != clbClimbingUp && m_state != clbClimbingDown) &&
-        (new_state == clbClimbingUp || new_state == clbClimbingDown))
-    {
-        if (m_character->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE)
-            GetPhysicsCore()->SetBodyGravityFactor(m_character->get_body(), 0.0f);
-    }
-
-    // Включаем гравитацию обратно при сходе с лестницы
-    if ((new_state != clbClimbingUp && new_state != clbClimbingDown) &&
-        (m_state == clbClimbingUp || m_state == clbClimbingDown))
-    {
-        if (m_character->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE)
-            GetPhysicsCore()->SetBodyGravityFactor(m_character->get_body(), 1.0f);
-    }
-
+    // Отключаем/включаем состояние при лестнице
     NewState();
     m_state = new_state;
 }

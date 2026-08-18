@@ -212,7 +212,7 @@ public:
     void ApplyRagdollImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse, const Fvector& point) override;
     void ApplyRagdollLinearImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse) override;
     void GetRagdollPartTransform(RagdollHandle handle, u32 part_index, Fvector& out_position, Fquaternion& out_rotation) const override;
-    void GetRagdollAllTransforms(RagdollHandle handle, Fvector* out_positions, Fquaternion* out_rotations, u32 count) const override;
+    void GetRagdollAllTransforms(RagdollHandle handle, Fmatrix* out_matrices, u32 count) const override;
     void GetRagdollPartVelocity(RagdollHandle handle, u32 part_index, Fvector& out_linear_vel, Fvector& out_angular_vel) const override;
     float GetRagdollTotalEnergy(RagdollHandle handle) const override;
     u32 GetRagdollPartCount(RagdollHandle handle) const override;

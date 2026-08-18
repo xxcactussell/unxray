@@ -45,6 +45,7 @@ struct ActiveRagdollCallbackData {
 };
 
 struct SPartHitReaction {
+    Fvector impulse_dir = {0.0f, 0.0f, 0.0f};
     float flinch_factor = 0.0f;
     float recovery_duration = 0.35f;
     float elapsed_time = 0.0f;
@@ -69,6 +70,9 @@ private:
     float m_death_decay_timer = 0.f;
     float m_death_decay_duration = 2.0f; // 2 seconds to die
     
+    float m_visual_blend_factor = 0.f;
+    float m_visual_blend_duration = 0.8f; // Shorter than decay so visual is fully physical when motors die
+    
     float m_knockdown_timer = 0.0f;
     float m_min_knockdown_duration = 0.8f;
     float m_max_knockdown_duration = 3.5f;
@@ -84,8 +88,7 @@ private:
     GetUpCallback m_get_up_callback;
     
     xr_vector<Fmatrix> m_target_matrices;
-    xr_vector<Fvector> m_simulated_positions;
-    xr_vector<Fquaternion> m_simulated_rotations;
+    xr_vector<Fmatrix> m_simulated_matrices;
     xr_vector<SPartHitReaction> m_part_reactions;
     
     xr_vector<ActiveRagdollCallbackData> m_cb_data;
@@ -109,8 +112,8 @@ public:
     
     bool IsFacingUp() const { return m_facing_up; }
     const Fvector& GetSimulatedPosition(u32 part_idx) const {
-        VERIFY(part_idx < m_simulated_positions.size());
-        return m_simulated_positions[part_idx];
+        VERIFY(part_idx < m_simulated_matrices.size());
+        return m_simulated_matrices[part_idx].c;
     }
     
     void Update(float dt);

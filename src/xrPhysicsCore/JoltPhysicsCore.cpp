@@ -1429,7 +1429,8 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         JPH::RagdollSettings::Part& jph_part = jph_settings->mParts[i];
         jph_part.SetShape(static_cast<JPH::Shape*>(part.shape));
         jph_part.mPosition = JPH::Vec3(part.position.x, part.position.y, part.position.z);
-        jph_part.mRotation = JPH::Quat(part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w);
+        JPH::Quat part_rot(part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w);
+        jph_part.mRotation = part_rot.Normalized();
         
         float mass = std::max(part.mass, 0.05f);
         jph_part.mMassPropertiesOverride.mMass = mass;
@@ -1441,6 +1442,8 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         } else {
             jph_part.mMotionType = JPH::EMotionType::Dynamic;
         }
+        
+        jph_part.mMotionQuality = JPH::EMotionQuality::LinearCast;
         
         jph_part.mObjectLayer = Layers::RAGDOLL;
     }
@@ -1457,28 +1460,34 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         JPH::Ref<JPH::SwingTwistConstraintSettings> constraint = new JPH::SwingTwistConstraintSettings();
         constraint->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
         
-        JPH::Quat rot_parent(part_parent.rotation.x, part_parent.rotation.y, part_parent.rotation.z, part_parent.rotation.w);
-        JPH::Quat rot_child(part_child.rotation.x, part_child.rotation.y, part_child.rotation.z, part_child.rotation.w);
+        JPH::Quat rot_parent = JPH::Quat(part_parent.rotation.x, part_parent.rotation.y, part_parent.rotation.z, part_parent.rotation.w).Normalized();
+        JPH::Quat rot_child = JPH::Quat(part_child.rotation.x, part_child.rotation.y, part_child.rotation.z, part_child.rotation.w).Normalized();
         
         JPH::Vec3 pos_parent(part_parent.position.x, part_parent.position.y, part_parent.position.z);
         JPH::Vec3 pos_child(part_child.position.x, part_child.position.y, part_child.position.z);
         
-        // The constraint is located at the child's origin.
-        constraint->mPosition1 = rot_parent.Conjugated() * (pos_child - pos_parent);
-        constraint->mPosition2 = JPH::Vec3::sZero();
+        JPH::Vec3 parent_com_local = jph_settings->mParts[part_child.parent_index].GetShape()->GetCenterOfMass();
+        JPH::Vec3 child_com_local = jph_settings->mParts[c_desc.child_index].GetShape()->GetCenterOfMass();
+        
+        // The constraint is located at the child's origin, but must be specified relative to the real COM.
+        constraint->mPosition1 = (rot_parent.Conjugated() * (pos_child - pos_parent)) - parent_com_local;
+        constraint->mPosition2 = -child_com_local;
         
         JPH::Vec3 twist_world = rot_child * JPH::Vec3(c_desc.twist_axis.x, c_desc.twist_axis.y, c_desc.twist_axis.z);
         JPH::Vec3 plane_world = rot_child * JPH::Vec3(c_desc.plane_axis.x, c_desc.plane_axis.y, c_desc.plane_axis.z);
         
-        constraint->mTwistAxis1 = rot_parent.Conjugated() * twist_world;
-        constraint->mPlaneAxis1 = rot_parent.Conjugated() * plane_world;
-        constraint->mTwistAxis2 = JPH::Vec3(c_desc.twist_axis.x, c_desc.twist_axis.y, c_desc.twist_axis.z);
-        constraint->mPlaneAxis2 = JPH::Vec3(c_desc.plane_axis.x, c_desc.plane_axis.y, c_desc.plane_axis.z);
+        constraint->mTwistAxis1 = (rot_parent.Conjugated() * twist_world).Normalized();
+        constraint->mPlaneAxis1 = (rot_parent.Conjugated() * plane_world).Normalized();
+        constraint->mTwistAxis2 = JPH::Vec3(c_desc.twist_axis.x, c_desc.twist_axis.y, c_desc.twist_axis.z).Normalized();
+        constraint->mPlaneAxis2 = JPH::Vec3(c_desc.plane_axis.x, c_desc.plane_axis.y, c_desc.plane_axis.z).Normalized();
         
-        constraint->mNormalHalfConeAngle = c_desc.swing_limit_y;
-        constraint->mPlaneHalfConeAngle = c_desc.swing_limit_z;
-        constraint->mTwistMinAngle = c_desc.twist_limit_min;
-        constraint->mTwistMaxAngle = c_desc.twist_limit_max;
+        constraint->mNormalHalfConeAngle = std::clamp(c_desc.swing_limit_y, 0.0f, float(M_PI * 0.5f));
+        constraint->mPlaneHalfConeAngle = std::clamp(c_desc.swing_limit_z, 0.0f, float(M_PI * 0.5f));
+        constraint->mTwistMinAngle = std::clamp(c_desc.twist_limit_min, -float(M_PI), float(M_PI));
+        constraint->mTwistMaxAngle = std::clamp(c_desc.twist_limit_max, -float(M_PI), float(M_PI));
+        if (constraint->mTwistMaxAngle < constraint->mTwistMinAngle) {
+            std::swap(constraint->mTwistMinAngle, constraint->mTwistMaxAngle);
+        }
         constraint->mMaxFrictionTorque = c_desc.max_friction_torque;
         
         // Motor settings
@@ -1489,16 +1498,28 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         jph_settings->mParts[c_desc.child_index].mToParent = constraint;
     }
     
-    jph_settings->DisableParentChildCollisions();
+    // X-Ray shapes overlap massively. Disable ALL internal collisions within the same ragdoll,
+    // not just parent-child (DisableParentChildCollisions() alone is not enough).
+    JPH::Ref<JPH::GroupFilterTable> group_filter = new JPH::GroupFilterTable((uint32_t)settings.parts.size());
+    for (int i = 0; i < (int)settings.parts.size(); ++i)
+        for (int j = 0; j < (int)settings.parts.size(); ++j)
+            if (i != j)
+                group_filter->DisableCollision(i, j);
+
+    RagdollHandle handle = m_next_ragdoll_handle++;
+    for (int i = 0; i < (int)settings.parts.size(); ++i) {
+        jph_settings->mParts[i].mCollisionGroup.SetGroupFilter(group_filter);
+        jph_settings->mParts[i].mCollisionGroup.SetSubGroupID(i);
+        jph_settings->mParts[i].mCollisionGroup.SetGroupID(handle);
+    }
+
     jph_settings->CalculateConstraintPriorities();
     jph_settings->Stabilize();
     jph_settings->CalculateBodyIndexToConstraintIndex();
     jph_settings->CalculateConstraintIndexToBodyIdxPair();
     
-    JPH::Ragdoll* ragdoll = jph_settings->CreateRagdoll(0, 0, m_physics_system);
+    JPH::Ragdoll* ragdoll = jph_settings->CreateRagdoll(handle, 0, m_physics_system);
     if (!ragdoll) return INVALID_RAGDOLL_HANDLE;
-    
-    RagdollHandle handle = m_next_ragdoll_handle++;
     m_ragdolls[handle] = ragdoll;
     m_ragdoll_settings[handle] = jph_settings;
     
@@ -1588,14 +1609,7 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* 
             u32 it_count = (count < j_count) ? count : j_count;
             
             for (u32 i = 0; i < it_count; ++i) {
-                int parent_idx = m_ragdoll_settings[handle]->mSkeleton->GetJoint(i).mParentJointIndex;
-                if (parent_idx != -1 && parent_idx < it_count) {
-                    JPH::Mat44 parent_world = jph_matrices[parent_idx];
-                    JPH::Mat44 child_world = jph_matrices[i];
-                    target_pose.GetJointMatrices()[i] = parent_world.InversedRotationTranslation() * child_world;
-                } else {
-                    target_pose.GetJointMatrices()[i] = jph_matrices[i];
-                }
+                target_pose.GetJointMatrices()[i] = jph_matrices[i];
             }
             
             target_pose.CalculateJointStates();
@@ -1782,7 +1796,13 @@ void JoltPhysicsCore::SetRagdollAllPartsKinematic(RagdollHandle handle, bool kin
             JPH::BodyID body_id = it->second->GetBodyID(i);
             if (!body_id.IsInvalid()) {
                 m_physics_system->GetBodyInterface().SetMotionType(body_id, motion_type, JPH::EActivation::Activate);
+                if (!kinematic) {
+                    m_physics_system->GetBodyInterface().SetLinearAndAngularVelocity(body_id, JPH::Vec3::sZero(), JPH::Vec3::sZero());
+                }
             }
+        }
+        if (!kinematic) {
+            it->second->ResetWarmStart();
         }
     }
 }
@@ -1826,7 +1846,8 @@ void JoltPhysicsCore::ApplyRagdollImpulse(RagdollHandle handle, u32 part_index, 
     auto it = m_ragdolls.find(handle);
     if (it != m_ragdolls.end() && m_physics_system) {
         JPH::BodyID body_id = it->second->GetBodyID(part_index);
-        if (!body_id.IsInvalid()) {
+        if (!body_id.IsInvalid() &&
+            m_physics_system->GetBodyInterface().GetMotionType(body_id) == JPH::EMotionType::Dynamic) {
             m_physics_system->GetBodyInterface().AddImpulse(
                 body_id, 
                 JPH::Vec3(impulse.x, impulse.y, impulse.z), 
@@ -1840,7 +1861,8 @@ void JoltPhysicsCore::ApplyRagdollLinearImpulse(RagdollHandle handle, u32 part_i
     auto it = m_ragdolls.find(handle);
     if (it != m_ragdolls.end() && m_physics_system) {
         JPH::BodyID body_id = it->second->GetBodyID(part_index);
-        if (!body_id.IsInvalid()) {
+        if (!body_id.IsInvalid() &&
+            m_physics_system->GetBodyInterface().GetMotionType(body_id) == JPH::EMotionType::Dynamic) {
             m_physics_system->GetBodyInterface().AddImpulse(
                 body_id, 
                 JPH::Vec3(impulse.x, impulse.y, impulse.z)
@@ -1862,17 +1884,27 @@ void JoltPhysicsCore::GetRagdollPartTransform(RagdollHandle handle, u32 part_ind
     }
 }
 
-void JoltPhysicsCore::GetRagdollAllTransforms(RagdollHandle handle, Fvector* out_positions, Fquaternion* out_rotations, u32 count) const {
+void JoltPhysicsCore::GetRagdollAllTransforms(RagdollHandle handle, Fmatrix* out_matrices, u32 count) const {
     auto it = m_ragdolls.find(handle);
     if (it != m_ragdolls.end() && m_physics_system) {
         u32 max_parts = std::min(count, (u32)it->second->GetBodyCount());
         for (u32 i = 0; i < max_parts; ++i) {
             JPH::BodyID body_id = it->second->GetBodyID(i);
             if (!body_id.IsInvalid()) {
-                JPH::Vec3 pos = m_physics_system->GetBodyInterface().GetPosition(body_id);
-                JPH::Quat rot = m_physics_system->GetBodyInterface().GetRotation(body_id);
-                out_positions[i].set(pos.GetX(), pos.GetY(), pos.GetZ());
-                out_rotations[i].set(rot.GetX(), rot.GetY(), rot.GetZ(), rot.GetW());
+                JPH::Mat44 jph_mat = m_physics_system->GetBodyInterface().GetWorldTransform(body_id);
+                Fmatrix& mat = out_matrices[i];
+                
+                JPH::Vec3 axis_x = jph_mat.GetAxisX();
+                JPH::Vec3 axis_y = jph_mat.GetAxisY();
+                JPH::Vec3 axis_z = jph_mat.GetAxisZ();
+                JPH::Vec3 pos = jph_mat.GetTranslation();
+                
+                mat.i.set(axis_x.GetX(), axis_x.GetY(), axis_x.GetZ());
+                mat.j.set(axis_y.GetX(), axis_y.GetY(), axis_y.GetZ());
+                mat.k.set(axis_z.GetX(), axis_z.GetY(), axis_z.GetZ());
+                mat.c.set(pos.GetX(), pos.GetY(), pos.GetZ());
+                
+                mat._14_ = 0.0f; mat._24_ = 0.0f; mat._34_ = 0.0f; mat._44_ = 1.0f;
             }
         }
     }

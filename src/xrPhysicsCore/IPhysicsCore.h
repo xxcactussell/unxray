@@ -242,7 +242,7 @@ public:
     virtual void ApplyRagdollLinearImpulse(RagdollHandle handle, u32 part_index, const Fvector& impulse) = 0;
     
     virtual void GetRagdollPartTransform(RagdollHandle handle, u32 part_index, Fvector& out_position, Fquaternion& out_rotation) const = 0;
-    virtual void GetRagdollAllTransforms(RagdollHandle handle, Fvector* out_positions, Fquaternion* out_rotations, u32 count) const = 0;
+    virtual void GetRagdollAllTransforms(RagdollHandle handle, Fmatrix* out_matrices, u32 count) const = 0;
     virtual void GetRagdollPartVelocity(RagdollHandle handle, u32 part_index, Fvector& out_linear_vel, Fvector& out_angular_vel) const = 0;
     virtual float GetRagdollTotalEnergy(RagdollHandle handle) const = 0;
     virtual u32 GetRagdollPartCount(RagdollHandle handle) const = 0;

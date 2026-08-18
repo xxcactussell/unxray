@@ -431,6 +431,7 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
 
     if (m_active_ragdoll)
     {
+        DestroyIKController();
         m_active_ragdoll->OnDeath();
         m_eState = esDead;
         m_flags.set(fl_death_anim_on, FALSE);
@@ -585,7 +586,7 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
         KillHit(H);
 
     if (m_flags.test(fl_use_hit_anims) && Type() != etBitting &&
-        !m_flags.test(fl_death_anim_on)) //&& Type() == etStalker
+        !m_flags.test(fl_death_anim_on) && !is_killing && m_EntityAlife.g_Alive()) //&& Type() == etStalker
     {
         m_hit_animations.PlayHitMotion(H.direction(), H.bone_space_position(), H.bone(), m_EntityAlife);
     }
@@ -608,6 +609,7 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
 
         if (is_killing || !m_EntityAlife.g_Alive())
         {
+            DestroyIKController();
             m_active_ragdoll->OnDeath();
             m_active_ragdoll->ApplyHit(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
         }
@@ -629,6 +631,7 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
 
             if (is_explosion || is_heavy_strike || is_huge_impulse || is_leg_hit)
             {
+                DestroyIKController();
                 m_active_ragdoll->KnockDown(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
             }
             else
@@ -741,9 +744,23 @@ void CCharacterPhysicsSupport::in_UpdateCL()
     //}
     else
     {
-        if (m_active_ragdoll && m_active_ragdoll->GetState() == ERagdollState::Dead && !m_flags.test(fl_death_anim_on))
+        if (m_active_ragdoll)
         {
-            m_flags.set(fl_death_anim_on, TRUE);
+            auto state = m_active_ragdoll->GetState();
+            if (state == ERagdollState::Dead || state == ERagdollState::Dying ||
+                state == ERagdollState::KnockedDown || state == ERagdollState::KnockdownResting)
+            {
+                DestroyIKController();
+            }
+            else if (state == ERagdollState::Active && !m_ik_controller && m_EntityAlife.g_Alive())
+            {
+                CreateIKController();
+            }
+            
+            if (state == ERagdollState::Dead && !m_flags.test(fl_death_anim_on))
+            {
+                m_flags.set(fl_death_anim_on, TRUE);
+            }
         }
         
         if (ik_controller())

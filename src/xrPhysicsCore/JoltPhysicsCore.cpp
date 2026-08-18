@@ -1397,7 +1397,7 @@ PhysicsShapeHandle JoltPhysicsCore::CreateRotatedTranslatedShape(PhysicsShapeHan
     JPH::Shape* inner = reinterpret_cast<JPH::Shape*>(base_shape);
     JPH::RotatedTranslatedShapeSettings settings(
         JPH::Vec3(position.x, position.y, position.z),
-        JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w),
+        JPH::Quat(-rotation.x, -rotation.y, -rotation.z, rotation.w).Normalized(),
         inner
     );
     JPH::ShapeSettings::ShapeResult result = settings.Create();
@@ -1420,16 +1420,16 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
     for (size_t i = 0; i < settings.parts.size(); ++i) {
         const auto& part = settings.parts[i];
         
-        JPH::Skeleton::Joint joint;
-        joint.mName = "joint_" + std::to_string(part.bone_id);
-        joint.mParentName = part.parent_index != -1 ? "joint_" + std::to_string(settings.parts[part.parent_index].bone_id) : "";
-        joint.mParentJointIndex = part.parent_index;
-        jph_settings->mSkeleton->GetJoints().push_back(joint);
+        std::string joint_name = "joint_" + std::to_string(part.bone_id);
+        jph_settings->mSkeleton->AddJoint(
+            joint_name.c_str(), 
+            part.parent_index
+        );
         
-        JPH::RagdollSettings::Part& jph_part = jph_settings->mParts[i];
+        auto& jph_part = jph_settings->mParts[i];
         jph_part.SetShape(static_cast<JPH::Shape*>(part.shape));
         jph_part.mPosition = JPH::Vec3(part.position.x, part.position.y, part.position.z);
-        JPH::Quat part_rot(part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w);
+        JPH::Quat part_rot(-part.rotation.x, -part.rotation.y, -part.rotation.z, part.rotation.w);
         jph_part.mRotation = part_rot.Normalized();
         
         float mass = std::max(part.mass, 0.05f);
@@ -1460,8 +1460,8 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         JPH::Ref<JPH::SwingTwistConstraintSettings> constraint = new JPH::SwingTwistConstraintSettings();
         constraint->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
         
-        JPH::Quat rot_parent = JPH::Quat(part_parent.rotation.x, part_parent.rotation.y, part_parent.rotation.z, part_parent.rotation.w).Normalized();
-        JPH::Quat rot_child = JPH::Quat(part_child.rotation.x, part_child.rotation.y, part_child.rotation.z, part_child.rotation.w).Normalized();
+        JPH::Quat rot_parent = JPH::Quat(-part_parent.rotation.x, -part_parent.rotation.y, -part_parent.rotation.z, part_parent.rotation.w).Normalized();
+        JPH::Quat rot_child = JPH::Quat(-part_child.rotation.x, -part_child.rotation.y, -part_child.rotation.z, part_child.rotation.w).Normalized();
         
         JPH::Vec3 pos_parent(part_parent.position.x, part_parent.position.y, part_parent.position.z);
         JPH::Vec3 pos_child(part_child.position.x, part_child.position.y, part_child.position.z);
@@ -1490,9 +1490,9 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         }
         constraint->mMaxFrictionTorque = c_desc.max_friction_torque;
         
-        // Motor settings
-        constraint->mSwingMotorSettings = JPH::MotorSettings(settings.default_motor.stiffness, settings.default_motor.damping);
-        constraint->mTwistMotorSettings = JPH::MotorSettings(settings.default_motor.stiffness, settings.default_motor.damping);
+        // Motor settings with bounded torque limits to prevent explosive constraint forces
+        constraint->mSwingMotorSettings = JPH::MotorSettings(JPH::ESpringMode::StiffnessAndDamping, settings.default_motor.stiffness, settings.default_motor.damping, 500.0f, 250.0f);
+        constraint->mTwistMotorSettings = JPH::MotorSettings(JPH::ESpringMode::StiffnessAndDamping, settings.default_motor.stiffness, settings.default_motor.damping, 500.0f, 250.0f);
         
         // Attach to part
         jph_settings->mParts[c_desc.child_index].mToParent = constraint;
@@ -1681,7 +1681,7 @@ void JoltPhysicsCore::SetRagdollRootTransform(RagdollHandle handle, const Fvecto
     if (it != m_ragdolls.end() && m_physics_system) {
         JPH::BodyID root_id = it->second->GetBodyID(0);
         if (!root_id.IsInvalid()) {
-            m_physics_system->GetBodyInterface().SetPositionAndRotation(root_id, JPH::Vec3(position.x, position.y, position.z), JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w), JPH::EActivation::DontActivate);
+            m_physics_system->GetBodyInterface().SetPositionAndRotation(root_id, JPH::Vec3(position.x, position.y, position.z), JPH::Quat(-rotation.x, -rotation.y, -rotation.z, rotation.w).Normalized(), JPH::EActivation::DontActivate);
         }
     }
 }
@@ -1725,6 +1725,8 @@ void JoltPhysicsCore::SetRagdollMotorStiffness(RagdollHandle handle, float stiff
                 JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
                 st->GetSwingMotorSettings().mSpringSettings.mStiffness = stiffness;
                 st->GetTwistMotorSettings().mSpringSettings.mStiffness = stiffness;
+                st->GetSwingMotorSettings().SetTorqueLimits(-250.0f, 250.0f);
+                st->GetTwistMotorSettings().SetTorqueLimits(-250.0f, 250.0f);
             }
         }
     }
@@ -1739,6 +1741,8 @@ void JoltPhysicsCore::SetRagdollMotorDamping(RagdollHandle handle, float damping
                 JPH::SwingTwistConstraint* st = static_cast<JPH::SwingTwistConstraint*>(c);
                 st->GetSwingMotorSettings().mSpringSettings.mDamping = damping;
                 st->GetTwistMotorSettings().mSpringSettings.mDamping = damping;
+                st->GetSwingMotorSettings().SetTorqueLimits(-250.0f, 250.0f);
+                st->GetTwistMotorSettings().SetTorqueLimits(-250.0f, 250.0f);
             }
         }
     }
@@ -1755,6 +1759,8 @@ void JoltPhysicsCore::SetRagdollConstraintMotor(RagdollHandle handle, u32 constr
                 st->GetSwingMotorSettings().mSpringSettings.mDamping = damping;
                 st->GetTwistMotorSettings().mSpringSettings.mStiffness = stiffness;
                 st->GetTwistMotorSettings().mSpringSettings.mDamping = damping;
+                st->GetSwingMotorSettings().SetTorqueLimits(-250.0f, 250.0f);
+                st->GetTwistMotorSettings().SetTorqueLimits(-250.0f, 250.0f);
             }
         }
     }
@@ -1835,7 +1841,7 @@ void JoltPhysicsCore::SetRagdollPartTransform(RagdollHandle handle, u32 part_ind
             m_physics_system->GetBodyInterface().SetPositionAndRotation(
                 body_id, 
                 JPH::Vec3(position.x, position.y, position.z), 
-                JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w), 
+                JPH::Quat(-rotation.x, -rotation.y, -rotation.z, rotation.w).Normalized(), 
                 JPH::EActivation::DontActivate
             );
         }

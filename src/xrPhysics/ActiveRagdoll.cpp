@@ -58,8 +58,8 @@ u16 CActiveRagdollSkeletonMapper::PartToBone(u16 part_index) const {
 
 SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinematics, const CActiveRagdollSkeletonMapper& mapper) {
     SRagdollSettings settings;
-    settings.default_motor.stiffness = 1000.f;
-    settings.default_motor.damping = 100.f;
+    settings.default_motor.stiffness = 300.f;
+    settings.default_motor.damping = 50.f;
     
     if (!kinematics) return settings;
     
@@ -154,23 +154,24 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             c_desc.plane_axis = Fvector().set(0.f, 1.f, 0.f);
             
             if (ik_data.type == jtRigid || ik_data.type == jtNone) {
-                c_desc.swing_limit_y = 0.f;
-                c_desc.swing_limit_z = 0.f;
-                c_desc.twist_limit_min = 0.f;
-                c_desc.twist_limit_max = 0.f;
+                c_desc.swing_limit_y = 0.05f;
+                c_desc.swing_limit_z = 0.05f;
+                c_desc.twist_limit_min = -0.05f;
+                c_desc.twist_limit_max = 0.05f;
             } else {
-                float lim_y = std::max(0.01f, _abs(ik_data.limits[1].limit.y - ik_data.limits[1].limit.x) * 0.5f);
-                float lim_z = std::max(0.01f, _abs(ik_data.limits[2].limit.y - ik_data.limits[2].limit.x) * 0.5f);
-                c_desc.swing_limit_y = std::clamp(lim_y, 0.01f, float(M_PI * 0.5f));
-                c_desc.swing_limit_z = std::clamp(lim_z, 0.01f, float(M_PI * 0.5f));
+                float lim_y = std::max(0.15f, _abs(ik_data.limits[1].limit.y - ik_data.limits[1].limit.x) * 0.5f);
+                float lim_z = std::max(0.15f, _abs(ik_data.limits[2].limit.y - ik_data.limits[2].limit.x) * 0.5f);
+                c_desc.swing_limit_y = std::clamp(lim_y, 0.15f, float(M_PI * 0.6f));
+                c_desc.swing_limit_z = std::clamp(lim_z, 0.15f, float(M_PI * 0.6f));
                 
                 float t_min = std::min(ik_data.limits[0].limit.x, ik_data.limits[0].limit.y);
                 float t_max = std::max(ik_data.limits[0].limit.x, ik_data.limits[0].limit.y);
+                if (t_max - t_min < 0.2f) {
+                    t_min -= 0.1f;
+                    t_max += 0.1f;
+                }
                 c_desc.twist_limit_min = std::clamp(t_min, -float(M_PI), float(M_PI));
                 c_desc.twist_limit_max = std::clamp(t_max, -float(M_PI), float(M_PI));
-                if (c_desc.twist_limit_max < c_desc.twist_limit_min + 0.001f) {
-                    c_desc.twist_limit_max = c_desc.twist_limit_min + 0.001f;
-                }
             }
             c_desc.max_friction_torque = ik_data.friction;
             settings.constraints.push_back(c_desc);
@@ -277,7 +278,9 @@ void CActiveRagdollController::OnDeath() {
         m_visual_blend_factor = 0.f;
         
         GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
-        GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
+        GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, true);
+        GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, m_motor_stiffness);
+        GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, m_motor_damping);
     }
 }
 
@@ -523,39 +526,37 @@ void CActiveRagdollController::Update(float dt) {
         GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, current_stiffness);
         GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, current_damping);
         
-        float vt = std::min(m_death_decay_timer / m_visual_blend_duration, 1.0f);
-        m_visual_blend_factor = vt * vt * (3.0f - 2.0f * vt);
-        
         if (t >= 1.0f) {
             m_state = ERagdollState::Dead;
-            m_visual_blend_factor = 1.0f;
-            GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
             GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
         }
     }
 }
 
 void CActiveRagdollController::SyncToPhysics() {
-    if (m_state == ERagdollState::Inactive || m_state == ERagdollState::Dead || m_state == ERagdollState::KnockedDown || m_state == ERagdollState::KnockdownResting || m_state == ERagdollState::Dying) return;
+    if (m_state == ERagdollState::Inactive || m_state == ERagdollState::Dead || m_state == ERagdollState::KnockedDown || m_state == ERagdollState::KnockdownResting) return;
     
     if (!m_holder || !m_kinematics || m_mapper.m_part_to_bone.empty()) return;
+
+    const Fmatrix& obj_xform = m_holder->ObjectXFORM();
 
     // Sync root transform (part 0 in world space) when in active kinematic drive or get-up
     if (m_state == ERagdollState::Active || m_state == ERagdollState::GettingUp) {
         u16 root_bone = m_mapper.PartToBone(0);
-        const CBoneInstance& root_bi = m_kinematics->LL_GetBoneInstance(root_bone);
+        Fmatrix root_anim_pos;
+        m_kinematics->Bone_GetAnimPos(root_anim_pos, root_bone, u8(-1), true);
         Fmatrix root_world;
-        root_world.mul_43(m_holder->ObjectXFORM(), root_bi.mTransform);
+        root_world.mul_43(obj_xform, root_anim_pos);
         Fquaternion rot;
         rot.set(root_world);
         GetPhysicsCore()->SetRagdollRootTransform(m_ragdoll_handle, root_world.c, rot);
     }
     
-    // Sync all target bone matrices in WORLD SPACE
-    const Fmatrix& obj_xform = m_holder->ObjectXFORM();
+    // Sync all target bone matrices in WORLD SPACE sampled directly from pure animation tracks
     for (u32 i = 0; i < m_mapper.m_part_to_bone.size(); ++i) {
         u16 bone_id = m_mapper.PartToBone(i);
-        const CBoneInstance& B = m_kinematics->LL_GetBoneInstance(bone_id);
+        Fmatrix anim_pos;
+        m_kinematics->Bone_GetAnimPos(anim_pos, bone_id, u8(-1), true);
 
         auto is_matrix_invalid = [](const Fmatrix& m) {
             return _isnan(m.c.x) || _isnan(m.c.y) || _isnan(m.c.z) ||
@@ -564,11 +565,11 @@ void CActiveRagdollController::SyncToPhysics() {
                 _isnan(m.k.x) || _isnan(m.k.y) || _isnan(m.k.z);
         };
 
-        if (is_matrix_invalid(B.mTransform)) {
+        if (is_matrix_invalid(anim_pos)) {
             m_target_matrices[i].identity();
             m_target_matrices[i].c = obj_xform.c;
         } else {
-            m_target_matrices[i].mul_43(obj_xform, B.mTransform);
+            m_target_matrices[i].mul_43(obj_xform, anim_pos);
         }
     }
     
@@ -631,9 +632,9 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
                 offset.mul(rx.impulse_dir, factor * 0.16f);
                 B->mTransform.c.add(offset);
                 
-                // 2. Angular tilt around bone's own center
+                // 2. Angular tilt around bone's own center (tilts away from the incoming hit)
                 Fvector rot_axis;
-                rot_axis.crossproduct(Fvector().set(0.f, 1.f, 0.f), rx.impulse_dir);
+                rot_axis.crossproduct(rx.impulse_dir, Fvector().set(0.f, 1.f, 0.f));
                 if (rot_axis.square_magnitude() > 0.001f) {
                     rot_axis.normalize();
                     Fmatrix flinch_rot;
@@ -660,14 +661,8 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
         phys_object_space = part_world;
     }
     
-    if (controller->m_state == ERagdollState::Dying) {
-        Fmatrix blended;
-        BlendMatrix(blended, B->mTransform, phys_object_space, controller->m_visual_blend_factor);
-        B->mTransform = blended;
-    } else {
-        B->mTransform = phys_object_space;
-        B->set_callback_overwrite(TRUE);
-    }
+    B->mTransform = phys_object_space;
+    B->set_callback_overwrite(TRUE);
 }
 
 // ===========================================================================

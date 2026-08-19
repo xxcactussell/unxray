@@ -40,15 +40,25 @@ JoltPhysicsCore::~JoltPhysicsCore()
 
 void JoltPhysicsCore::Initialize() 
 {
-    JPH::RegisterDefaultAllocator();
-    JPH::Factory::sInstance = new JPH::Factory();
-    JPH::RegisterTypes();
+    if (m_physics_system) return;
 
-    m_temp_allocator = new JPH::TempAllocatorImpl(10 * 1024 * 1024);
-    m_job_system = new JPH::JobSystemThreadPool(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, std::thread::hardware_concurrency() - 1);
+    if (!JPH::Factory::sInstance) {
+        JPH::RegisterDefaultAllocator();
+        JPH::Factory::sInstance = new JPH::Factory();
+        JPH::RegisterTypes();
+    }
+
+    if (!m_temp_allocator) {
+        m_temp_allocator = new JPH::TempAllocatorImpl(10 * 1024 * 1024);
+    }
+    if (!m_job_system) {
+        m_job_system = new JPH::JobSystemThreadPool(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, std::thread::hardware_concurrency() - 1);
+    }
 
 #ifdef JPH_DEBUG_RENDERER
-    m_debug_renderer = new CXRayJoltDebugRenderer();
+    if (!m_debug_renderer) {
+        m_debug_renderer = new CXRayJoltDebugRenderer();
+    }
 #endif
 
     m_physics_system = new JPH::PhysicsSystem();
@@ -65,21 +75,61 @@ void JoltPhysicsCore::Initialize()
     m_physics_system->SetContactListener(&m_contact_listener);
 }
 
+void JoltPhysicsCore::Clear()
+{
+    if (!m_physics_system) return;
+
+    // 1. Remove and clear all constraints
+    for (auto& pair : m_constraints) {
+        if (pair.second) {
+            m_physics_system->RemoveConstraint(pair.second);
+        }
+    }
+    m_constraints.clear();
+    m_connected_bodies.clear();
+
+    // 2. Remove and clear all ragdolls
+    for (auto& pair : m_ragdolls) {
+        if (pair.second) {
+            pair.second->RemoveFromPhysicsSystem();
+        }
+    }
+    m_ragdolls.clear();
+    m_ragdoll_settings.clear();
+
+    // 3. Clear virtual characters
+    m_characters.clear();
+    m_stick_to_floor.clear();
+    m_character_gravity_factors.clear();
+
+    // 4. Remove and destroy all rigid bodies
+    JPH::BodyInterface& bi = m_physics_system->GetBodyInterface();
+    JPH::BodyIDVector all_bodies;
+    m_physics_system->GetBodies(all_bodies);
+    if (!all_bodies.empty()) {
+        bi.RemoveBodies(all_bodies.data(), (int)all_bodies.size());
+        bi.DestroyBodies(all_bodies.data(), (int)all_bodies.size());
+    }
+
+    // Reset handle counters
+    m_next_joint_handle = 1;
+    m_next_character_handle = 1;
+    m_next_ragdoll_handle = 1;
+
+    // Optimize broadphase for clean state
+    m_physics_system->OptimizeBroadPhase();
+}
+
 void JoltPhysicsCore::Step(float delta_time) 
 {
+    if (!m_physics_system || !m_temp_allocator || !m_job_system) return;
     int collision_steps = 1; 
     m_physics_system->Update(delta_time, collision_steps, m_temp_allocator, m_job_system);
 }
 
 void JoltPhysicsCore::Destroy() 
 {
-    for (auto& pair : m_constraints) {
-        if (m_physics_system && pair.second) {
-            m_physics_system->RemoveConstraint(pair.second);
-        }
-    }
-    m_constraints.clear();
-    m_connected_bodies.clear();
+    Clear();
 
     if (m_physics_system) {
         delete m_physics_system;
@@ -87,8 +137,10 @@ void JoltPhysicsCore::Destroy()
     }
 
 #ifdef JPH_DEBUG_RENDERER
-    delete m_debug_renderer;
-    m_debug_renderer = nullptr;
+    if (m_debug_renderer) {
+        delete m_debug_renderer;
+        m_debug_renderer = nullptr;
+    }
 #endif
 
     if (m_job_system) {

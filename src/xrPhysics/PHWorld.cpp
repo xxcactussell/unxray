@@ -95,6 +95,7 @@ void CPHWorld::SetStep(float s)
 void CPHWorld::Create(bool mt, CObjectSpace* os, CObjectList* lo)
 {
     ZoneScoped;
+    GetPhysicsCore()->Initialize();
     LoadParams();
     m_object_space = os;
     m_level_objects = lo;
@@ -119,8 +120,8 @@ void CPHWorld::Destroy()
     xr_delete(m_commander);
     Mesh.Destroy();
     
-    // Уничтожение нового физического ядра
-    GetPhysicsCore()->Destroy();
+    // Очистка физического мира от объектов текущего уровня
+    GetPhysicsCore()->Clear();
 
     Device.RemoveSeqFrame(this);
     b_exist = false;

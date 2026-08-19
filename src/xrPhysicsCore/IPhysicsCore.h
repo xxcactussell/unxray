@@ -78,6 +78,7 @@ public:
     virtual ~IPhysicsCore() = default;
 
     virtual void Initialize() = 0;
+    virtual void Clear() = 0;
     virtual void Step(float delta_time) = 0;
     virtual void Destroy() = 0;
 
@@ -123,7 +124,6 @@ public:
     virtual void GetCDBModelBounds(PhysicsShapeHandle handle, Fvector& out_center, Fvector& out_extents) const = 0;
     
     // type: 0=Ball, 1=Hinge, 2=Hinge2, 3=FullControl, 4=Slider (соответствует X-Ray CPhysicsJoint::enumType)
-    // Замени старый CreateJoint на этот:
     virtual JointHandle CreateJoint(int type, BodyHandle b1, BodyHandle b2, 
                                     const Fvector& anchor, 
                                     const Fvector& axis0, const Fvector& axis1, const Fvector& axis2, 

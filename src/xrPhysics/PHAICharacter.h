@@ -20,6 +20,8 @@ public:
     virtual void SetForcedPhysicsControl(bool v) { m_forced_physics_control = v; }
     virtual bool ForcedPhysicsControl() { return m_forced_physics_control; }
     virtual void Create(Fvector sizes);
+    virtual void GetSavedVelocity(Fvector& vvel) override;
+    virtual void GetVelocity(Fvector& vvel) const override;
 
 private:
     virtual void UpdateStaticDamage(const Fvector& normal, const Fvector& pos, SGameMtl* tri_material, bool bo1) {}

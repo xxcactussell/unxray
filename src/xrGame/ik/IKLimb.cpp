@@ -316,6 +316,15 @@ void CIKLimb::Create(u16 id, IKinematicsAnimated* K, bool collide_)
     else
         m_foot.Create(CK, 0, m_bones);
     ////////////////////////////////////////////////////////////////////
+    for (u16 i = 0; 4 > i; ++i)
+    {
+        if (m_bones[i] == BI_NONE || m_bones[i] >= CK->LL_BoneCount())
+        {
+            m_collide = false;
+            return;
+        }
+    }
+    ////////////////////////////////////////////////////////////////////
     sv_state.set_limb(this);
     m_collide = collide_;
     //////////////////////////////////////////////////////////////////////

@@ -440,11 +440,15 @@ BOOL pick_bone(CKinematics* Parent, IKinematics::pick_result& r, float dist, con
 BOOL CSkeletonX_ext::_PickBone(IKinematics::pick_result& r, float dist, const Fvector& start, const Fvector& dir,
     Fvisual* V, u16 bone_id, u32 iBase, u32 /*iCount*/)
 {
-    VERIFY(Parent && ChildIDX != u16(-1));
+    if (!Parent || ChildIDX == u16(-1) || bone_id >= Parent->LL_BoneCount()) return FALSE;
     CBoneData& BD = Parent->LL_GetData(bone_id);
+    if (ChildIDX >= BD.child_faces.size()) return FALSE;
     CBoneData::FacesVec& faces = BD.child_faces[ChildIDX];
+    if (faces.empty()) return FALSE;
+    if (!V || !V->p_rm_Indices) return FALSE;
     BOOL result = FALSE;
     u16* indices = static_cast<u16*>(V->p_rm_Indices->Map(0, V->dwPrimitives * 3, true));
+    if (!indices) return FALSE;
     switch (RenderMode)
     {
     case RM_SKINNING_SOFT:
@@ -634,10 +638,14 @@ void fill_vertices_hw(CKinematics* parent, const Fmatrix& view, CSkeletonWallmar
 void CSkeletonX_ext::_FillVertices(const Fmatrix& view, CSkeletonWallmark& wm, const Fvector& normal,
                                    float size, Fvisual* V, u16 bone_id, u32 iBase, u32 /*iCount*/)
 {
-    VERIFY(Parent && ChildIDX != u16(-1));
+    if (!Parent || ChildIDX == u16(-1) || bone_id >= Parent->LL_BoneCount()) return;
     CBoneData& BD = Parent->LL_GetData(bone_id);
+    if (ChildIDX >= BD.child_faces.size()) return;
     CBoneData::FacesVec* faces = &BD.child_faces[ChildIDX];
+    if (!faces || faces->empty()) return;
+    if (!V || !V->p_rm_Indices) return;
     u16* indices = static_cast<u16*>(V->p_rm_Indices->Map(0, V->dwPrimitives * 3, true));
+    if (!indices) return;
     // fill vertices
     switch (RenderMode)
     {
@@ -719,10 +727,14 @@ void TEnumBoneVertices(
 
 void CSkeletonX_ext::_EnumBoneVertices(SEnumVerticesCallback& C, Fvisual* V, u16 bone_id, u32 iBase, u32 /*iCount*/) const
 {
-    VERIFY(Parent && ChildIDX != u16(-1));
+    if (!Parent || ChildIDX == u16(-1) || bone_id >= Parent->LL_BoneCount()) return;
     CBoneData& BD = Parent->LL_GetData(bone_id);
+    if (ChildIDX >= BD.child_faces.size()) return;
     CBoneData::FacesVec* faces = &BD.child_faces[ChildIDX];
+    if (!faces || faces->empty()) return;
+    if (!V || !V->p_rm_Indices) return;
     u16* indices = static_cast<u16*>(V->p_rm_Indices->Map(0, V->dwPrimitives * 3, true));
+    if (!indices) return;
 
     // fill vertices
     switch (RenderMode)

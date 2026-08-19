@@ -1433,7 +1433,19 @@ void CCharacterPhysicsSupport::PHGetLinearVell(Fvector& velocity)
 
 void CCharacterPhysicsSupport::CreateIKController()
 {
-    VERIFY(!m_ik_controller);
+    if (m_ik_controller)
+        return;
+
+    if (etStalker != m_eType && etActor != m_eType)
+    {
+        if (!m_EntityAlife.Visual() || !m_EntityAlife.Visual()->dcast_PKinematics() ||
+            !m_EntityAlife.Visual()->dcast_PKinematics()->LL_UserData() ||
+            !m_EntityAlife.Visual()->dcast_PKinematics()->LL_UserData()->section_exist("ik"))
+        {
+            return;
+        }
+    }
+
     m_ik_controller = xr_new<CIKLimbsController>();
     m_ik_controller->Create(&m_EntityAlife);
 }

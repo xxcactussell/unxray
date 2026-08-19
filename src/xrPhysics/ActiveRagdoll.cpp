@@ -196,8 +196,22 @@ void CActiveRagdollController::Initialize(IKinematics* kinematics, IPhysicsShell
     m_holder = holder;
     m_mapper.Build(kinematics);
     
+    if (m_mapper.m_part_to_bone.empty()) {
+        m_state = ERagdollState::Inactive;
+        return;
+    }
+    
     SRagdollSettings settings = CActiveRagdollSettingsBuilder::BuildSettings(kinematics, m_mapper);
+    if (settings.parts.empty()) {
+        m_state = ERagdollState::Inactive;
+        return;
+    }
+
     m_ragdoll_handle = GetPhysicsCore()->CreateRagdoll(settings);
+    if (m_ragdoll_handle == INVALID_RAGDOLL_HANDLE) {
+        m_state = ERagdollState::Inactive;
+        return;
+    }
     
     if (m_ragdoll_handle != INVALID_RAGDOLL_HANDLE) {
         u32 part_count = (u32)settings.parts.size();
@@ -234,7 +248,7 @@ void CActiveRagdollController::Initialize(IKinematics* kinematics, IPhysicsShell
         // 5. Read back synchronized world positions immediately
         GetPhysicsCore()->GetRagdollAllTransforms(m_ragdoll_handle, m_simulated_matrices.data(), part_count);
         
-        // 6. Setup bone callbacks
+        // 6. Setup bone callbacks (preserving existing AI aiming callbacks)
         for (u32 i = 0; i < part_count; ++i) {
             u16 bone_id = m_mapper.PartToBone((u16)i);
             if (bone_id == u16(-1) || bone_id >= m_kinematics->LL_BoneCount()) continue;
@@ -244,6 +258,8 @@ void CActiveRagdollController::Initialize(IKinematics* kinematics, IPhysicsShell
             m_cb_data[i].bone_id = bone_id;
             
             CBoneInstance& B = m_kinematics->LL_GetBoneInstance(bone_id);
+            m_cb_data[i].previous_callback = B.callback();
+            m_cb_data[i].previous_param = B.callback_param();
             B.set_callback(bctCustom, BonesCallback, &m_cb_data[i]);
         }
         
@@ -543,18 +559,26 @@ void CActiveRagdollController::SyncToPhysics() {
     // Sync root transform (part 0 in world space) when in active kinematic drive or get-up
     if (m_state == ERagdollState::Active || m_state == ERagdollState::GettingUp) {
         u16 root_bone = m_mapper.PartToBone(0);
-        Fmatrix root_anim_pos;
-        m_kinematics->Bone_GetAnimPos(root_anim_pos, root_bone, u8(-1), true);
-        Fmatrix root_world;
-        root_world.mul_43(obj_xform, root_anim_pos);
-        Fquaternion rot;
-        rot.set(root_world);
-        GetPhysicsCore()->SetRagdollRootTransform(m_ragdoll_handle, root_world.c, rot);
+        if (root_bone != u16(-1) && root_bone < m_kinematics->LL_BoneCount()) {
+            Fmatrix root_anim_pos;
+            m_kinematics->Bone_GetAnimPos(root_anim_pos, root_bone, u8(-1), true);
+            Fmatrix root_world;
+            root_world.mul_43(obj_xform, root_anim_pos);
+            Fquaternion rot;
+            rot.set(root_world);
+            GetPhysicsCore()->SetRagdollRootTransform(m_ragdoll_handle, root_world.c, rot);
+        }
     }
     
     // Sync all target bone matrices in WORLD SPACE sampled directly from pure animation tracks
     for (u32 i = 0; i < m_mapper.m_part_to_bone.size(); ++i) {
         u16 bone_id = m_mapper.PartToBone(i);
+        if (bone_id == u16(-1) || bone_id >= m_kinematics->LL_BoneCount()) {
+            m_target_matrices[i].identity();
+            m_target_matrices[i].c = obj_xform.c;
+            continue;
+        }
+
         Fmatrix anim_pos;
         m_kinematics->Bone_GetAnimPos(anim_pos, bone_id, u8(-1), true);
 
@@ -620,6 +644,14 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
     if (part_idx >= controller->m_simulated_matrices.size()) return;
     
     if (controller->m_state == ERagdollState::Active) {
+        // 1. Run the chained callback (e.g. spine/head aiming from CStalkerAnimationManager)
+        if (cb_data->previous_callback && cb_data->previous_callback != BonesCallback) {
+            B->set_callback(B->callback_type(), cb_data->previous_callback, cb_data->previous_param, B->callback_overwrite());
+            cb_data->previous_callback(B);
+            B->set_callback(bctCustom, BonesCallback, cb_data, FALSE);
+        }
+        
+        // 2. Apply active flinch impulse on top if hit
         if (part_idx < controller->m_part_reactions.size() && controller->m_part_reactions[part_idx].active) {
             const auto& rx = controller->m_part_reactions[part_idx];
             float progress = rx.elapsed_time / rx.recovery_duration;
@@ -683,8 +715,16 @@ CActiveRagdollManager::~CActiveRagdollManager() {
 }
 
 CActiveRagdollController* CActiveRagdollManager::RegisterRagdoll(IKinematics* kinematics, IPhysicsShellHolder* holder) {
+    if (!kinematics || !holder) return nullptr;
+
     CActiveRagdollController* controller = xr_new<CActiveRagdollController>();
     controller->Initialize(kinematics, holder);
+    
+    if (controller->GetState() == ERagdollState::Inactive) {
+        xr_delete(controller);
+        return nullptr;
+    }
+    
     m_controllers.push_back(controller);
     return controller;
 }

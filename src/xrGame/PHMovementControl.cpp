@@ -569,7 +569,6 @@ void CPHMovementControl::PathNearestPoint(const xr_vector<DetailPathManager::STr
 
     if (m_path_distance == phInfinity) // after whall path
     {
-        R_ASSERT2(after_line, "Must be after line");
         vtemp.sub(new_position, path[i].position);
         m_path_distance = vtemp.magnitude();
         SetPathDir(dir);
@@ -664,7 +663,6 @@ void CPHMovementControl::PathNearestPointFindUp(const xr_vector<DetailPathManage
 
     if (m_path_distance == phInfinity && i == m_path_size - 1)
     {
-        R_ASSERT2(after_line, "Must be after line");
         vtemp.sub(new_position, path[i].position);
         m_path_distance = vtemp.magnitude();
         SetPathDir(dir);
@@ -751,7 +749,6 @@ void CPHMovementControl::PathNearestPointFindDown(const xr_vector<DetailPathMana
 
     if (m_path_distance == phInfinity && i == 1)
     {
-        R_ASSERT2(after_line, "Must be after line");
         vtemp.sub(new_position, path[i].position);
         m_path_distance = vtemp.magnitude();
         SetPathDir(dir);

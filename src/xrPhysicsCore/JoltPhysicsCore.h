@@ -64,6 +64,7 @@ public:
     virtual ~JoltPhysicsCore() override;
 
     void Initialize() override;
+    void Clear() override;
     void Step(float delta_time) override;
     void Destroy() override;
 
@@ -107,7 +108,6 @@ public:
     void GetBodyAABB(BodyHandle body, Fvector& center, Fvector& half_extents) const override;
     
     // --- Сочленения (Joints / Constraints) ---
-    // Замени старый CreateJoint на этот:
     JointHandle CreateJoint(int type, BodyHandle b1, BodyHandle b2, 
                                     const Fvector& anchor, 
                                     const Fvector& axis0, const Fvector& axis1, const Fvector& axis2, 

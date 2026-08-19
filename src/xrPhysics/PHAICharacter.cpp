@@ -41,8 +41,11 @@ bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
     displace.sub(pos, current_pos);
     float disp_mag = displace.magnitude();
 
-    if (fis_zero(disp_mag) || fis_zero(Device.fTimeDelta))
+    if (fis_zero(disp_mag) || fis_zero(Device.fTimeDelta)) {
+        m_last_move.set(0.f, 0.f, 0.f);
+        m_safe_velocity.set(0.f, 0.f, 0.f);
         return true;
+    }
         
     const u32 max_steps = 15;
     const float fmax_steps = float(max_steps);
@@ -97,6 +100,7 @@ bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
 
     SetPosition(pos_new);
     m_last_move.sub(pos_new, current_pos).mul(1.f / Device.fTimeDelta);
+    m_safe_velocity.set(m_last_move);
     m_char_handle_interpolation.UpdatePositions();
     m_char_handle_interpolation.UpdatePositions();
     
@@ -105,6 +109,22 @@ bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
         
     m_collision_damage_info.m_contact_velocity = 0.f;
     return ret;
+}
+
+void CPHAICharacter::GetSavedVelocity(Fvector& vvel)
+{
+    if (m_last_move.square_magnitude() > EPS_L)
+        vvel.set(m_last_move);
+    else
+        inherited::GetSavedVelocity(vvel);
+}
+
+void CPHAICharacter::GetVelocity(Fvector& vvel) const
+{
+    if (m_last_move.square_magnitude() > EPS_L)
+        vvel.set(m_last_move);
+    else
+        inherited::GetVelocity(vvel);
 }
 
 void CPHAICharacter::Jump(const Fvector& jump_velocity)

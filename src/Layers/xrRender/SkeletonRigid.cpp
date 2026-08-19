@@ -234,7 +234,11 @@ void CKinematics::Bone_GetAnimPos(Fmatrix& pos, u16 id, u8 mask_channel, bool ig
 {
     ZoneScoped;
 
-    R_ASSERT(id < LL_BoneCount());
+    if (id >= LL_BoneCount())
+    {
+        pos.identity();
+        return;
+    }
     CBoneInstance bi = LL_GetBoneInstance(id);
     BoneChain_Calculate(&LL_GetData(id), bi, mask_channel, ignore_callbacks);
 #ifndef MASTER_GOLD
@@ -259,6 +263,7 @@ void CKinematics::BoneChain_Calculate(const CBoneData* bd, CBoneInstance& bi, u8
 {
     ZoneScoped;
 
+    if (!bd) return;
     u16 SelfID = bd->GetSelfID();
     // CBlendInstance& BLEND_INST	= LL_GetBlendInstance(SelfID);
     // CBlendInstance::BlendSVec &Blend = BLEND_INST.blend_vector();
@@ -269,15 +274,14 @@ void CKinematics::BoneChain_Calculate(const CBoneData* bd, CBoneInstance& bi, u8
     {
         bi.set_callback(bi.callback_type(), nullptr, bi.callback_param(), 0);
     }
-    if (SelfID == LL_GetBoneRoot())
+    u16 ParentID = bd->GetParentID();
+    if (SelfID == LL_GetBoneRoot() || ParentID == BI_NONE || ParentID >= LL_BoneCount())
     {
         CLBone(bd, bi, &Fidentity, mask_channel);
         // restore callback
         bi.set_callback(bi.callback_type(), bc, bi.callback_param(), ow);
         return;
     }
-    u16 ParentID = bd->GetParentID();
-    R_ASSERT(ParentID != BI_NONE);
     CBoneData* ParrentDT = &LL_GetData(ParentID);
     CBoneInstance parrent_bi = LL_GetBoneInstance(ParentID);
     BoneChain_Calculate(ParrentDT, parrent_bi, mask_channel, ignore_callbacks);

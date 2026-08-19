@@ -24,6 +24,7 @@ public:
 };
 
 #include "xrCore/fastdelegate.h"
+#include "xrCore/Animation/Bone.hpp"
 
 enum class ERagdollState {
     Inactive,
@@ -39,9 +40,11 @@ enum class ERagdollState {
 class CActiveRagdollController;
 
 struct ActiveRagdollCallbackData {
-    CActiveRagdollController* controller;
-    u16 part_index;
-    u16 bone_id;
+    CActiveRagdollController* controller = nullptr;
+    u16 part_index = 0;
+    u16 bone_id = 0;
+    BoneCallback previous_callback = nullptr;
+    void* previous_param = nullptr;
 };
 
 struct SPartHitReaction {

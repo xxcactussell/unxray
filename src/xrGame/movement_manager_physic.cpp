@@ -38,6 +38,10 @@ float CMovementManager::speed(CPHMovementControl* movement_control) const
     if (movement_control->IsCharacterEnabled())
         return (movement_control->GetXZActVelInGoingDir());
 
+    float act_vel = movement_control->GetXZActVelInGoingDir();
+    if (act_vel > EPS_L)
+        return act_vel;
+
     return (m_speed);
 }
 #ifdef DEBUG

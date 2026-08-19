@@ -583,24 +583,22 @@ void CActiveRagdollController::Update(float dt) {
 }
 
 void CActiveRagdollController::SyncToPhysics() {
-    if (m_state == ERagdollState::Inactive || m_state == ERagdollState::Dead || m_state == ERagdollState::KnockedDown || m_state == ERagdollState::KnockdownResting || m_state == ERagdollState::MotorRampingUp) return;
+    if (m_state != ERagdollState::Active) return;
     
     if (!m_holder || !m_kinematics || m_mapper.m_part_to_bone.empty()) return;
 
     const Fmatrix& obj_xform = m_holder->ObjectXFORM();
 
-    // Sync root transform (part 0 in world space) when in active kinematic drive or get-up
-    if (m_state == ERagdollState::Active || m_state == ERagdollState::GettingUp) {
-        u16 root_bone = m_mapper.PartToBone(0);
-        if (root_bone != u16(-1) && root_bone < m_kinematics->LL_BoneCount()) {
-            Fmatrix root_anim_pos;
-            m_kinematics->Bone_GetAnimPos(root_anim_pos, root_bone, u8(-1), true);
-            Fmatrix root_world;
-            root_world.mul_43(obj_xform, root_anim_pos);
-            Fquaternion rot;
-            rot.set(root_world);
-            GetPhysicsCore()->SetRagdollRootTransform(m_ragdoll_handle, root_world.c, rot);
-        }
+    // Sync root transform (part 0 in world space) when in active kinematic drive
+    u16 root_bone = m_mapper.PartToBone(0);
+    if (root_bone != u16(-1) && root_bone < m_kinematics->LL_BoneCount()) {
+        Fmatrix root_anim_pos;
+        m_kinematics->Bone_GetAnimPos(root_anim_pos, root_bone, u8(-1), true);
+        Fmatrix root_world;
+        root_world.mul_43(obj_xform, root_anim_pos);
+        Fquaternion rot;
+        rot.set(root_world);
+        GetPhysicsCore()->SetRagdollRootTransform(m_ragdoll_handle, root_world.c, rot);
     }
     
     // Sync all target bone matrices in WORLD SPACE directly from pure animation curves (ignoring callbacks/overwrites)

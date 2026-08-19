@@ -580,15 +580,12 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
 {
     if (!m_active_ragdoll || !m_EntityAlife.g_Alive()) return;
     
-    // Reposition character capsule to the settled pelvis position safely on the ground
+    // Reposition entity object to the settled pelvis position
     Fvector pelvis_pos = m_active_ragdoll->GetSimulatedPosition(0);
     if (_valid(pelvis_pos))
     {
-        set_movement_position(pelvis_pos);
-        if (m_PhysicMovementControl)
-        {
-            m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
-        }
+        m_EntityAlife.Position() = pelvis_pos;
+        m_EntityAlife.XFORM().c = pelvis_pos;
     }
 
     IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
@@ -634,6 +631,12 @@ void CCharacterPhysicsSupport::OnGetUpAnimationEnd()
         stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
         stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
         stalker->animation().global().reset();
+    }
+
+    if (m_PhysicMovementControl)
+    {
+        m_PhysicMovementControl->SetPosition(m_EntityAlife.Position());
+        m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
     }
 
     if (m_active_ragdoll)
@@ -838,15 +841,22 @@ void CCharacterPhysicsSupport::in_UpdateCL()
         m_active_ragdoll->SyncToPhysics();
         m_active_ragdoll->SyncFromPhysics();
 
-        if (IsKnockedDown() && m_active_ragdoll->GetPartCount() > 0) {
-            Fvector pelvis_pos = m_active_ragdoll->GetSimulatedPosition(0);
-            if (_valid(pelvis_pos)) {
+        if (m_active_ragdoll->GetPartCount() > 0) {
+            auto ragdoll_state = m_active_ragdoll->GetState();
+            if (ragdoll_state == ERagdollState::KnockedDown || ragdoll_state == ERagdollState::KnockdownResting) {
+                Fvector pelvis_pos = m_active_ragdoll->GetSimulatedPosition(0);
+                if (_valid(pelvis_pos)) {
+                    m_EntityAlife.Position() = pelvis_pos;
+                    m_EntityAlife.XFORM().c = pelvis_pos;
+                    if (m_PhysicMovementControl) {
+                        m_PhysicMovementControl->SetPosition(pelvis_pos);
+                        m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
+                    }
+                }
+            } else if (ragdoll_state == ERagdollState::MotorRampingUp || ragdoll_state == ERagdollState::GettingUp) {
                 if (m_PhysicMovementControl) {
-                    m_PhysicMovementControl->SetPosition(pelvis_pos);
                     m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
                 }
-                m_EntityAlife.Position() = pelvis_pos;
-                m_EntityAlife.XFORM().c = pelvis_pos;
             }
         }
     }

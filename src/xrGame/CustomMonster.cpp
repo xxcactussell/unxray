@@ -572,7 +572,8 @@ void CCustomMonster::UpdateCL()
 void CCustomMonster::UpdatePositionAnimation()
 {
     START_PROFILE("CustomMonster/client_update/movement")
-    movement().on_frame(character_physics_support()->movement(), NET_Last.p_pos);
+    if (!character_physics_support() || !character_physics_support()->IsKnockedDown())
+        movement().on_frame(character_physics_support()->movement(), NET_Last.p_pos);
     STOP_PROFILE
 
     START_PROFILE("CustomMonster/client_update/animation")

@@ -990,6 +990,7 @@ void CAI_Stalker::shedule_Update(u32 DT)
             movement().set_desired_position(0);
             movement().set_desired_direction(0);
             movement().set_path_type(MovementManager::ePathTypeNoPath);
+            movement().enable_movement(false);
         }
         else if (GetScriptControl())
             ProcessScripts();
@@ -1080,6 +1081,7 @@ void CAI_Stalker::Think()
         movement().set_desired_position(0);
         movement().set_desired_direction(0);
         movement().set_path_type(MovementManager::ePathTypeNoPath);
+        movement().enable_movement(false);
         return;
     }
 

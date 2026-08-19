@@ -631,6 +631,7 @@ void CCharacterPhysicsSupport::OnGetUpAnimationEnd()
         stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
         stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
         stalker->animation().global().reset();
+        stalker->movement().enable_movement(true);
     }
 
     if (m_PhysicMovementControl)

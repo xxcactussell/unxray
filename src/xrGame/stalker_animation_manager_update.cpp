@@ -210,13 +210,13 @@ void CStalkerAnimationManager::update_impl()
     update_tracks();
     play_delayed_callbacks();
 
-    if (object().character_physics_support() && object().character_physics_support()->IsKnockedDown())
-        return;
-
     if (play_script())
         return;
 
     if (play_global())
+        return;
+
+    if (object().character_physics_support() && object().character_physics_support()->IsKnockedDown())
         return;
 
     play_head();

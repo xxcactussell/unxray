@@ -750,6 +750,12 @@ void CAI_Stalker::update_object_handler()
     if (!g_Alive())
         return;
 
+    if (character_physics_support() && character_physics_support()->IsKnockedDown())
+    {
+        CObjectHandler::set_goal(eObjectActionIdle);
+        return;
+    }
+
     try
     {
         try
@@ -820,9 +826,7 @@ void CAI_Stalker::UpdateCL()
     START_PROFILE("stalker/client_update")
     VERIFY2(PPhysicsShell() || getEnabled(), cName().c_str());
 
-    bool is_knocked = (character_physics_support() && character_physics_support()->IsKnockedDown());
-
-    if (g_Alive() && !is_knocked)
+    if (g_Alive())
     {
         if (g_mt_config.test(mtObjectHandler) && CObjectHandler::planner().initialized())
         {
@@ -868,21 +872,24 @@ void CAI_Stalker::UpdateCL()
     m_pPhysics_support->in_UpdateCL();
     STOP_PROFILE
 
-    if (g_Alive() && !is_knocked)
+    if (g_Alive())
     {
         START_PROFILE("stalker/client_update/sight_manager")
         VERIFY(!m_pPhysicsShell);
-        try
+        if (!(character_physics_support() && character_physics_support()->IsKnockedDown()))
         {
-            sight().update();
-        }
-        catch (...)
-        {
-            sight().setup(CSightAction(SightManager::eSightTypeCurrentDirection));
-            sight().update();
-        }
+            try
+            {
+                sight().update();
+            }
+            catch (...)
+            {
+                sight().setup(CSightAction(SightManager::eSightTypeCurrentDirection));
+                sight().update();
+            }
 
-        Exec_Look(client_update_fdelta());
+            Exec_Look(client_update_fdelta());
+        }
         STOP_PROFILE
 
         START_PROFILE("stalker/client_update/step_manager")
@@ -931,9 +938,7 @@ void CAI_Stalker::shedule_Update(u32 DT)
     // *** general stuff
     float dt = float(DT) / 1000.f;
 
-    bool is_knocked = (character_physics_support() && character_physics_support()->IsKnockedDown());
-
-    if (g_Alive() && !is_knocked)
+    if (g_Alive())
     {
         animation().play_delayed_callbacks();
 
@@ -974,13 +979,19 @@ void CAI_Stalker::shedule_Update(u32 DT)
     if (Remote())
     {
     }
-    else if (!is_knocked)
+    else
     {
         // here is monster AI call
         VERIFY(_valid(Position()));
         m_fTimeUpdateDelta = dt;
         Level().AIStats.Think.Begin();
-        if (GetScriptControl())
+        if (character_physics_support() && character_physics_support()->IsKnockedDown())
+        {
+            movement().set_desired_position(0);
+            movement().set_desired_direction(0);
+            movement().set_path_type(MovementManager::ePathTypeNoPath);
+        }
+        else if (GetScriptControl())
             ProcessScripts();
         else
 #ifdef DEBUG
@@ -1064,6 +1075,14 @@ void CAI_Stalker::spawn_supplies()
 
 void CAI_Stalker::Think()
 {
+    if (character_physics_support() && character_physics_support()->IsKnockedDown())
+    {
+        movement().set_desired_position(0);
+        movement().set_desired_direction(0);
+        movement().set_path_type(MovementManager::ePathTypeNoPath);
+        return;
+    }
+
     START_PROFILE("stalker/schedule_update/think")
     u32 update_delta = Device.dwTimeGlobal - m_dwLastUpdateTime;
 

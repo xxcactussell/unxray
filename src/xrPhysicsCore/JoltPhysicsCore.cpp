@@ -1655,12 +1655,16 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* 
         std::vector<JPH::Mat44> jph_matrices(count);
         for (u32 i = 0; i < count; ++i) {
             const Fmatrix& m = target_matrices[i];
-            jph_matrices[i] = JPH::Mat44(
+            JPH::Mat44 mat(
                 JPH::Vec4(m._11, m._12, m._13, 0.0f),
                 JPH::Vec4(m._21, m._22, m._23, 0.0f),
                 JPH::Vec4(m._31, m._32, m._33, 0.0f),
-                JPH::Vec3(m._41, m._42, m._43)
+                JPH::Vec3(0, 0, 0)
             );
+            JPH::Quat q = mat.GetQuaternion();
+            JPH::Quat jph_q(-q.GetX(), -q.GetY(), -q.GetZ(), q.GetW());
+            JPH::Vec3 jph_pos(m.c.x, m.c.y, m.c.z);
+            jph_matrices[i] = JPH::Mat44::sRotationTranslation(jph_q.Normalized(), jph_pos);
         }
         
         // Check if there are kinematic vs dynamic bodies
@@ -1690,8 +1694,15 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* 
             u32 j_count = (u32)target_pose.GetJointMatrices().size();
             u32 it_count = (count < j_count) ? count : j_count;
             
+            const auto& ragdoll_settings = m_ragdoll_settings[handle];
             for (u32 i = 0; i < it_count; ++i) {
-                target_pose.GetJointMatrices()[i] = jph_matrices[i];
+                int parent_idx = ragdoll_settings->mSkeleton->GetJoint(i).mParentJointIndex;
+                if (parent_idx == -1 || parent_idx >= (int)count) {
+                    target_pose.GetJointMatrices()[i] = jph_matrices[i];
+                } else {
+                    JPH::Mat44 parent_inv = jph_matrices[parent_idx].InversedRotationTranslation();
+                    target_pose.GetJointMatrices()[i] = parent_inv * jph_matrices[i];
+                }
             }
             
             target_pose.CalculateJointStates();

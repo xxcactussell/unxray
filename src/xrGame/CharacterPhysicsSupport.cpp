@@ -435,6 +435,15 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
 
     if (m_active_ragdoll)
     {
+        CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
+        if (stalker)
+        {
+            stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
+            stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
+            stalker->animation().global().reset();
+        }
+        m_get_up_motion.invalidate();
+
         DestroyIKController();
         m_active_ragdoll->OnDeath();
         m_eState = esDead;
@@ -497,134 +506,141 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
     }
 }
 
-static MotionID SelectGetUpMotion(IKinematicsAnimated* ka, u32 entity_type, bool is_wounded)
+static LPCSTR SelectGetUpMotionName(IKinematicsAnimated* ka, u32 entity_type, bool is_wounded, bool is_facing_up = true)
 {
-    if (!ka) return MotionID();
-
-    if (is_wounded)
-    {
-        MotionID target = ka->LL_MotionID("waunded_1_idle_0");
-        if (!target.valid()) target = ka->LL_MotionID("waunded_2_idle_0");
-        if (!target.valid()) target = ka->LL_MotionID("waunded_0_idle_0");
-        if (!target.valid()) target = ka->LL_MotionID("waunded_3_idle_0");
-        if (!target.valid()) target = ka->LL_MotionID("help_wounded_0");
-        return target;
-    }
+    if (!ka) return nullptr;
 
     if (entity_type == CCharacterPhysicsSupport::etStalker)
     {
-        const char* stalker_getup_candidates[] = {
+        const char* stalker_face_up[] = {
+            "waunded_1_out",
+            "waunded_2_out",
+            "waunded_3_out",
+            "wounded_1_out",
+            "wounded_2_out",
+            "wounded_3_out",
             "trans_lay_to_stand",
             "trans_lay_to_cr",
-            "trans_lay_to_sit",
-            "help_wounded_stand_up",
-            "help_wounded_1",
-            "help_wounded_2",
-            "help_wounded_3",
-            "help_wounded_0",
-            "help_wounded_idle_0",
-            "waunded_1_help_0",
-            "waunded_2_help_0",
-            "waunded_3_help_0",
             "lay_to_stand_0",
             "lie_to_stand_up_0",
-            "lie_stand_up_0",
-            "sit_stand_up_0",
-            "cr_to_norm_0",
-            "cr_to_norm",
             "stand_up_0",
             "stand_up",
-            "get_up_0",
-            "get_up",
-            "norm_idle_0"
+            "cr_to_norm_0",
+            "cr_to_norm"
         };
 
-        for (const char* anim_name : stalker_getup_candidates)
+        const char* stalker_face_down[] = {
+            "waunded_1_out",
+            "waunded_2_out",
+            "waunded_3_out",
+            "wounded_1_out",
+            "wounded_2_out",
+            "wounded_3_out",
+            "trans_lay_to_stand",
+            "trans_lay_to_cr",
+            "lie_stand_up_0",
+            "get_up_0",
+            "get_up",
+            "cr_to_norm_0",
+            "cr_to_norm"
+        };
+
+        const char** candidates = is_facing_up ? stalker_face_up : stalker_face_down;
+        size_t count = is_facing_up ? (sizeof(stalker_face_up) / sizeof(stalker_face_up[0])) : (sizeof(stalker_face_down) / sizeof(stalker_face_down[0]));
+
+        for (size_t i = 0; i < count; ++i)
         {
-            MotionID m = ka->LL_MotionID(anim_name);
-            if (m.valid())
+            if (ka->LL_MotionID(candidates[i]).valid())
             {
-                if (strstr(anim_name, "trans") || strstr(anim_name, "stand_up") || strstr(anim_name, "to_norm") || strstr(anim_name, "help"))
-                {
-                    return m;
-                }
+                return candidates[i];
             }
         }
 
-        MotionID fallback = ka->LL_MotionID("cr_to_norm");
-        if (!fallback.valid()) fallback = ka->LL_MotionID("norm_idle_0");
-        return fallback;
+        return "cr_to_norm";
     }
     else if (entity_type == CCharacterPhysicsSupport::etBitting)
     {
-        MotionID target = ka->LL_MotionID("lie_to_stand_up_0");
-        if (!target.valid()) target = ka->LL_MotionID("sit_stand_up_0");
-        if (!target.valid()) target = ka->LL_MotionID("stand_idle_0");
-        return target;
+        const char* monster_candidates[] = {
+            "lie_to_stand_up_0",
+            "sit_stand_up_0",
+            "stand_idle_0"
+        };
+        for (const char* anim_name : monster_candidates)
+        {
+            if (ka->LL_MotionID(anim_name).valid())
+                return anim_name;
+        }
+        return "stand_idle_0";
     }
 
-    return MotionID();
+    return nullptr;
 }
 
 void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
 {
     if (!m_active_ragdoll || !m_EntityAlife.g_Alive()) return;
     
-    // Reposition character capsule to the settled pelvis position
+    // Reposition character capsule to the settled pelvis position safely on the ground
     Fvector pelvis_pos = m_active_ragdoll->GetSimulatedPosition(0);
-    if (m_PhysicMovementControl)
+    if (_valid(pelvis_pos))
     {
-        m_PhysicMovementControl->SetPosition(pelvis_pos);
+        set_movement_position(pelvis_pos);
+        if (m_PhysicMovementControl)
+        {
+            m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
+        }
     }
-    m_EntityAlife.Position() = pelvis_pos;
-    m_EntityAlife.XFORM().c = pelvis_pos;
-    
-    CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
-    bool is_wounded = (stalker && (stalker->wounded() || stalker->critically_wounded() || m_EntityAlife.GetfHealth() <= 0.25f));
-    m_active_ragdoll->SetTargetWounded(is_wounded);
 
     IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
     if (ka)
     {
-        MotionID target_motion = SelectGetUpMotion(ka, m_eType, is_wounded);
-        if (target_motion.valid())
+        bool is_facing_up = m_active_ragdoll ? m_active_ragdoll->IsFacingUp() : true;
+        LPCSTR motion_name = SelectGetUpMotionName(ka, m_eType, false, is_facing_up);
+        if (motion_name)
         {
-            ka->PlayCycle(target_motion);
+            m_get_up_motion = ka->LL_MotionID(motion_name);
         }
+    }
+
+    CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
+    if (stalker && m_get_up_motion.valid())
+    {
+        stalker->critical_wounded_state_stop();
+        stalker->animation().global_selector(
+            CStalkerAnimationManager::AnimationSelector(this, &CCharacterPhysicsSupport::SelectGetUpAnimation));
+        stalker->animation().global_callback(
+            CStalkerAnimationManager::AnimationCallback(this, &CCharacterPhysicsSupport::OnGetUpAnimationEnd));
+        stalker->animation().global().reset();
+        stalker->animation().global().make_inactual();
     }
 }
 
 void CCharacterPhysicsSupport::OnActiveRagdollStartGetUp()
 {
-    if (!m_active_ragdoll || !m_EntityAlife.g_Alive()) return;
+    // Ramp up completed - animation continues running seamlessly in X-Ray global track
+}
 
-    IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
-    if (!ka)
-    {
-        m_active_ragdoll->SetGetUpDuration(0.5f);
-        return;
-    }
+MotionID CCharacterPhysicsSupport::SelectGetUpAnimation(bool& animation_movement_controller)
+{
+    animation_movement_controller = false;
+    return m_get_up_motion;
+}
 
+void CCharacterPhysicsSupport::OnGetUpAnimationEnd()
+{
     CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
-    bool is_wounded = (stalker && (stalker->wounded() || stalker->critically_wounded() || m_EntityAlife.GetfHealth() <= 0.25f));
-    
-    MotionID target_motion = SelectGetUpMotion(ka, m_eType, is_wounded);
-    if (target_motion.valid())
+    if (stalker)
     {
-        CBlend* blend = ka->PlayCycle(target_motion);
-        if (blend && blend->speed > 0.001f)
-        {
-            m_active_ragdoll->SetGetUpDuration(blend->timeTotal / blend->speed);
-        }
-        else
-        {
-            m_active_ragdoll->SetGetUpDuration(2.0f);
-        }
+        stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
+        stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
+        stalker->animation().global().reset();
     }
-    else
+
+    if (m_active_ragdoll)
     {
-        m_active_ragdoll->SetGetUpDuration(1.0f);
+        m_active_ragdoll->OnGetUpFinished();
     }
+    m_get_up_motion.invalidate();
 }
 
 bool CCharacterPhysicsSupport::IsKnockedDown() const
@@ -633,7 +649,7 @@ bool CCharacterPhysicsSupport::IsKnockedDown() const
     auto state = m_active_ragdoll->GetState();
     return (state == ERagdollState::KnockedDown || 
             state == ERagdollState::KnockdownResting || 
-            state == ERagdollState::MotorRampingUp || 
+            state == ERagdollState::MotorRampingUp ||
             state == ERagdollState::GettingUp);
 }
 
@@ -665,7 +681,7 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
         KillHit(H);
 
     if (m_flags.test(fl_use_hit_anims) && Type() != etBitting &&
-        !m_flags.test(fl_death_anim_on) && !is_killing && m_EntityAlife.g_Alive()) //&& Type() == etStalker
+        !m_flags.test(fl_death_anim_on) && !is_killing && m_EntityAlife.g_Alive() && !IsKnockedDown() && !m_active_ragdoll) //&& Type() == etStalker
     {
         m_hit_animations.PlayHitMotion(H.direction(), H.bone_space_position(), H.bone(), m_EntityAlife);
     }
@@ -729,11 +745,19 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
                 }
             }
 
-            Msg("! [JOLT DEBUG] Hit Type: %d, Bone: %d, Impulse: %.1f, Damage: %.2f, Wpn: %s", 
-                (int)H.type(), (int)H.bone(), H.phys_impulse(), H.damage(), wpn ? wpn->cNameSect().c_str() : "none");
-
-            if (is_explosion || is_heavy_strike || is_heavy_firearm || is_leg_hit)
+            if (is_explosion || is_heavy_strike || is_heavy_firearm || is_leg_hit || 
+                (m_active_ragdoll && (m_active_ragdoll->GetState() == ERagdollState::GettingUp || m_active_ragdoll->GetState() == ERagdollState::MotorRampingUp)))
             {
+                CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
+                if (stalker)
+                {
+                    stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
+                    stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
+                    stalker->animation().global().reset();
+                    stalker->critical_wounded_state_stop();
+                }
+                m_get_up_motion.invalidate();
+
                 DestroyIKController();
                 m_active_ragdoll->KnockDown(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
             }
@@ -813,6 +837,18 @@ void CCharacterPhysicsSupport::in_UpdateCL()
         m_active_ragdoll->Update(Device.fTimeDelta);
         m_active_ragdoll->SyncToPhysics();
         m_active_ragdoll->SyncFromPhysics();
+
+        if (IsKnockedDown() && m_active_ragdoll->GetPartCount() > 0) {
+            Fvector pelvis_pos = m_active_ragdoll->GetSimulatedPosition(0);
+            if (_valid(pelvis_pos)) {
+                if (m_PhysicMovementControl) {
+                    m_PhysicMovementControl->SetPosition(pelvis_pos);
+                    m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
+                }
+                m_EntityAlife.Position() = pelvis_pos;
+                m_EntityAlife.XFORM().c = pelvis_pos;
+            }
+        }
     }
 #ifdef DEBUG
     if (dbg_draw_character_bones)

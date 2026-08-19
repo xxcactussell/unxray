@@ -131,6 +131,8 @@ public:
     void in_Hit(SHit& H, bool is_killing = false);
     void OnActiveRagdollGetUp();
     void OnActiveRagdollStartGetUp();
+    MotionID SelectGetUpAnimation(bool& animation_movement_controller);
+    void OnGetUpAnimationEnd();
     bool IsKnockedDown() const;
     void in_NetSave(NET_Packet& P);
     void in_ChangeVisual();
@@ -184,5 +186,6 @@ private:
     IC bool DoCharacterShellCollide();
     void UpdateCollisionActivatingDellay();
     void SpawnCharacterCreate();
+    MotionID m_get_up_motion;
 };
 #endif // CHARACTER_PHYSICS_SUPPORT

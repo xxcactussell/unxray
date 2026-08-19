@@ -106,7 +106,9 @@ void CPHSimpleCharacter::SetBox(const Fvector& sizes)
     // В Jolt размеры и геометрии обновляются через ядро
     if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        // GetPhysicsCore()->ResizeCharacter(m_char_handle, m_radius, m_cyl_hight);
+        PhysicsShapeHandle shape = GetPhysicsCore()->CreateCapsuleShape(m_radius, m_cyl_hight / 2.f);
+        shape = GetPhysicsCore()->CreateRotatedTranslatedShape(shape, Fvector().set(0.f, m_cyl_hight / 2.f, 0.f), Fquaternion().identity());
+        GetPhysicsCore()->SetCharacterVirtualShape(m_char_handle, shape);
     }
 }
 

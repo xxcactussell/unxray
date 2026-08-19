@@ -1240,6 +1240,27 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCapsuleShape(float radius, float half_
     return reinterpret_cast<PhysicsShapeHandle>(const_cast<JPH::Shape*>(capsule.GetPtr()));
 }
 
+class JoltIgnoreActorBodyFilter : public JPH::BodyFilter {
+public:
+    JPH::PhysicsSystem* m_system;
+    JPH::uint64 m_actor_user_data;
+    
+    JoltIgnoreActorBodyFilter(JPH::PhysicsSystem* system, JPH::uint64 user_data) 
+        : m_system(system), m_actor_user_data(user_data) {}
+        
+    virtual bool ShouldCollide(const JPH::BodyID &inBodyID) const override {
+        if (m_actor_user_data == 0) return true;
+        
+        JPH::BodyLockRead lock(m_system->GetBodyLockInterface(), inBodyID);
+        if (lock.Succeeded()) {
+            if (lock.GetBody().GetUserData() == m_actor_user_data) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
 CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) {
     JPH::Shape* jolt_shape = reinterpret_cast<JPH::Shape*>(shape);
 
@@ -1304,12 +1325,19 @@ void JoltPhysicsCore::SetCharacterVirtualPosition(CharacterVirtualHandle handle,
 
 void JoltPhysicsCore::SetCharacterVirtualShape(CharacterVirtualHandle handle, PhysicsShapeHandle shape) {
     auto it = m_characters.find(handle);
-    if (it != m_characters.end()) {
+    if (it != m_characters.end() && m_physics_system && m_temp_allocator && shape) {
         JPH::Shape* jolt_shape = reinterpret_cast<JPH::Shape*>(shape);
-        it->second->SetShape(jolt_shape, 1.5f * m_physics_system->GetPhysicsSettings().mPenetrationSlop,
+        JPH::CharacterVirtual* character = it->second.GetPtr();
+        if (!character) return;
+        
+        JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
+        if (character->SetShape(jolt_shape, 1.5f,
                              m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
                              m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
-                             {}, {}, *m_temp_allocator);
+                             body_filter, {}, *m_temp_allocator))
+        {
+            character->SetInnerBodyShape(jolt_shape);
+        }
     }
 }
 
@@ -1356,27 +1384,6 @@ void JoltPhysicsCore::SetCharacterVirtualUserData(CharacterVirtualHandle handle,
         it->second->SetUserData(reinterpret_cast<JPH::uint64>(data));
     }
 }
-
-class JoltIgnoreActorBodyFilter : public JPH::BodyFilter {
-public:
-    JPH::PhysicsSystem* m_system;
-    JPH::uint64 m_actor_user_data;
-    
-    JoltIgnoreActorBodyFilter(JPH::PhysicsSystem* system, JPH::uint64 user_data) 
-        : m_system(system), m_actor_user_data(user_data) {}
-        
-    virtual bool ShouldCollide(const JPH::BodyID &inBodyID) const override {
-        if (m_actor_user_data == 0) return true;
-        
-        JPH::BodyLockRead lock(m_system->GetBodyLockInterface(), inBodyID);
-        if (lock.Succeeded()) {
-            if (lock.GetBody().GetUserData() == m_actor_user_data) {
-                return false;
-            }
-        }
-        return true;
-    }
-};
 
 void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) {
     auto it = m_characters.find(handle);

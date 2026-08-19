@@ -36,6 +36,7 @@
 #include "Weapon.h"
 #include "WeaponShotgun.h"
 #include "WeaponAutomaticShotgun.h"
+#include "xrScriptEngine/script_engine.hpp"
 
 // const float default_hinge_friction = 5.f;//gray_wolf comment
 #ifdef DEBUG
@@ -506,12 +507,48 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
     }
 }
 
-static LPCSTR SelectGetUpMotionName(IKinematicsAnimated* ka, u32 entity_type, bool is_wounded, bool is_facing_up = true)
+static LPCSTR SelectGetUpMotionName(IKinematicsAnimated* ka, CCharacterPhysicsSupport::EType entity_type, bool is_wounded, bool is_facing_up)
 {
     if (!ka) return nullptr;
 
     if (entity_type == CCharacterPhysicsSupport::etStalker)
     {
+        if (is_wounded)
+        {
+            const char* wounded_face_up[] = {
+                "waunded_1_idle_0",
+                "waunded_1_idle",
+                "help_heavy_0",
+                "help_blind_0",
+                "trans_lay_to_cr",
+                "cr_to_lay_0",
+                "cr_to_lay"
+            };
+
+            const char* wounded_face_down[] = {
+                "waunded_2_idle_0",
+                "waunded_3_idle_0",
+                "waunded_2_idle",
+                "waunded_3_idle",
+                "trans_lay_to_cr",
+                "cr_to_lay_0",
+                "cr_to_lay"
+            };
+
+            const char** candidates = is_facing_up ? wounded_face_up : wounded_face_down;
+            size_t count = is_facing_up ? (sizeof(wounded_face_up) / sizeof(wounded_face_up[0])) : (sizeof(wounded_face_down) / sizeof(wounded_face_down[0]));
+
+            for (size_t i = 0; i < count; ++i)
+            {
+                if (ka->LL_MotionID(candidates[i]).valid())
+                {
+                    return candidates[i];
+                }
+            }
+
+            return "waunded_1_idle_0";
+        }
+
         const char* stalker_face_up[] = {
             "waunded_1_out",
             "waunded_2_out",
@@ -588,18 +625,91 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
         m_EntityAlife.XFORM().c = pelvis_pos;
     }
 
+    CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
+    bool is_wounded = false;
+    if (stalker)
+    {
+        // 1. Check if already marked wounded in engine
+        if (stalker->wounded())
+        {
+            is_wounded = true;
+        }
+
+        // 2. Force Lua xr_wounded to evaluate the new health against the NPC's actual custom logic
+        if (!is_wounded && GEnv.ScriptEngine && GEnv.ScriptEngine->lua())
+        {
+            string256 lua_code;
+            xr_sprintf(lua_code,
+                "local id = %u\n"
+                "local st = db.storage[id]\n"
+                "if st and st.wounded and st.wounded.wound_manager then\n"
+                "    st.wounded.wound_manager:update()\n"
+                "end\n",
+                stalker->ID());
+            
+            int err = luaL_loadbuffer(GEnv.ScriptEngine->lua(), lua_code, xr_strlen(lua_code), "@ragdoll_wound_update");
+            if (!err)
+            {
+                lua_pcall(GEnv.ScriptEngine->lua(), 0, 0, 0);
+            }
+
+            // Check if Lua wound_manager marked stalker as wounded
+            is_wounded = stalker->wounded();
+            
+            if (!is_wounded)
+            {
+                luabind::functor<bool> func_heavy;
+                if (GEnv.ScriptEngine->functor("xr_wounded.is_heavy_wounded", func_heavy))
+                {
+                    is_wounded = func_heavy(stalker->ID());
+                }
+            }
+            if (!is_wounded)
+            {
+                luabind::functor<bool> func_psy;
+                if (GEnv.ScriptEngine->functor("xr_wounded.is_psy_wounded", func_psy))
+                {
+                    is_wounded = func_psy(stalker->ID());
+                }
+            }
+        }
+    }
+
     IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
     if (ka)
     {
         bool is_facing_up = m_active_ragdoll ? m_active_ragdoll->IsFacingUp() : true;
-        LPCSTR motion_name = SelectGetUpMotionName(ka, m_eType, false, is_facing_up);
+        LPCSTR motion_name = SelectGetUpMotionName(ka, m_eType, is_wounded, is_facing_up);
         if (motion_name)
         {
             m_get_up_motion = ka->LL_MotionID(motion_name);
         }
     }
 
-    CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
+    if (stalker && is_wounded)
+    {
+        // Smoothly hand off directly into the wounded state without standing up
+        stalker->wounded(true);
+
+        // Inform state_mgr that the character is already lying down so it doesn't play waunded_1_in
+        if (GEnv.ScriptEngine && GEnv.ScriptEngine->lua())
+        {
+            string256 lua_code;
+            xr_sprintf(lua_code,
+                "local id = %u\n"
+                "local st = db.storage[id]\n"
+                "if st and st.state_mgr then\n"
+                "    st.state_mgr:set_state('wounded_heavy', nil, nil, nil, {animation = true})\n"
+                "end\n",
+                stalker->ID());
+            int err = luaL_loadbuffer(GEnv.ScriptEngine->lua(), lua_code, xr_strlen(lua_code), "@ragdoll_state_mgr_set");
+            if (!err)
+            {
+                lua_pcall(GEnv.ScriptEngine->lua(), 0, 0, 0);
+            }
+        }
+    }
+
     if (stalker && m_get_up_motion.valid())
     {
         stalker->critical_wounded_state_stop();
@@ -631,7 +741,10 @@ void CCharacterPhysicsSupport::OnGetUpAnimationEnd()
         stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
         stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
         stalker->animation().global().reset();
-        stalker->movement().enable_movement(true);
+        if (!stalker->wounded())
+        {
+            stalker->movement().enable_movement(true);
+        }
     }
 
     if (m_PhysicMovementControl)

@@ -217,6 +217,7 @@ void CActiveRagdollController::Initialize(IKinematics* kinematics, IPhysicsShell
         u32 part_count = (u32)settings.parts.size();
         m_target_matrices.resize(part_count);
         m_simulated_matrices.resize(part_count);
+        m_anim_matrices.resize(part_count);
         m_part_reactions.resize(part_count);
         m_cb_data.resize(part_count);
         
@@ -288,16 +289,25 @@ void CActiveRagdollController::Deactivate() {
 }
 
 void CActiveRagdollController::OnDeath() {
-    if (m_state == ERagdollState::Active) {
-        m_state = ERagdollState::Dying;
-        m_death_decay_timer = 0.f;
-        m_visual_blend_factor = 0.f;
-        
+    if (m_state == ERagdollState::Dead || m_state == ERagdollState::Inactive || m_ragdoll_handle == INVALID_RAGDOLL_HANDLE) return;
+
+    if (m_state == ERagdollState::KnockedDown || m_state == ERagdollState::KnockdownResting) {
+        // Already on the ground or falling: instantly become purely unmotorized dead ragdoll
+        m_state = ERagdollState::Dead;
         GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
-        GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, true);
-        GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, m_motor_stiffness);
-        GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, m_motor_damping);
+        GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
+        return;
     }
+
+    // If standing or in the middle of getting up: collapse naturally by smoothly decaying motors
+    m_state = ERagdollState::Dying;
+    m_death_decay_timer = 0.f;
+    m_visual_blend_factor = 0.f;
+    
+    GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
+    GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, true);
+    GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, m_motor_stiffness);
+    GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, m_motor_damping);
 }
 
 void CActiveRagdollController::SetMotorDefaults(float stiffness, float damping) {
@@ -336,8 +346,8 @@ void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float 
     }
     
     Fvector impulse_vec = dir;
-    // Scale X-Ray's ODE-based impulse down and clamp to avoid constraint violation (tearing joints)
-    float clamped_impulse = std::min(impulse * 0.01f, 5.0f);
+    // Scale X-Ray impulse realistically into Jolt N*s (realistic fall without flying away)
+    float clamped_impulse = std::clamp(impulse * 0.4f, 4.0f, 45.0f);
     impulse_vec.mul(clamped_impulse);
     GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, impulse_vec, hit_pos);
 }
@@ -362,8 +372,7 @@ void CActiveRagdollController::ApplyHit(u16 bone_id, const Fvector& dir, float i
     
     // Calculate physical impulse vector
     Fvector impulse_vec = dir;
-    // Scale X-Ray's ODE-based impulse down and clamp to avoid constraint violation (tearing joints)
-    float clamped_impulse = std::min(impulse * 0.01f, 5.0f);
+    float clamped_impulse = std::clamp(impulse * 0.25f, 2.0f, 25.0f);
     impulse_vec.mul(clamped_impulse);
     
     // Apply impulse to Jolt physics body
@@ -452,49 +461,70 @@ void CActiveRagdollController::Update(float dt) {
         }
     }
     
-    // 2. KnockdownResting: brief rest before initiating get-up
+    // 2. KnockdownResting: brief rest on ground, then trigger callback to position capsule & select target pose
     else if (m_state == ERagdollState::KnockdownResting) {
         m_ramp_up_timer += dt;
         if (m_ramp_up_timer >= 0.25f) {
             m_state = ERagdollState::MotorRampingUp;
             m_ramp_up_timer = 0.0f;
             
-            // Turn on motors with low initial stiffness
-            GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, true);
-            GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, 10.0f);
-            GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, 5.0f);
-            
-            // Invoke callback to reposition capsule and launch animation
+            // Invoke callback to reposition capsule and launch target animation
             if (m_get_up_callback) {
                 m_get_up_callback();
             }
+
+            // Enable motors to begin smoothly pulling physical limbs towards the 1st frame of target animation
+            GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
+            GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, true);
+            GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, 40.0f);
+            GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, 15.0f);
         }
     }
     
-    // 3. MotorRampingUp: smoothly ramp up stiffness to pull skeleton to animation pose
+    // 3. MotorRampingUp: smoothly pull dynamic ragdoll on floor into 1st frame pose over ramp duration
     else if (m_state == ERagdollState::MotorRampingUp) {
         m_ramp_up_timer += dt;
         float t = std::min(m_ramp_up_timer / m_ramp_up_duration, 1.0f);
         
+        // Smooth ease-in curve for motor stiffness
         float ease = t * t * (3.0f - 2.0f * t);
-        float cur_stiffness = m_motor_stiffness * ease;
-        float cur_damping = m_motor_damping * ease;
+        float cur_stiffness = 40.0f + (m_motor_stiffness - 40.0f) * ease;
+        float cur_damping = 15.0f + (m_motor_damping - 15.0f) * ease;
         
         GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, cur_stiffness);
         GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, cur_damping);
         
         if (t >= 1.0f) {
-            // Restore kinematic bodies
+            // First frame reached! Now lock into kinematic mode
             GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, true);
-            m_state = ERagdollState::GettingUp;
-            m_get_up_timer = 0.0f;
+            
+            if (m_kinematics) {
+                for (const auto& cb : m_cb_data) {
+                    if (cb.bone_id < m_kinematics->LL_BoneCount()) {
+                        m_kinematics->LL_GetBoneInstance(cb.bone_id).set_callback_overwrite(FALSE);
+                    }
+                }
+            }
+
+            if (m_is_wounded) {
+                // For wounded stalker, we have settled into the wounded pose on ground
+                m_state = ERagdollState::Active;
+            } else {
+                // For standing up, proceed to play the get-up animation in kinematic mode
+                m_state = ERagdollState::GettingUp;
+                m_get_up_timer = 0.0f;
+                if (m_start_get_up_callback) {
+                    m_start_get_up_callback();
+                }
+            }
         }
     }
     
-    // 4. GettingUp: waiting for animation to finish
+    // 4. GettingUp: playing get-up animation from frame 0 up to standing
     else if (m_state == ERagdollState::GettingUp) {
         m_get_up_timer += dt;
         if (m_get_up_timer >= m_get_up_duration) {
+            // Stand up completed! Return to active state
             m_state = ERagdollState::Active;
             if (m_kinematics) {
                 for (const auto& cb : m_cb_data) {
@@ -570,7 +600,7 @@ void CActiveRagdollController::SyncToPhysics() {
         }
     }
     
-    // Sync all target bone matrices in WORLD SPACE sampled directly from pure animation tracks
+    // Sync all target bone matrices in WORLD SPACE directly from pure animation curves (ignoring callbacks/overwrites)
     for (u32 i = 0; i < m_mapper.m_part_to_bone.size(); ++i) {
         u16 bone_id = m_mapper.PartToBone(i);
         if (bone_id == u16(-1) || bone_id >= m_kinematics->LL_BoneCount()) {
@@ -643,7 +673,14 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
     u32 part_idx = cb_data->part_index;
     if (part_idx >= controller->m_simulated_matrices.size()) return;
     
-    if (controller->m_state == ERagdollState::Active) {
+    // Save CLEAN animated pose calculated by the animator BEFORE any callback modifications
+    if (part_idx < controller->m_anim_matrices.size()) {
+        controller->m_anim_matrices[part_idx] = B->mTransform;
+    }
+    
+    if (controller->m_state == ERagdollState::Active || controller->m_state == ERagdollState::GettingUp) {
+        B->set_callback_overwrite(FALSE);
+
         // 1. Run the chained callback (e.g. spine/head aiming from CStalkerAnimationManager)
         if (cb_data->previous_callback && cb_data->previous_callback != BonesCallback) {
             B->set_callback(B->callback_type(), cb_data->previous_callback, cb_data->previous_param, B->callback_overwrite());
@@ -651,8 +688,8 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
             B->set_callback(bctCustom, BonesCallback, cb_data, FALSE);
         }
         
-        // 2. Apply active flinch impulse on top if hit
-        if (part_idx < controller->m_part_reactions.size() && controller->m_part_reactions[part_idx].active) {
+        // 2. Apply active flinch impulse on top if hit during active state
+        if (controller->m_state == ERagdollState::Active && part_idx < controller->m_part_reactions.size() && controller->m_part_reactions[part_idx].active) {
             const auto& rx = controller->m_part_reactions[part_idx];
             float progress = rx.elapsed_time / rx.recovery_duration;
             if (progress < 1.0f) {

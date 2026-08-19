@@ -820,7 +820,9 @@ void CAI_Stalker::UpdateCL()
     START_PROFILE("stalker/client_update")
     VERIFY2(PPhysicsShell() || getEnabled(), cName().c_str());
 
-    if (g_Alive())
+    bool is_knocked = (character_physics_support() && character_physics_support()->IsKnockedDown());
+
+    if (g_Alive() && !is_knocked)
     {
         if (g_mt_config.test(mtObjectHandler) && CObjectHandler::planner().initialized())
         {
@@ -866,7 +868,7 @@ void CAI_Stalker::UpdateCL()
     m_pPhysics_support->in_UpdateCL();
     STOP_PROFILE
 
-    if (g_Alive())
+    if (g_Alive() && !is_knocked)
     {
         START_PROFILE("stalker/client_update/sight_manager")
         VERIFY(!m_pPhysicsShell);
@@ -929,7 +931,9 @@ void CAI_Stalker::shedule_Update(u32 DT)
     // *** general stuff
     float dt = float(DT) / 1000.f;
 
-    if (g_Alive())
+    bool is_knocked = (character_physics_support() && character_physics_support()->IsKnockedDown());
+
+    if (g_Alive() && !is_knocked)
     {
         animation().play_delayed_callbacks();
 
@@ -970,7 +974,7 @@ void CAI_Stalker::shedule_Update(u32 DT)
     if (Remote())
     {
     }
-    else
+    else if (!is_knocked)
     {
         // here is monster AI call
         VERIFY(_valid(Position()));
@@ -1314,6 +1318,9 @@ smart_cover::loophole const* CAI_Stalker::get_current_loophole()
 
 bool CAI_Stalker::can_fire_right_now()
 {
+    if (character_physics_support() && character_physics_support()->IsKnockedDown())
+        return (false);
+
     if (!ready_to_kill())
         return (false);
 

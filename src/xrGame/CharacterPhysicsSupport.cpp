@@ -33,6 +33,9 @@
 #include "Inventory.h"
 #include "ActivatingCharCollisionDelay.h"
 #include "stalker_movement_manager_smart_cover.h"
+#include "Weapon.h"
+#include "WeaponShotgun.h"
+#include "WeaponAutomaticShotgun.h"
 
 // const float default_hinge_friction = 5.f;//gray_wolf comment
 #ifdef DEBUG
@@ -264,6 +267,7 @@ void CCharacterPhysicsSupport::SpawnInitPhysics(CSE_Abstract* e)
             m_active_ragdoll = CActiveRagdollManager::GetInstance().RegisterRagdoll(k, &m_EntityAlife);
             if (m_active_ragdoll) {
                 m_active_ragdoll->SetGetUpCallback(fastdelegate::MakeDelegate(this, &CCharacterPhysicsSupport::OnActiveRagdollGetUp));
+                m_active_ragdoll->SetStartGetUpCallback(fastdelegate::MakeDelegate(this, &CCharacterPhysicsSupport::OnActiveRagdollStartGetUp));
             }
         }
 
@@ -493,9 +497,78 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
     }
 }
 
+static MotionID SelectGetUpMotion(IKinematicsAnimated* ka, u32 entity_type, bool is_wounded)
+{
+    if (!ka) return MotionID();
+
+    if (is_wounded)
+    {
+        MotionID target = ka->LL_MotionID("waunded_1_idle_0");
+        if (!target.valid()) target = ka->LL_MotionID("waunded_2_idle_0");
+        if (!target.valid()) target = ka->LL_MotionID("waunded_0_idle_0");
+        if (!target.valid()) target = ka->LL_MotionID("waunded_3_idle_0");
+        if (!target.valid()) target = ka->LL_MotionID("help_wounded_0");
+        return target;
+    }
+
+    if (entity_type == CCharacterPhysicsSupport::etStalker)
+    {
+        const char* stalker_getup_candidates[] = {
+            "trans_lay_to_stand",
+            "trans_lay_to_cr",
+            "trans_lay_to_sit",
+            "help_wounded_stand_up",
+            "help_wounded_1",
+            "help_wounded_2",
+            "help_wounded_3",
+            "help_wounded_0",
+            "help_wounded_idle_0",
+            "waunded_1_help_0",
+            "waunded_2_help_0",
+            "waunded_3_help_0",
+            "lay_to_stand_0",
+            "lie_to_stand_up_0",
+            "lie_stand_up_0",
+            "sit_stand_up_0",
+            "cr_to_norm_0",
+            "cr_to_norm",
+            "stand_up_0",
+            "stand_up",
+            "get_up_0",
+            "get_up",
+            "norm_idle_0"
+        };
+
+        for (const char* anim_name : stalker_getup_candidates)
+        {
+            MotionID m = ka->LL_MotionID(anim_name);
+            if (m.valid())
+            {
+                if (strstr(anim_name, "trans") || strstr(anim_name, "stand_up") || strstr(anim_name, "to_norm") || strstr(anim_name, "help"))
+                {
+                    return m;
+                }
+            }
+        }
+
+        MotionID fallback = ka->LL_MotionID("cr_to_norm");
+        if (!fallback.valid()) fallback = ka->LL_MotionID("norm_idle_0");
+        return fallback;
+    }
+    else if (entity_type == CCharacterPhysicsSupport::etBitting)
+    {
+        MotionID target = ka->LL_MotionID("lie_to_stand_up_0");
+        if (!target.valid()) target = ka->LL_MotionID("sit_stand_up_0");
+        if (!target.valid()) target = ka->LL_MotionID("stand_idle_0");
+        return target;
+    }
+
+    return MotionID();
+}
+
 void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
 {
-    if (!m_active_ragdoll) return;
+    if (!m_active_ragdoll || !m_EntityAlife.g_Alive()) return;
     
     // Reposition character capsule to the settled pelvis position
     Fvector pelvis_pos = m_active_ragdoll->GetSimulatedPosition(0);
@@ -506,56 +579,62 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
     m_EntityAlife.Position() = pelvis_pos;
     m_EntityAlife.XFORM().c = pelvis_pos;
     
+    CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
+    bool is_wounded = (stalker && (stalker->wounded() || stalker->critically_wounded() || m_EntityAlife.GetfHealth() <= 0.25f));
+    m_active_ragdoll->SetTargetWounded(is_wounded);
+
+    IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
+    if (ka)
+    {
+        MotionID target_motion = SelectGetUpMotion(ka, m_eType, is_wounded);
+        if (target_motion.valid())
+        {
+            ka->PlayCycle(target_motion);
+        }
+    }
+}
+
+void CCharacterPhysicsSupport::OnActiveRagdollStartGetUp()
+{
+    if (!m_active_ragdoll || !m_EntityAlife.g_Alive()) return;
+
     IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
     if (!ka)
     {
         m_active_ragdoll->SetGetUpDuration(0.5f);
         return;
     }
+
+    CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
+    bool is_wounded = (stalker && (stalker->wounded() || stalker->critically_wounded() || m_EntityAlife.GetfHealth() <= 0.25f));
     
-    MotionID get_up_motion;
-    if (m_eType == etStalker)
+    MotionID target_motion = SelectGetUpMotion(ka, m_eType, is_wounded);
+    if (target_motion.valid())
     {
-        if (m_active_ragdoll->IsFacingUp())
-        {
-            get_up_motion = ka->LL_MotionID("fake_death_0_2");
-            if (!get_up_motion.valid())
-                get_up_motion = ka->LL_MotionID("trans_lay_to_stand");
-            if (!get_up_motion.valid())
-                get_up_motion = ka->LL_MotionID("help_wounded_stand_up");
-        }
-        else
-        {
-            get_up_motion = ka->LL_MotionID("fake_death_1_2");
-            if (!get_up_motion.valid())
-                get_up_motion = ka->LL_MotionID("trans_lay_to_stand");
-        }
-    }
-    else if (m_eType == etBitting)
-    {
-        get_up_motion = ka->LL_MotionID("lie_to_stand_up_0");
-        if (!get_up_motion.valid())
-            get_up_motion = ka->LL_MotionID("sit_stand_up_0");
-        if (!get_up_motion.valid())
-            get_up_motion = ka->LL_MotionID("fake_death_0_2");
-    }
-    
-    if (get_up_motion.valid())
-    {
-        CBlend* blend = ka->PlayCycle(get_up_motion);
+        CBlend* blend = ka->PlayCycle(target_motion);
         if (blend && blend->speed > 0.001f)
         {
             m_active_ragdoll->SetGetUpDuration(blend->timeTotal / blend->speed);
         }
         else
         {
-            m_active_ragdoll->SetGetUpDuration(1.5f);
+            m_active_ragdoll->SetGetUpDuration(2.0f);
         }
     }
     else
     {
-        m_active_ragdoll->SetGetUpDuration(0.5f);
+        m_active_ragdoll->SetGetUpDuration(1.0f);
     }
+}
+
+bool CCharacterPhysicsSupport::IsKnockedDown() const
+{
+    if (!m_active_ragdoll) return false;
+    auto state = m_active_ragdoll->GetState();
+    return (state == ERagdollState::KnockedDown || 
+            state == ERagdollState::KnockdownResting || 
+            state == ERagdollState::MotorRampingUp || 
+            state == ERagdollState::GettingUp);
 }
 
 const u32 hit_valide_time = 1000;
@@ -615,21 +694,45 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
         }
         else
         {
-            // Check for knockdown triggers
-            bool is_explosion = (H.type() == ALife::eHitTypeExplosion && H.damage() > 30.0f);
-            bool is_heavy_strike = ((H.type() == ALife::eHitTypeStrike || H.type() == ALife::eHitTypePhysicStrike) && H.phys_impulse() > 200.0f);
-            bool is_huge_impulse = (H.phys_impulse() > 300.0f);
+            // 1. Check weapon class and type
+            IGameObject* wpn_obj = (H.weaponID != u16(-1)) ? Level().Objects.net_Find(H.weaponID) : nullptr;
+            CWeapon* wpn = smart_cast<CWeapon*>(wpn_obj);
+            bool is_shotgun = false;
+            bool is_sniper = false;
+            bool is_heavy_launcher = false;
+
+            if (wpn)
+            {
+                LPCSTR sect = wpn->cNameSect().c_str();
+                is_shotgun = (smart_cast<CWeaponShotgun*>(wpn) != nullptr || 
+                              smart_cast<CWeaponAutomaticShotgun*>(wpn) != nullptr || 
+                              strstr(sect, "shotgun") || strstr(sect, "spas") || strstr(sect, "wincheaster") || 
+                              strstr(sect, "bm16") || strstr(sect, "toz") || strstr(sect, "saiga") || strstr(sect, "protecta"));
+
+                is_sniper = (strstr(sect, "svd") || strstr(sect, "svu") || strstr(sect, "gauss") || 
+                             strstr(sect, "vintorez") || strstr(sect, "awm") || strstr(sect, "m82") || strstr(sect, "wa2000"));
+
+                is_heavy_launcher = (strstr(sect, "rpg") || strstr(sect, "rg-6") || strstr(sect, "grenade_launcher"));
+            }
+
+            // 2. Check hit categories
+            bool is_explosion = (H.type() == ALife::eHitTypeExplosion);
+            bool is_heavy_strike = ((H.type() == ALife::eHitTypeStrike || H.type() == ALife::eHitTypePhysicStrike) && (H.damage() >= 0.15f || H.phys_impulse() >= 20.0f));
+            bool is_heavy_firearm = (H.type() == ALife::eHitTypeFireWound && (is_shotgun || is_sniper || is_heavy_launcher || H.damage() >= 0.75f));
             
-            // Check for leg knockdown
+            // Check for leg knockdown (requires shotgun, sniper, or high damage shot to leg)
             bool is_leg_hit = false;
-            if (k && H.bone() < k->LL_BoneCount()) {
+            if (H.type() == ALife::eHitTypeFireWound && k && H.bone() < k->LL_BoneCount()) {
                 LPCSTR bone_name = k->LL_BoneName_dbg(H.bone());
                 if (bone_name && (strstr(bone_name, "leg") || strstr(bone_name, "thigh") || strstr(bone_name, "calf") || strstr(bone_name, "foot"))) {
-                    is_leg_hit = (H.phys_impulse() > 140.0f);
+                    is_leg_hit = (is_shotgun || is_sniper || H.damage() >= 0.4f);
                 }
             }
 
-            if (is_explosion || is_heavy_strike || is_huge_impulse || is_leg_hit)
+            Msg("! [JOLT DEBUG] Hit Type: %d, Bone: %d, Impulse: %.1f, Damage: %.2f, Wpn: %s", 
+                (int)H.type(), (int)H.bone(), H.phys_impulse(), H.damage(), wpn ? wpn->cNameSect().c_str() : "none");
+
+            if (is_explosion || is_heavy_strike || is_heavy_firearm || is_leg_hit)
             {
                 DestroyIKController();
                 m_active_ragdoll->KnockDown(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
@@ -701,6 +804,12 @@ void CCharacterPhysicsSupport::in_UpdateCL()
     }
     
     if (m_active_ragdoll) {
+        if (!m_EntityAlife.g_Alive()) {
+            auto state = m_active_ragdoll->GetState();
+            if (state != ERagdollState::Dead && state != ERagdollState::Dying && state != ERagdollState::Inactive) {
+                m_active_ragdoll->OnDeath();
+            }
+        }
         m_active_ragdoll->Update(Device.fTimeDelta);
         m_active_ragdoll->SyncToPhysics();
         m_active_ragdoll->SyncFromPhysics();

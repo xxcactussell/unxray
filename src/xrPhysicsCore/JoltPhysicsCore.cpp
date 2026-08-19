@@ -123,7 +123,14 @@ void JoltPhysicsCore::Clear()
 void JoltPhysicsCore::Step(float delta_time) 
 {
     if (!m_physics_system || !m_temp_allocator || !m_job_system) return;
-    int collision_steps = 1; 
+
+    int collision_steps = 1;
+    if (delta_time > 1.0f / 60.0f) {
+        collision_steps = (int)(delta_time * 60.0f) + 1; 
+    }
+    
+    if (collision_steps > 4) collision_steps = 4;
+
     m_physics_system->Update(delta_time, collision_steps, m_temp_allocator, m_job_system);
 }
 
@@ -458,6 +465,10 @@ BodyHandle JoltPhysicsCore::CreateBodyFromShape(PhysicsShapeHandle shape_handle,
     body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     body_settings.mMassPropertiesOverride.mMass = mass;
 
+    if (mass > 0.0f && mass <= 3.0f) {
+        body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
+    }
+
     JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
     if (!body) {
         return INVALID_BODY_HANDLE;
@@ -486,6 +497,10 @@ BodyHandle JoltPhysicsCore::CreateBox(const Fvector& half_extents, const Fvector
     body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     body_settings.mMassPropertiesOverride.mMass = mass;
 
+    if (mass > 0.0f && mass <= 3.0f) {
+        body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
+    }
+
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
     JPH::Body* body = body_interface.CreateBody(body_settings);
     
@@ -513,6 +528,10 @@ BodyHandle JoltPhysicsCore::CreateSphere(float radius, const Fvector& position, 
     body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     body_settings.mMassPropertiesOverride.mMass = mass;
 
+    if (mass > 0.0f && mass <= 3.0f) {
+        body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
+    }
+
     JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
     m_physics_system->GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);
     
@@ -535,6 +554,10 @@ BodyHandle JoltPhysicsCore::CreateCylinder(float radius, float half_height, cons
 
     body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     body_settings.mMassPropertiesOverride.mMass = mass;
+
+    if (mass > 0.0f && mass <= 3.0f) {
+        body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
+    }
 
     JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
     m_physics_system->GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);

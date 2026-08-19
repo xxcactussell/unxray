@@ -13,6 +13,7 @@
 #include "xrScriptEngine/script_callback_ex.h"
 #include "xrEngine/profiler.h"
 #include "stalker_movement_manager_smart_cover.h"
+#include "CharacterPhysicsSupport.h"
 
 /*IC*/ void CStalkerAnimationManager::play_delayed_callbacks() // XXX: can't compile Release because of "inline"
 {
@@ -42,6 +43,9 @@ IC bool CStalkerAnimationManager::script_callback() const
 
 IC bool CStalkerAnimationManager::need_update() const
 {
+    if (object().character_physics_support() && object().character_physics_support()->IsKnockedDown())
+        return (true);
+
     if (script_callback())
         return (true);
 
@@ -205,6 +209,9 @@ void CStalkerAnimationManager::update_impl()
 
     update_tracks();
     play_delayed_callbacks();
+
+    if (object().character_physics_support() && object().character_physics_support()->IsKnockedDown())
+        return;
 
     if (play_script())
         return;

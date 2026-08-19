@@ -606,6 +606,9 @@ bool CAI_Stalker::remember_ammo()
 
 bool CAI_Stalker::ready_to_kill()
 {
+    if (character_physics_support() && character_physics_support()->IsKnockedDown())
+        return (false);
+
     return (m_best_item_to_kill && inventory().ActiveItem() &&
         (inventory().ActiveItem()->object().ID() == m_best_item_to_kill->object().ID()) &&
         m_best_item_to_kill->ready_to_kill());

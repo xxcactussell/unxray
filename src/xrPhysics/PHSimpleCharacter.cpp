@@ -211,9 +211,29 @@ void CPHSimpleCharacter::ApplyImpulse(const Fvector& dir, const float P)
     {
         Fvector v;
         GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
-        v.x += dir.x * P / 50.0f;
-        v.y += dir.y * P / 50.0f;
-        v.z += dir.z * P / 50.0f;
+
+        // Scale impulse into realistic velocity delta (P in X-Ray is ~50-1000)
+        float speed_delta = std::clamp(P / 150.0f, 0.0f, 8.0f);
+
+        Fvector impulse_dir = dir;
+        float sq_mag = impulse_dir.square_magnitude();
+        if (sq_mag > 0.001f) {
+            impulse_dir.mul(1.0f / sqrtf(sq_mag));
+        } else {
+            impulse_dir.set(0.f, 0.f, 0.f);
+        }
+
+        // Strongly limit vertical launch component (+3.0 m/s max hop)
+        float horiz_comp = speed_delta;
+        float vert_comp = std::clamp(impulse_dir.y * speed_delta, -4.0f, 3.0f);
+
+        v.x += impulse_dir.x * horiz_comp;
+        v.y += vert_comp;
+        v.z += impulse_dir.z * horiz_comp;
+
+        // Ensure vertical velocity stays within sensible bounds
+        v.y = std::clamp(v.y, -30.0f, 7.0f);
+
         GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, v);
     }
 }
@@ -224,9 +244,10 @@ void CPHSimpleCharacter::ApplyForce(const Fvector& force)
     {
         Fvector v;
         GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
-        v.x += force.x / 50.0f;
-        v.y += force.y / 50.0f;
-        v.z += force.z / 50.0f;
+        v.x += std::clamp(force.x / 150.0f, -6.0f, 6.0f);
+        v.y += std::clamp(force.y / 150.0f, -4.0f, 3.0f);
+        v.z += std::clamp(force.z / 150.0f, -6.0f, 6.0f);
+        v.y = std::clamp(v.y, -30.0f, 7.0f);
         GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, v);
     }
 }
@@ -618,6 +639,12 @@ void CPHSimpleCharacter::SafeAndLimitVelocity()
             linear_velocity.z = 0;
             GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
         }
+    }
+
+    if (linear_velocity.y > 8.0f || linear_velocity.y < -30.0f)
+    {
+        linear_velocity.y = std::clamp(linear_velocity.y, -30.0f, 8.0f);
+        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
     }
 
     Fvector body_pos;

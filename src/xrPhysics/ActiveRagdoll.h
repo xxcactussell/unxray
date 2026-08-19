@@ -81,17 +81,20 @@ private:
     float m_max_knockdown_duration = 3.5f;
     
     float m_ramp_up_timer = 0.0f;
-    float m_ramp_up_duration = 0.35f;
+    float m_ramp_up_duration = 0.5f;
     
     float m_get_up_timer = 0.0f;
     float m_get_up_duration = 1.5f;
     
     bool m_facing_up = true;
+    bool m_is_wounded = false;
     
     GetUpCallback m_get_up_callback;
+    GetUpCallback m_start_get_up_callback;
     
     xr_vector<Fmatrix> m_target_matrices;
     xr_vector<Fmatrix> m_simulated_matrices;
+    xr_vector<Fmatrix> m_anim_matrices;
     xr_vector<SPartHitReaction> m_part_reactions;
     
     xr_vector<ActiveRagdollCallbackData> m_cb_data;
@@ -110,7 +113,10 @@ public:
     void SetMotorDefaults(float stiffness, float damping);
     
     void SetGetUpCallback(GetUpCallback cb) { m_get_up_callback = cb; }
+    void SetStartGetUpCallback(GetUpCallback cb) { m_start_get_up_callback = cb; }
     void SetGetUpDuration(float duration) { m_get_up_duration = duration; }
+    void SetTargetWounded(bool wounded) { m_is_wounded = wounded; }
+    bool IsTargetWounded() const { return m_is_wounded; }
     void OnGetUpFinished() { m_state = ERagdollState::Active; }
     
     bool IsFacingUp() const { return m_facing_up; }

@@ -300,15 +300,33 @@ void CActiveRagdollController::OnDeath() {
         return;
     }
 
-    // If standing or in the middle of getting up: collapse naturally by smoothly decaying motors
-    m_state = ERagdollState::Dying;
+    // 1. Snapshot the EXACT current animated pose into Jolt physics world BEFORE switching to dynamic ragdoll.
+    // This completely eliminates any snap or transition to the bind pose (T-pose).
+    if (m_holder && m_kinematics && !m_anim_matrices.empty()) {
+        const Fmatrix& obj_xform = m_holder->ObjectXFORM();
+        u32 part_count = (u32)m_anim_matrices.size();
+        
+        xr_vector<Fmatrix> current_model_matrices(part_count);
+        for (u32 i = 0; i < part_count; ++i) {
+            u16 bone_id = m_mapper.PartToBone((u16)i);
+            if (bone_id != u16(-1) && bone_id < m_kinematics->LL_BoneCount()) {
+                const CBoneInstance& bi = m_kinematics->LL_GetBoneInstance(bone_id);
+                current_model_matrices[i] = bi.mTransform;
+            } else {
+                current_model_matrices[i] = m_anim_matrices[i];
+            }
+        }
+        GetPhysicsCore()->SetRagdollWorldPose(m_ragdoll_handle, obj_xform, current_model_matrices.data(), part_count);
+        GetPhysicsCore()->GetRagdollAllTransforms(m_ragdoll_handle, m_simulated_matrices.data(), part_count);
+    }
+
+    // 2. Switch all bodies to unmotorized, free dynamic ragdoll immediately on death
+    m_state = ERagdollState::Dead;
     m_death_decay_timer = 0.f;
     m_visual_blend_factor = 0.f;
     
     GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
-    GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, true);
-    GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, m_motor_stiffness);
-    GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, m_motor_damping);
+    GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
 }
 
 void CActiveRagdollController::SetMotorDefaults(float stiffness, float damping) {
@@ -324,6 +342,24 @@ void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float 
     if (m_state == ERagdollState::Inactive || m_state == ERagdollState::Dead || m_state == ERagdollState::Dying || m_ragdoll_handle == INVALID_RAGDOLL_HANDLE)
         return;
     
+    // Snapshot current pose before knockdown
+    if (m_holder && m_kinematics && !m_anim_matrices.empty()) {
+        const Fmatrix& obj_xform = m_holder->ObjectXFORM();
+        u32 part_count = (u32)m_anim_matrices.size();
+        xr_vector<Fmatrix> current_model_matrices(part_count);
+        for (u32 i = 0; i < part_count; ++i) {
+            u16 b_id = m_mapper.PartToBone((u16)i);
+            if (b_id != u16(-1) && b_id < m_kinematics->LL_BoneCount()) {
+                const CBoneInstance& bi = m_kinematics->LL_GetBoneInstance(b_id);
+                current_model_matrices[i] = bi.mTransform;
+            } else {
+                current_model_matrices[i] = m_anim_matrices[i];
+            }
+        }
+        GetPhysicsCore()->SetRagdollWorldPose(m_ragdoll_handle, obj_xform, current_model_matrices.data(), part_count);
+        GetPhysicsCore()->GetRagdollAllTransforms(m_ragdoll_handle, m_simulated_matrices.data(), part_count);
+    }
+
     m_state = ERagdollState::KnockedDown;
     m_knockdown_timer = 0.0f;
     
@@ -348,9 +384,16 @@ void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float 
     
     Fvector impulse_vec = dir;
     // Scale X-Ray impulse realistically into Jolt N*s (realistic fall without flying away)
-    float clamped_impulse = std::clamp(impulse * 0.4f, 4.0f, 45.0f);
+    float clamped_impulse = std::clamp(impulse * 0.4f, 4.0f, 60.0f);
     impulse_vec.mul(clamped_impulse);
     GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, impulse_vec, hit_pos);
+
+    // Also impart moderate momentum to root so the character momentum isn't stationary
+    if (part_idx != 0) {
+        Fvector root_impulse = dir;
+        root_impulse.mul(clamped_impulse * 0.35f);
+        GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, root_impulse);
+    }
 }
 
 void CActiveRagdollController::ApplyHit(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos) {
@@ -373,11 +416,20 @@ void CActiveRagdollController::ApplyHit(u16 bone_id, const Fvector& dir, float i
     
     // Calculate physical impulse vector
     Fvector impulse_vec = dir;
-    float clamped_impulse = std::clamp(impulse * 0.25f, 2.0f, 25.0f);
+    float factor_scale = (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) ? 0.6f : 0.25f;
+    float max_limit = (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) ? 140.0f : 25.0f;
+    float clamped_impulse = std::clamp(impulse * factor_scale, 2.0f, max_limit);
     impulse_vec.mul(clamped_impulse);
     
-    // Apply impulse to Jolt physics body
+    // Apply impulse to Jolt physics body at hit position
     GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, impulse_vec, hit_pos);
+
+    // On death / dead ragdoll, transfer proportional momentum to root (Pelvis) so center-of-mass realistically flies back
+    if ((m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) && part_idx != 0) {
+        Fvector pelvis_impulse = dir;
+        pelvis_impulse.mul(clamped_impulse * 0.45f);
+        GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, pelvis_impulse);
+    }
     
     // Apply hit flinch to motors for living character
     if (m_state == ERagdollState::Active && part_idx < m_part_reactions.size()) {

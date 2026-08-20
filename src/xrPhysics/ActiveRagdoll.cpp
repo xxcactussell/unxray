@@ -370,9 +370,9 @@ void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float 
     
     // Apply physical impulse
     u16 part_idx = m_mapper.BoneToPart(bone_id);
-    if (part_idx == u16(-1) && m_kinematics) {
+    if (part_idx == u16(-1) && m_kinematics && bone_id < m_kinematics->LL_BoneCount() && bone_id != BI_NONE) {
         u16 parent_id = m_kinematics->GetBoneData(bone_id).GetParentID();
-        while (parent_id != u16(-1)) {
+        while (parent_id != u16(-1) && parent_id != BI_NONE && parent_id < m_kinematics->LL_BoneCount()) {
             part_idx = m_mapper.BoneToPart(parent_id);
             if (part_idx != u16(-1)) break;
             parent_id = m_kinematics->GetBoneData(parent_id).GetParentID();
@@ -401,9 +401,9 @@ void CActiveRagdollController::ApplyHit(u16 bone_id, const Fvector& dir, float i
     
     // Find matching part index or traverse up parent chain
     u16 part_idx = m_mapper.BoneToPart(bone_id);
-    if (part_idx == u16(-1) && m_kinematics) {
+    if (part_idx == u16(-1) && m_kinematics && bone_id < m_kinematics->LL_BoneCount() && bone_id != BI_NONE) {
         u16 parent_id = m_kinematics->GetBoneData(bone_id).GetParentID();
-        while (parent_id != u16(-1)) {
+        while (parent_id != u16(-1) && parent_id != BI_NONE && parent_id < m_kinematics->LL_BoneCount()) {
             part_idx = m_mapper.BoneToPart(parent_id);
             if (part_idx != u16(-1)) break;
             parent_id = m_kinematics->GetBoneData(parent_id).GetParentID();

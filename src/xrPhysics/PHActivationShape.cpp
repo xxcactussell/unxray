@@ -258,14 +258,16 @@ void CPHActivationShape::InitContact(bool& do_collide, bool bo1, float depth, CP
 
 void CPHActivationShape::CutVelocity(float l_limit, float /*a_limit*/)
 {
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE) return;
+
     Fvector lin_vel;
-    GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, lin_vel);
+    GetPhysicsCore()->GetBodyLinearVelocity(m_char_handle, lin_vel);
     
     float mag = lin_vel.magnitude();
-    if (mag > l_limit)
+    if (mag > l_limit && mag > EPS)
     {
         lin_vel.mul(l_limit / mag);
-        GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, lin_vel);
+        GetPhysicsCore()->SetBodyLinearVelocity(m_char_handle, lin_vel);
         GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, Fvector().set(0.f, 0.f, 0.f));
     }
 }

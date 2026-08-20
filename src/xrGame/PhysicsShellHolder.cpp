@@ -170,6 +170,23 @@ void CPhysicsShellHolder::correct_spawn_pos()
     Fvector c;
     get_box(PPhysicsShell(), XFORM(), size, c);
 
+    // Фоллбэк, если get_box вернул невалидные габариты из-за отсутствия данных о геометрии
+    if (!_valid(size) || size.x < 0.01f || size.y < 0.01f || size.z < 0.01f || !_valid(c))
+    {
+        if (Visual() && Visual()->dcast_PKinematics())
+        {
+            Fvector local_c, half_dim;
+            Visual()->dcast_PKinematics()->GetBox().get_CD(local_c, half_dim);
+            size.mul(half_dim, 2.0f);
+            XFORM().transform_tiny(c, local_c);
+        }
+        else
+        {
+            size.set(0.1f, 0.25f, 0.1f);
+            c.set(Position());
+        }
+    }
+
     R_ASSERT2(_valid(c), make_string("object: %s model: %s ", cName().c_str(), cNameVisual().c_str()));
     R_ASSERT2(_valid(size), make_string("object: %s model: %s ", cName().c_str(), cNameVisual().c_str()));
     R_ASSERT2(_valid(XFORM()), make_string("object: %s model: %s ", cName().c_str(), cNameVisual().c_str()));
@@ -177,15 +194,6 @@ void CPhysicsShellHolder::correct_spawn_pos()
 
     Fvector ap = Fvector().set(0, 0, 0);
     ActivateShapePhysShellHolder(this, XFORM(), size, c, ap);
-
-    ////	VERIFY								(valid_pos(activation_shape.Position(),phBoundaries));
-    //	if (!valid_pos(activation_shape.Position(),phBoundaries)) {
-    //		CPHActivationShape				activation_shape;
-    //		activation_shape.Create			(c,size,this);
-    //		activation_shape.set_rotation	(XFORM());
-    //		activation_shape.Activate		(size,1,1.f,M_PI/8.f);
-    ////		VERIFY							(valid_pos(activation_shape.Position(),phBoundaries));
-    //	}
 
     PPhysicsShell()->EnableCollision();
 

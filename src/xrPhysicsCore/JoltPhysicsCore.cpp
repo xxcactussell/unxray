@@ -600,24 +600,34 @@ void JoltPhysicsCore::DestroyBody(BodyHandle body_handle) {
 }
 
 void JoltPhysicsCore::GetBodyTransform(BodyHandle body_handle, Fmatrix& out_matrix) const {
-    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) {
+        out_matrix.i.set(1.0f, 0.0f, 0.0f);
+        out_matrix.j.set(0.0f, 1.0f, 0.0f);
+        out_matrix.k.set(0.0f, 0.0f, 1.0f);
+        out_matrix.c.set(0.0f, 0.0f, 0.0f);
+        return;
+    }
 
     JPH::BodyID id(body_handle);
-    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
-    
-    JPH::Mat44 transform = body_interface.GetWorldTransform(id);
-    
+    JPH::Mat44 transform = m_physics_system->GetBodyInterface().GetWorldTransform(id);
+    JPH::Vec3 pos = transform.GetTranslation();
+
+    if (_isnan(pos.GetX()) || _isnan(pos.GetY()) || _isnan(pos.GetZ())) {
+        out_matrix.i.set(1.0f, 0.0f, 0.0f);
+        out_matrix.j.set(0.0f, 1.0f, 0.0f);
+        out_matrix.k.set(0.0f, 0.0f, 1.0f);
+        out_matrix.c.set(0.0f, 0.0f, 0.0f);
+        return;
+    }
+
     JPH::Vec3 axis_x = transform.GetAxisX();
     JPH::Vec3 axis_y = transform.GetAxisY();
     JPH::Vec3 axis_z = transform.GetAxisZ();
-    JPH::Vec3 pos = transform.GetTranslation();
 
     out_matrix.i.set(axis_x.GetX(), axis_x.GetY(), axis_x.GetZ());
     out_matrix.j.set(axis_y.GetX(), axis_y.GetY(), axis_y.GetZ());
     out_matrix.k.set(axis_z.GetX(), axis_z.GetY(), axis_z.GetZ());
     out_matrix.c.set(pos.GetX(), pos.GetY(), pos.GetZ());
-
-    // For safety, initialize the projection part to standard values
     out_matrix._14_ = 0.0f; out_matrix._24_ = 0.0f; out_matrix._34_ = 0.0f; out_matrix._44_ = 1.0f;
 }
 
@@ -641,15 +651,26 @@ void JoltPhysicsCore::SetBodyTransform(BodyHandle body_handle, const Fmatrix& ma
 }
 
 void JoltPhysicsCore::GetBodyAABB(BodyHandle body_handle, Fvector& center, Fvector& half_extents) const {
-    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) {
+        center.set(0.f, 0.f, 0.f);
+        half_extents.set(0.1f, 0.1f, 0.1f);
+        return;
+    }
 
     JPH::BodyID id(body_handle);
-    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
+    JPH::AABox bounds = m_physics_system->GetBodyInterface().GetTransformedShape(id).GetWorldSpaceBounds();
     
-    JPH::AABox bounds = body_interface.GetTransformedShape(id).GetWorldSpaceBounds();
-    
-    center.set(bounds.GetCenter().GetX(), bounds.GetCenter().GetY(), bounds.GetCenter().GetZ());
-    half_extents.set(bounds.GetExtent().GetX(), bounds.GetExtent().GetY(), bounds.GetExtent().GetZ());
+    JPH::Vec3 j_center = bounds.GetCenter();
+    JPH::Vec3 j_extents = bounds.GetExtent();
+
+    if (_isnan(j_center.GetX()) || _isnan(j_extents.GetX())) {
+        center.set(0.f, 0.f, 0.f);
+        half_extents.set(0.1f, 0.1f, 0.1f);
+        return;
+    }
+
+    center.set(j_center.GetX(), j_center.GetY(), j_center.GetZ());
+    half_extents.set(j_extents.GetX(), j_extents.GetY(), j_extents.GetZ());
 }
 
 bool JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle, 

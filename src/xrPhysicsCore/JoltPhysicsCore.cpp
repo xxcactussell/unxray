@@ -1143,7 +1143,16 @@ float JoltPhysicsCore::GetBodyMass(BodyHandle body_handle) const {
     if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return 1.0f;
     
     JPH::BodyID id(body_handle);
-    return m_physics_system->GetBodyInterface().GetShape(id)->GetMassProperties().mMass;
+    if (!m_physics_system->GetBodyInterface().IsAdded(id)) return 1.0f;
+
+    JPH::BodyLockRead lock(m_physics_system->GetBodyLockInterface(), id);
+    if (!lock.Succeeded()) return 1.0f;
+
+    const JPH::Body& body = lock.GetBody();
+    const JPH::Shape* shape = body.GetShape();
+    if (!shape) return 1.0f;
+
+    return shape->GetMassProperties().mMass;
 }
 
 void JoltPhysicsCore::GetBodyPointVelocity(BodyHandle body_handle, const Fvector& point, Fvector& velocity) const {
@@ -1153,8 +1162,12 @@ void JoltPhysicsCore::GetBodyPointVelocity(BodyHandle body_handle, const Fvector
     }
     
     JPH::BodyID id(body_handle);
-    JPH::Vec3 jolt_pos(point.x, point.y, point.z);
+    if (!m_physics_system->GetBodyInterface().IsAdded(id)) {
+        velocity.set(0.f, 0.f, 0.f);
+        return;
+    }
     
+    JPH::Vec3 jolt_pos(point.x, point.y, point.z);
     JPH::Vec3 jolt_vel = m_physics_system->GetBodyInterface().GetPointVelocity(id, jolt_pos);
     
     velocity.set(jolt_vel.GetX(), jolt_vel.GetY(), jolt_vel.GetZ());
@@ -1284,6 +1297,51 @@ public:
     }
 };
 
+void JoltPhysicsCore::MyCharacterContactListener::OnContactAdded(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact, JPH::CharacterContactSettings& ioSettings) {
+    ProcessContact(inCharacter, inContact);
+}
+
+void JoltPhysicsCore::MyCharacterContactListener::OnContactPersisted(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact, JPH::CharacterContactSettings& ioSettings) {
+    ProcessContact(inCharacter, inContact);
+}
+
+void JoltPhysicsCore::MyCharacterContactListener::ProcessContact(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact) {
+    if (!inCharacter) return;
+
+    u32 tri_user_data = u32(-1);
+    void* other_body_user_data = nullptr;
+    BodyHandle other_body_handle = INVALID_BODY_HANDLE;
+
+    if (!inContact.mBodyB.IsInvalid() && m_core->m_physics_system) {
+        JPH::BodyLockRead lock(m_core->m_physics_system->GetBodyLockInterface(), inContact.mBodyB);
+        if (lock.Succeeded()) {
+            const JPH::Body& body = lock.GetBody();
+            if (body.IsDynamic()) {
+                other_body_handle = inContact.mBodyB.GetIndexAndSequenceNumber();
+                other_body_user_data = reinterpret_cast<void*>(body.GetUserData());
+            }
+            const JPH::Shape* shape = body.GetShape();
+            if (shape) {
+                tri_user_data = shape->GetSubShapeUserData(inContact.mSubShapeIDB);
+            }
+        }
+    }
+
+    Fvector contact_pos = { (float)inContact.mPosition.GetX(), (float)inContact.mPosition.GetY(), (float)inContact.mPosition.GetZ() };
+    Fvector contact_norm = { inContact.mContactNormal.GetX(), inContact.mContactNormal.GetY(), inContact.mContactNormal.GetZ() };
+    Fvector contact_vel = { inContact.mLinearVelocity.GetX(), inContact.mLinearVelocity.GetY(), inContact.mLinearVelocity.GetZ() };
+
+    for (const auto& [handle, char_ptr] : m_core->m_characters) {
+        if (char_ptr.GetPtr() == inCharacter) {
+            auto cb_it = m_core->m_character_callbacks.find(handle);
+            if (cb_it != m_core->m_character_callbacks.end() && cb_it->second.callback) {
+                cb_it->second.callback(cb_it->second.user_data, contact_pos, contact_norm, contact_vel, tri_user_data, other_body_handle, other_body_user_data, inContact.mIsSensorB);
+            }
+            break;
+        }
+    }
+}
+
 CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) {
     JPH::Shape* jolt_shape = reinterpret_cast<JPH::Shape*>(shape);
 
@@ -1296,6 +1354,7 @@ CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandl
     JPH::RVec3 pos(initial_pos.x, initial_pos.y, initial_pos.z);
     
     JPH::CharacterVirtual* character = new JPH::CharacterVirtual(settings, pos, JPH::Quat::sIdentity(), 0, m_physics_system);
+    character->SetListener(&m_character_contact_listener);
     
     CharacterVirtualHandle handle = m_next_character_handle++;
     m_characters[handle] = character;
@@ -1308,6 +1367,7 @@ void JoltPhysicsCore::DestroyCharacterVirtual(CharacterVirtualHandle handle) {
     if (it != m_characters.end()) {
         m_characters.erase(it);
         m_stick_to_floor.erase(handle);
+        m_character_callbacks.erase(handle);
     }
 }
 
@@ -1385,6 +1445,7 @@ void JoltPhysicsCore::GetCharacterVirtualGroundState(CharacterVirtualHandle hand
     out_state.on_ground = false;
     out_state.ground_normal.set(0.f, 1.f, 0.f);
     out_state.ground_velocity.set(0.f, 0.f, 0.f);
+    out_state.ground_triangle_user_data = u32(-1);
 
     auto it = m_characters.find(handle);
     if (it != m_characters.end()) {
@@ -1398,6 +1459,19 @@ void JoltPhysicsCore::GetCharacterVirtualGroundState(CharacterVirtualHandle hand
         
         JPH::Vec3 ground_vel = character->GetGroundVelocity();
         out_state.ground_velocity.set(ground_vel.GetX(), ground_vel.GetY(), ground_vel.GetZ());
+
+        JPH::BodyID ground_body = character->GetGroundBodyID();
+        JPH::SubShapeID ground_sub_shape = character->GetGroundSubShapeID();
+        if (!ground_body.IsInvalid() && m_physics_system) {
+            JPH::BodyLockRead lock(m_physics_system->GetBodyLockInterface(), ground_body);
+            if (lock.Succeeded()) {
+                const JPH::Body& body = lock.GetBody();
+                const JPH::Shape* shape = body.GetShape();
+                if (shape) {
+                    out_state.ground_triangle_user_data = shape->GetSubShapeUserData(ground_sub_shape);
+                }
+            }
+        }
     }
 }
 
@@ -1405,6 +1479,14 @@ void JoltPhysicsCore::SetCharacterVirtualUserData(CharacterVirtualHandle handle,
     auto it = m_characters.find(handle);
     if (it != m_characters.end()) {
         it->second->SetUserData(reinterpret_cast<JPH::uint64>(data));
+    }
+}
+
+void JoltPhysicsCore::SetCharacterVirtualContactCallback(CharacterVirtualHandle handle, CharacterContactCallbackFun callback, void* char_user_data) {
+    if (callback) {
+        m_character_callbacks[handle] = { callback, char_user_data };
+    } else {
+        m_character_callbacks.erase(handle);
     }
 }
 

@@ -355,8 +355,7 @@ void CPHActorCharacter::ChooseRestrictionType(ERestrictionType my_type, CPHChara
 
 void CPHActorCharacter::update_last_material()
 {
-    if (ignore_material(*p_lastMaterialIDX))
-        inherited::update_last_material();
+    inherited::update_last_material();
 }
 
 float free_fly_up_force_limit = 4000.f;

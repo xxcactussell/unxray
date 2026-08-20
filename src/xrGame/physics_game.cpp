@@ -200,10 +200,8 @@ void TContactShotMark(
     const Fvector& contact_normal, const Fvector& contact_pos, 
     SGameMtl* material_1, SGameMtl* material_2)
 {
-    if (!my_geom || !oposite_geom) return;
-
-    IPhysicsShellHolder* holder_1 = (IPhysicsShellHolder*)my_geom->get_callback_data();
-    IPhysicsShellHolder* holder_2 = (IPhysicsShellHolder*)oposite_geom->get_callback_data();
+    IPhysicsShellHolder* holder_1 = my_geom ? (IPhysicsShellHolder*)my_geom->get_callback_data() : nullptr;
+    IPhysicsShellHolder* holder_2 = oposite_geom ? (IPhysicsShellHolder*)oposite_geom->get_callback_data() : nullptr;
 
     IPhysicsShellHolder* dyn_holder = bo1 ? holder_1 : holder_2;
     SGameMtl* static_mat = bo1 ? material_2 : material_1;
@@ -211,7 +209,7 @@ void TContactShotMark(
 
     if (!static_mat || !dyn_mat) return;
 
-    float vel_cret = 0.f;
+    float vel_cret = 1.0f;
     
     CPhysicsShellHolder* dyn_obj = dyn_holder ? smart_cast<CPhysicsShellHolder*>(dyn_holder) : nullptr;
     
@@ -228,14 +226,12 @@ void TContactShotMark(
     to_camera.sub(contact_pos, Device.vCameraPosition);
     float square_cam_dist = to_camera.square_magnitude();
 
-    if (dyn_holder)
+    u16 static_mat_id = GMLib.GetMaterialIdx(static_mat->m_Name.c_str());
+    u16 dyn_mat_id = GMLib.GetMaterialIdx(dyn_mat->m_Name.c_str());
+    
+    SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(static_mat_id, dyn_mat_id);
+    if (mtl_pair)
     {
-        u16 static_mat_id = GMLib.GetMaterialIdx(static_mat->m_Name.c_str());
-        u16 dyn_mat_id = GMLib.GetMaterialIdx(dyn_mat->m_Name.c_str());
-        
-        SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(static_mat_id, dyn_mat_id);
-        if (mtl_pair)
-        {
 
             if (square_cam_dist < SQUARE_SOUND_EFFECT_DIST)
             {
@@ -263,11 +259,10 @@ void TContactShotMark(
                     }
                 }
             }
-            if (square_cam_dist < SQUARE_PARTICLE_EFFECT_DIST && !mtl_pair->CollideParticles.empty())
-            {
-                LPCSTR ps_name = mtl_pair->CollideParticles[::Random.randI(0, mtl_pair->CollideParticles.size())].c_str();
-                play_particles<Pars>(vel_cret, dyn_holder, contact_pos, contact_normal, b_invert_normal, static_mat, ps_name);
-            }
+        if (square_cam_dist < SQUARE_PARTICLE_EFFECT_DIST && !mtl_pair->CollideParticles.empty())
+        {
+            LPCSTR ps_name = mtl_pair->CollideParticles[::Random.randI(0, mtl_pair->CollideParticles.size())].c_str();
+            play_particles<Pars>(vel_cret, dyn_holder, contact_pos, contact_normal, b_invert_normal, static_mat, ps_name);
         }
     }
 }

@@ -145,12 +145,14 @@ void CPHSimpleCharacter::Create(Fvector sizes)
 
     m_char_handle_interpolation.SetCharacter(m_char_handle);
     
+    GetPhysicsCore()->SetCharacterVirtualUserData(m_char_handle, this);
     if (m_phys_ref_object)
     {
-        GetPhysicsCore()->SetCharacterVirtualUserData(m_char_handle, m_phys_ref_object);
         SetPhysicsRefObject(m_phys_ref_object);
     }
     
+    GetPhysicsCore()->SetCharacterVirtualContactCallback(m_char_handle, &CPHSimpleCharacter::JoltCharacterContactCallback, this);
+
     if (m_object_contact_callback)
     {
         SetObjectContactCallback(m_object_contact_callback);
@@ -326,6 +328,24 @@ void CPHSimpleCharacter::PhTune(float step)
         b_lose_control = false;
         b_lose_ground = false;
         m_ground_contact_position = current_pos;
+
+        if (ground_state.ground_triangle_user_data != u32(-1))
+        {
+            CDB::TRI* tri = inl_ph_world().ObjectSpace().GetStaticTris() + ground_state.ground_triangle_user_data;
+            if (tri && p_lastMaterialIDX)
+            {
+                *p_lastMaterialIDX = tri->material;
+            }
+        }
+
+        if (m_air_frames > 0 && p_lastMaterialIDX && *p_lastMaterialIDX != GAMEMTL_NONE_IDX)
+        {
+            SGameMtl* tri_material = GMLib.GetMaterialByIdx(*p_lastMaterialIDX);
+            if (tri_material)
+            {
+                UpdateStaticDamage(m_ground_contact_normal, current_pos, tri_material, true);
+            }
+        }
     } else {
         b_lose_control = true;
         b_lose_ground = true;
@@ -570,12 +590,12 @@ void CPHSimpleCharacter::SetMas(float mass)
 
 EEnvironment CPHSimpleCharacter::CheckInvironment()
 {
-    if (b_lose_control)
-        return peInAir;
-    else if (m_elevator_state.ClimbingState())
+    if (m_elevator_state.ClimbingState())
         return peAtWall;
+    if (b_on_ground)
+        return peOnGround;
 
-    return peOnGround;
+    return peInAir;
 }
 
 void CPHSimpleCharacter::SetPhysicsRefObject(IPhysicsShellHolder* ref_object)
@@ -698,7 +718,7 @@ void CPHSimpleCharacter::EnableObject(CPHObject* obj)
 }
 
 void CPHSimpleCharacter::SetWheelContactCallback(ObjectContactCallbackFun* callback) { VERIFY(b_exist); }
-void CPHSimpleCharacter::SetStaticContactCallBack(ObjectContactCallbackFun* callback) { VERIFY(b_exist); }
+void CPHSimpleCharacter::SetStaticContactCallBack(ObjectContactCallbackFun* callback) { VERIFY(b_exist); m_static_contact_callback = callback; }
 ObjectContactCallbackFun* CPHSimpleCharacter::ObjectContactCallBack() { return m_object_contact_callback; }
 
 u16 CPHSimpleCharacter::RetriveContactBone()
@@ -792,6 +812,74 @@ void CPHSimpleCharacter::InitContact(bool& do_collide, bool bo1, float depth, CP
     }
     
     UpdateStaticDamage(normal, pos, tri_material, bo1);
+}
+
+void CPHSimpleCharacter::JoltCharacterContactCallback(void* char_user_data, 
+                                                    const Fvector& contact_pos, 
+                                                    const Fvector& contact_normal, 
+                                                    const Fvector& contact_vel, 
+                                                    u32 tri_user_data, 
+                                                    BodyHandle other_body_handle,
+                                                    void* other_body_user_data, 
+                                                    bool is_sensor)
+{
+    CPHSimpleCharacter* self = reinterpret_cast<CPHSimpleCharacter*>(char_user_data);
+    if (!self || !self->b_exist) return;
+
+    u16 mat_idx = GAMEMTL_NONE_IDX;
+    if (tri_user_data != u32(-1))
+    {
+        CDB::TRI* tri = inl_ph_world().ObjectSpace().GetStaticTris() + tri_user_data;
+        if (tri)
+        {
+            mat_idx = tri->material;
+            SGameMtl* m = GMLib.GetMaterialByIdx(mat_idx);
+            if (m && !m->Flags.test(SGameMtl::flPassable) && !m->Flags.test(SGameMtl::flLiquid))
+            {
+                if (self->p_lastMaterialIDX)
+                {
+                    *self->p_lastMaterialIDX = mat_idx;
+                }
+            }
+        }
+    }
+
+    SGameMtl* tri_mat = (mat_idx != GAMEMTL_NONE_IDX) ? GMLib.GetMaterialByIdx(mat_idx) : nullptr;
+    if (tri_mat)
+    {
+        // 1. Static impact damage / fall damage
+        self->UpdateStaticDamage(contact_normal, contact_pos, tri_mat, true);
+
+        // 2. Passable / Liquid material sound and particle effects (bushes, water)
+        if (tri_mat->Flags.test(SGameMtl::flPassable) || tri_mat->Flags.test(SGameMtl::flLiquid))
+        {
+            if (self->m_static_contact_callback)
+            {
+                bool do_collide = false;
+                u16 self_mat = (self->p_lastMaterialIDX && *self->p_lastMaterialIDX != GAMEMTL_NONE_IDX) ? *self->p_lastMaterialIDX : GAMEMTL_NONE_IDX;
+                SGameMtl* self_game_mat = (self_mat != GAMEMTL_NONE_IDX) ? GMLib.GetMaterialByIdx(self_mat) : tri_mat;
+                
+                // Use CSphereGeom representing this character so get_callback_data() returns m_phys_ref_object
+                Fsphere sph;
+                sph.set(contact_pos, 0.5f);
+                CSphereGeom dummy_geom(sph);
+                dummy_geom.ph_ref_object = self->m_phys_ref_object;
+                dummy_geom.ph_object = self;
+                
+                self->m_static_contact_callback(do_collide, true, &dummy_geom, nullptr, contact_normal, contact_pos, self_game_mat, tri_mat);
+            }
+        }
+    }
+
+    // 3. Dynamic object collision (Poltergeist props, flying items)
+    if (other_body_handle != INVALID_BODY_HANDLE && other_body_user_data)
+    {
+        IPhysicsShellHolder* other_obj = reinterpret_cast<IPhysicsShellHolder*>(other_body_user_data);
+        if (other_obj && !other_obj->ObjectGetDestroy())
+        {
+            self->UpdateDynamicDamage(contact_normal, contact_pos, other_body_handle, mat_idx, true);
+        }
+    }
 }
 
 void CPHSimpleCharacter::GroundNormal(Fvector& norm)
@@ -1069,7 +1157,7 @@ void CPHSimpleCharacter::update_last_material()
 {
     Fvector pos;
     GetPosition(pos);
-    pos.y += material_pick_upset;
+    pos.y += m_radius + material_pick_upset;
     if (m_last_picked_material != GAMEMTL_NONE_IDX && pos.similar(m_last_environment_update, material_update_tolerance))
     {
         *p_lastMaterialIDX = m_last_picked_material;
@@ -1077,7 +1165,8 @@ void CPHSimpleCharacter::update_last_material()
     }
     u16 new_material;
     VERIFY(!PhysicsRefObject() || smart_cast<IGameObject*>(PhysicsRefObject()));
-    if (PickMaterial(new_material, pos, Fvector().set(0, -1, 0), material_pick_dist + material_pick_upset,
+    
+    if (PickMaterial(new_material, pos, Fvector().set(0, -1, 0), m_radius + material_pick_dist + material_pick_upset,
             smart_cast<IGameObject*>(PhysicsRefObject())))
     {
         m_last_picked_material = new_material;

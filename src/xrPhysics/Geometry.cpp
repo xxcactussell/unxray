@@ -120,10 +120,10 @@ void CPhysicsGeom::set_contact_cb(ObjectContactCallbackFun* ccb) {}
 void CPhysicsGeom::set_obj_contact_cb(ObjectContactCallbackFun* occb) {}
 void CPhysicsGeom::add_obj_contact_cb(ObjectContactCallbackFun* occb) {}
 void CPhysicsGeom::remove_obj_contact_cb(ObjectContactCallbackFun* occb) {}
-void CPhysicsGeom::set_callback_data(void* cd) {}
-void* CPhysicsGeom::get_callback_data() { return nullptr; }
-void CPhysicsGeom::set_ref_object(IPhysicsShellHolder* ro) {}
-void CPhysicsGeom::set_ph_object(CPHObject* o) {}
+void CPhysicsGeom::set_callback_data(void* cd) { ph_ref_object = (IPhysicsShellHolder*)cd; }
+void* CPhysicsGeom::get_callback_data() { return ph_ref_object; }
+void CPhysicsGeom::set_ref_object(IPhysicsShellHolder* ro) { ph_ref_object = ro; }
+void CPhysicsGeom::set_ph_object(CPHObject* o) { ph_object = o; }
 
 void CPhysicsGeom::move_local_basis(const Fmatrix& inv_new_mul_old)
 {

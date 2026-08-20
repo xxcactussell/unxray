@@ -47,12 +47,27 @@ private:
     };
     MyContactListener m_contact_listener{this};
 
+    class MyCharacterContactListener : public JPH::CharacterContactListener {
+        JoltPhysicsCore* m_core;
+    public:
+        MyCharacterContactListener(JoltPhysicsCore* core) : m_core(core) {}
+        virtual void OnContactAdded(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact, JPH::CharacterContactSettings& ioSettings) override;
+        virtual void OnContactPersisted(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact, JPH::CharacterContactSettings& ioSettings) override;
+        void ProcessContact(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact);
+    };
+    MyCharacterContactListener m_character_contact_listener{this};
+
     std::unordered_map<JointHandle, JPH::Ref<JPH::Constraint>> m_constraints;
     JointHandle m_next_joint_handle = 1;
 
     std::unordered_map<CharacterVirtualHandle, JPH::Ref<JPH::CharacterVirtual>> m_characters;
     std::unordered_map<CharacterVirtualHandle, bool> m_stick_to_floor;
     std::unordered_map<CharacterVirtualHandle, float> m_character_gravity_factors;
+    struct CharacterCallbackInfo {
+        CharacterContactCallbackFun callback;
+        void* user_data;
+    };
+    std::unordered_map<CharacterVirtualHandle, CharacterCallbackInfo> m_character_callbacks;
     CharacterVirtualHandle m_next_character_handle = 1;
 
     std::unordered_map<RagdollHandle, JPH::Ref<JPH::Ragdoll>> m_ragdolls;
@@ -188,6 +203,7 @@ public:
     bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const override;
     void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) override;
     void SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) override;
+    void SetCharacterVirtualContactCallback(CharacterVirtualHandle handle, CharacterContactCallbackFun callback, void* char_user_data) override;
 
     RagdollHandle CreateRagdoll(const SRagdollSettings& settings) override;
     void DestroyRagdoll(RagdollHandle handle) override;

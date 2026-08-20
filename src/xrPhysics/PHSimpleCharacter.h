@@ -133,6 +133,7 @@ protected:
     float m_friction_factor;
     bool b_non_interactive;
     bool m_is_active;
+    ObjectContactCallbackFun* m_static_contact_callback{ nullptr };
 
 public:
     CPHSimpleCharacter();
@@ -187,6 +188,7 @@ private:
     void RemoveObjectContactCallback(ObjectContactCallbackFun* callback);
     void AddObjectContactCallback(ObjectContactCallbackFun* callback);
     static void TestRestrictorContactCallbackFun(bool& do_colide, bool bo1, CPhysicsGeom* geom1, CPhysicsGeom* geom2, const Fvector& contact_normal, const Fvector& contact_pos, SGameMtl* material_1, SGameMtl* material_2);
+    static void JoltCharacterContactCallback(void* char_user_data, const Fvector& contact_pos, const Fvector& contact_normal, const Fvector& contact_vel, u32 tri_user_data, BodyHandle other_body_handle, void* other_body_user_data, bool is_sensor);
 
 public:
     virtual ObjectContactCallbackFun* ObjectContactCallBack();

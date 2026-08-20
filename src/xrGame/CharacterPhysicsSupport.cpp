@@ -656,22 +656,6 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
             // Check if Lua wound_manager marked stalker as wounded
             is_wounded = stalker->wounded();
             
-            if (!is_wounded)
-            {
-                luabind::functor<bool> func_heavy;
-                if (GEnv.ScriptEngine->functor("xr_wounded.is_heavy_wounded", func_heavy))
-                {
-                    is_wounded = func_heavy(stalker->ID());
-                }
-            }
-            if (!is_wounded)
-            {
-                luabind::functor<bool> func_psy;
-                if (GEnv.ScriptEngine->functor("xr_wounded.is_psy_wounded", func_psy))
-                {
-                    is_wounded = func_psy(stalker->ID());
-                }
-            }
         }
     }
 
@@ -690,6 +674,7 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
     {
         // Smoothly hand off directly into the wounded state without standing up
         stalker->wounded(true);
+        m_get_up_motion.invalidate();
 
         // Inform state_mgr that the character is already lying down so it doesn't play waunded_1_in
         if (GEnv.ScriptEngine && GEnv.ScriptEngine->lua())

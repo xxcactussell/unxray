@@ -204,8 +204,20 @@ public:
         bool on_ground;
         Fvector ground_normal;
         Fvector ground_velocity;
+        u32 ground_triangle_user_data;
     };
     virtual void GetCharacterVirtualGroundState(CharacterVirtualHandle handle, SJoltCharacterGroundState& out_state) const = 0;
+
+    typedef void (*CharacterContactCallbackFun)(void* char_user_data, 
+                                               const Fvector& contact_pos, 
+                                               const Fvector& contact_normal, 
+                                               const Fvector& contact_vel, 
+                                               u32 tri_user_data, 
+                                               BodyHandle other_body_handle,
+                                               void* other_body_user_data, 
+                                               bool is_sensor);
+
+    virtual void SetCharacterVirtualContactCallback(CharacterVirtualHandle handle, CharacterContactCallbackFun callback, void* char_user_data) = 0;
 
     virtual bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const = 0;
     virtual void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) = 0;

@@ -198,7 +198,7 @@ void ApplySpawnIniToPhysicShell(CInifile const* ini, CPhysicsShell* physics_shel
         if ((ini->line_exist("collide", "ignore_static") && fixed) ||
             (ini->line_exist("collide", "ignore_static") && ini->section_exist("animated_object")))
         {
-            physics_shell->SetIgnoreStatic();
+            physics_shell->SetElementsCollideWithStatics(false);
         }
         if (ini->line_exist("collide", "small_object"))
         {

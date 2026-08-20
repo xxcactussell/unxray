@@ -23,7 +23,8 @@ private:
 #endif
     u32 m_debug_draw_flags = 0;
     float m_debug_draw_distance = 100.0f;
-
+    std::unordered_map<JPH::BodyID, bool> m_ignore_static_bodies;
+    
     BPLayerInterfaceImpl m_broad_phase_layer_interface;
     ObjectVsBroadPhaseLayerFilterImpl m_object_vs_broadphase_layer_filter;
     ObjectLayerPairFilterImpl m_object_vs_object_layer_filter;
@@ -165,6 +166,7 @@ public:
     void GetBodyPointVelocity(BodyHandle body, const Fvector& point, Fvector& velocity) const override;
 
     void SetBodyIgnoreStatic(BodyHandle body) override;
+    void SetBodyCollideWithStatics(BodyHandle body_handle, bool collide) override;
 
     void GetBodyPosition(BodyHandle body, Fvector& position) const override;
     void SetBodyPosition(BodyHandle body, const Fvector& position) override;
@@ -178,6 +180,7 @@ public:
     void SetBodyUserData(BodyHandle body, void* data) override;
 
     void SetBodyFixedRotation(BodyHandle body_handle) override;
+    void SetBodyMotionType(BodyHandle body_handle, int motion_type) override;
     BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) override;
     virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) override;
     virtual BodyHandle CreateBodyFromShape(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) override;

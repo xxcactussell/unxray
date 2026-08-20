@@ -581,17 +581,17 @@ void CPhysicObject::net_Export_PH_Params(NET_Packet& P, SPHNetState& State, mask
     }
     else
     {
-        /*		float				invert_magnitude = 1.f/magnitude;
+        float invert_magnitude = 1.f/magnitude;
 
         State.quaternion.x	*= invert_magnitude;
         State.quaternion.y	*= invert_magnitude;
         State.quaternion.z	*= invert_magnitude;
         State.quaternion.w	*= invert_magnitude;
 
-        clamp				(State.quaternion.x,-1.f,1.f);
-        clamp				(State.quaternion.y,-1.f,1.f);
-        clamp				(State.quaternion.z,-1.f,1.f);
-        clamp				(State.quaternion.w,-1.f,1.f);*/
+        clamp(State.quaternion.x,-1.f,1.f);
+        clamp(State.quaternion.y,-1.f,1.f);
+        clamp(State.quaternion.z,-1.f,1.f);
+        clamp(State.quaternion.w,-1.f,1.f);
     }
 
     P.w_float(State.quaternion.x);
@@ -766,12 +766,10 @@ void CPhysicObject::PH_A_CrPr()
         spatial_move();
         m_just_after_spawn = false;
 
-        VERIFY(!OnServer());
+        if (!OnServer()) { return; };
 
         PPhysicsShell()->get_ElementByStoreOrder(0)->Fix();
-        PPhysicsShell()->SetIgnoreStatic();
-        // PPhysicsShell()->SetIgnoreDynamic	();
-        // PPhysicsShell()->DisableCollision();
+        PPhysicsShell()->SetElementsCollideWithStatics(false);
     }
     // CalculateInterpolationParams()
 };

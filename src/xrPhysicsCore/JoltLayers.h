@@ -7,24 +7,26 @@ namespace Layers {
     static constexpr JPH::ObjectLayer NON_MOVING = 0;
     static constexpr JPH::ObjectLayer MOVING = 1;
     static constexpr JPH::ObjectLayer RAGDOLL = 2;
-    static constexpr JPH::uint NUM_LAYERS = 3;
+    static constexpr JPH::ObjectLayer MOVING_NO_STATIC = 3;
+    static constexpr JPH::uint NUM_LAYERS = 4;
 }
 
 namespace BroadPhaseLayers {
     static constexpr JPH::BroadPhaseLayer NON_MOVING(0);
     static constexpr JPH::BroadPhaseLayer MOVING(1);
     static constexpr JPH::BroadPhaseLayer RAGDOLL(2);
-    static constexpr JPH::uint NUM_LAYERS(3);
+    static constexpr JPH::BroadPhaseLayer MOVING_NO_STATIC(3);
+    static constexpr JPH::uint NUM_LAYERS(4);
 }
 
 
 class BPLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface {
 public:
     BPLayerInterfaceImpl() {
-        // Создаем массив маппинга
         m_object_to_broad_phase[Layers::NON_MOVING] = BroadPhaseLayers::NON_MOVING;
         m_object_to_broad_phase[Layers::MOVING] = BroadPhaseLayers::MOVING;
         m_object_to_broad_phase[Layers::RAGDOLL] = BroadPhaseLayers::RAGDOLL;
+        m_object_to_broad_phase[Layers::MOVING_NO_STATIC] = BroadPhaseLayers::MOVING_NO_STATIC;
     }
 
     virtual JPH::uint GetNumBroadPhaseLayers() const override {
@@ -42,6 +44,7 @@ public:
             case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::NON_MOVING: return "NON_MOVING";
             case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::MOVING:     return "MOVING";
             case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::RAGDOLL:    return "RAGDOLL";
+            case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::MOVING_NO_STATIC:    return "MOVING_NO_STATIC";
             default:                                                       JPH_ASSERT(false); return "INVALID";
         }
     }
@@ -57,14 +60,13 @@ public:
     virtual bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const override {
         switch (inLayer1) {
             case Layers::NON_MOVING:
-                // Статика сталкивается ТОЛЬКО с динамикой и рэгдоллами
                 return inLayer2 == BroadPhaseLayers::MOVING || inLayer2 == BroadPhaseLayers::RAGDOLL;
             case Layers::MOVING:
-                // Динамика сталкивается со всем
                 return true;
             case Layers::RAGDOLL:
-                // Рэгдоллы сталкиваются со всем
                 return true;
+            case Layers::MOVING_NO_STATIC:
+                return inLayer2 == BroadPhaseLayers::MOVING || inLayer2 == BroadPhaseLayers::RAGDOLL;
             default:
                 JPH_ASSERT(false);
                 return false;
@@ -75,19 +77,18 @@ public:
 class ObjectLayerPairFilterImpl : public JPH::ObjectLayerPairFilter {
 public:
     virtual bool ShouldCollide(JPH::ObjectLayer inObject1, JPH::ObjectLayer inObject2) const override {
-        switch (inObject1) {
-            case Layers::NON_MOVING:
-                // Статика сталкивается ТОЛЬКО с динамикой и рэгдоллами
-                return inObject2 == Layers::MOVING || inObject2 == Layers::RAGDOLL; 
-            case Layers::MOVING:
-                // Динамика сталкивается со всем
-                return true;
-            case Layers::RAGDOLL:
-                // Рэгдоллы сталкиваются со всем
-                return true;
-            default:
-                JPH_ASSERT(false);
-                return false;
-        }
+    switch (inObject1) {
+        case Layers::NON_MOVING:
+            return inObject2 == Layers::MOVING || inObject2 == Layers::RAGDOLL;
+        case Layers::MOVING:
+            return true;
+        case Layers::RAGDOLL:
+            return true;
+        case Layers::MOVING_NO_STATIC:
+            return inObject2 == Layers::MOVING || inObject2 == Layers::RAGDOLL;
+        default:
+            JPH_ASSERT(false);
+            return false;
     }
+}
 };

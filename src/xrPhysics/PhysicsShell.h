@@ -312,6 +312,7 @@ public:
     virtual void SetIgnoreDynamic() = 0;
     virtual void SetRagDoll() = 0;
     virtual void SetIgnoreRagDoll() = 0;
+    virtual void SetElementsCollideWithStatics(bool collide) = 0;
     virtual const CLBits& collide_bits() const = 0;
     virtual const _flags<CLClassBits>& collide_class_bits() const = 0;
     virtual void CreateShellAnimator(CInifile const* ini, LPCSTR section) = 0;

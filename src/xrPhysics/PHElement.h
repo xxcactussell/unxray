@@ -97,7 +97,7 @@ public:
     virtual void get_MaxAreaDir(Fvector& dir) { CPHGeometryOwner::get_MaxAreaDir(dir); }
     virtual float getRadius();
     virtual void GetPointVel(Fvector& res_vel, const Fvector& point) const;
-    
+    void SetCollideWithStatics(bool collide);
     ////////////////////////////////////////////////////Mass/////////////////////////////////////////////////////////////////////////////////////////////////
 private:
     void calculate_it_data(const Fvector& mc, float mass); 

@@ -116,6 +116,11 @@ void CPHElement::build()
     CPHGeometryOwner::build();
     set_body(m_char_handle);
     
+    if (isFixed() && m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        GetPhysicsCore()->SetBodyMotionType(m_char_handle, 0); // 0 = Static
+    }
+
     if (m_phys_ref_object && m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
         GetPhysicsCore()->SetBodyUserData(m_char_handle, m_phys_ref_object);
@@ -227,6 +232,10 @@ void CPHElement::SetTransform(const Fmatrix& m0, motion_history_state history_st
     Fmatrix transform = m0;
     transform.c = mc;
     GetPhysicsCore()->SetBodyTransform(m_char_handle, transform);
+    if (isFixed())
+    {
+        GetPhysicsCore()->SetBodyMotionType(m_char_handle, 0); // Static
+    }
     
     CPHDisablingFull::Reinit();
 
@@ -1160,6 +1169,10 @@ void CPHElement::Fix()
     if (isFixed())
         return;
     m_flags.set(flFixed, TRUE);
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        GetPhysicsCore()->SetBodyMotionType(m_char_handle, 0); // 0 = Static
+    }
 }
 
 void CPHElement::SetAnimated(bool v) { m_flags.set(flAnimated, BOOL(v)); }
@@ -1169,6 +1182,16 @@ void CPHElement::ReleaseFixed()
     if (!isFixed())
         return;
     m_flags.set(flFixed, FALSE);
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        GetPhysicsCore()->SetBodyMotionType(m_char_handle, 2); // 2 = Dynamic
+    }
+}
+
+void CPHElement::SetCollideWithStatics(bool collide)
+{
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        GetPhysicsCore()->SetBodyCollideWithStatics(m_char_handle, collide);
 }
 
 void CPHElement::applyGravityAccel(const Fvector& accel)

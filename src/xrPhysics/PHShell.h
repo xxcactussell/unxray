@@ -98,6 +98,7 @@ public:
     virtual bool IsGroupObject();
     virtual void SetIgnoreStatic();
     virtual void SetIgnoreDynamic();
+    virtual void SetElementsCollideWithStatics(bool collide);
     virtual void SetRagDoll();
     virtual void SetIgnoreRagDoll();
 

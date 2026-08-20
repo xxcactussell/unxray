@@ -164,6 +164,8 @@ public:
     virtual void GetBodyPointVelocity(BodyHandle body, const Fvector& point, Fvector& velocity) const = 0;
 
     virtual void SetBodyIgnoreStatic(BodyHandle body) = 0;
+
+    virtual void SetBodyCollideWithStatics(BodyHandle body_handle, bool collide) = 0;
     
     virtual void GetBodyPosition(BodyHandle body, Fvector& position) const = 0;
     virtual void SetBodyPosition(BodyHandle body, const Fvector& position) = 0;
@@ -177,6 +179,7 @@ public:
     virtual void SetBodyUserData(BodyHandle body, void* data) = 0;
 
     virtual void SetBodyFixedRotation(BodyHandle body_handle) = 0;
+    virtual void SetBodyMotionType(BodyHandle body_handle, int motion_type) = 0;
     virtual BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) = 0;
 
     virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) = 0;

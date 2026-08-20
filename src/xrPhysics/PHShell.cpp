@@ -652,6 +652,10 @@ void CPHShell::AddElementRecursive(
         {
             c_iter->second.joint = J;
             c_iter->second.element = E;
+            if (E)
+            {
+                E->Fix();
+            }
         }
     }
 
@@ -1224,6 +1228,12 @@ void CPHShell::CollideAll()
     CPHObject::reinit_single();
 }
 
+void CPHShell::SetElementsCollideWithStatics(bool collide)
+{
+    for (auto& it : elements)
+        it->SetCollideWithStatics(collide);
+}
+
 void CPHShell::RegisterToCLGroup(CGID g) { CPHCollideValidator::RegisterObjToGroup(g, *static_cast<CPHObject*>(this)); }
 bool CPHShell::IsGroupObject() { return CPHCollideValidator::IsGroupObject(*this); };
 void CPHShell::SetIgnoreStatic() { CPHCollideValidator::SetStaticNotCollide(*this); }
@@ -1375,6 +1385,10 @@ void CPHShell::PresetActive()
 void CPHShell::PureActivate()
 {
     for (auto it = elements.begin(); it != elements.end(); ++it)
+    {
+        if (*it) (*it)->Activate();
+    }
+    for (auto it = joints.begin(); it != joints.end(); ++it)
     {
         if (*it) (*it)->Activate();
     }

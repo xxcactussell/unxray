@@ -791,6 +791,31 @@ void JoltPhysicsCore::SetBodyFixedRotation(BodyHandle body_handle) {
     }
 }
 
+void JoltPhysicsCore::SetBodyMotionType(BodyHandle body_handle, int motion_type) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+
+    JPH::BodyID id(body_handle);
+    JPH::EMotionType j_motion = JPH::EMotionType::Dynamic;
+    JPH::ObjectLayer j_layer = Layers::MOVING;
+
+    bool ignore_static = m_ignore_static_bodies.count(id) != 0;
+
+    if (motion_type == 0) {
+        j_motion = JPH::EMotionType::Static;
+        j_layer = Layers::NON_MOVING;
+    } else if (motion_type == 1) {
+        j_motion = JPH::EMotionType::Kinematic;
+        j_layer = ignore_static ? Layers::MOVING_NO_STATIC : Layers::MOVING;
+    } else {
+        j_motion = JPH::EMotionType::Dynamic;
+        j_layer = ignore_static ? Layers::MOVING_NO_STATIC : Layers::MOVING;
+    }
+
+    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
+    body_interface.SetMotionType(id, j_motion, JPH::EActivation::Activate);
+    body_interface.SetObjectLayer(id, j_layer);
+}
+
 BodyHandle JoltPhysicsCore::CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) 
 {
     if (!m_physics_system || !shape_handle) return INVALID_BODY_HANDLE;
@@ -849,7 +874,11 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
             
             JPH::Vec3 j_axis(axis0.x, axis0.y, axis0.z);
             settings.mHingeAxis1 = settings.mHingeAxis2 = j_axis.Normalized();
-            settings.mNormalAxis1 = settings.mNormalAxis2 = settings.mHingeAxis1.GetNormalizedPerpendicular();
+            
+            // Calculate a reference normal perpendicular to hinge axis
+            JPH::Vec3 ref_normal = settings.mHingeAxis1.GetNormalizedPerpendicular();
+            settings.mNormalAxis1 = ref_normal;
+            settings.mNormalAxis2 = ref_normal;
             
             settings.mLimitsMin = limits_lo.x;
             settings.mLimitsMax = limits_hi.x;
@@ -933,7 +962,7 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
         JointHandle handle = m_next_joint_handle++;
         m_constraints[handle] = constraint;
 
-        if (b1 != &JPH::Body::sFixedToWorld && b2 != &JPH::Body::sFixedToWorld) {
+        if (b1 && b2) {
             m_connected_bodies[b1->GetID()].push_back(b2->GetID());
             m_connected_bodies[b2->GetID()].push_back(b1->GetID());
         }
@@ -955,7 +984,7 @@ void JoltPhysicsCore::DestroyJoint(JointHandle joint)
         const JPH::Body* b1 = two_body_c->GetBody1();
         const JPH::Body* b2 = two_body_c->GetBody2();
 
-        if (b1 != &JPH::Body::sFixedToWorld && b2 != &JPH::Body::sFixedToWorld) {
+        if (b1 && b2) {
             auto& vec1 = m_connected_bodies[b1->GetID()];
             vec1.erase(std::remove(vec1.begin(), vec1.end(), b2->GetID()), vec1.end());
             
@@ -1022,9 +1051,40 @@ void JoltPhysicsCore::SetJointMotor(JointHandle joint, int axis_num, float force
     }
 }
 
-void JoltPhysicsCore::SetJointSpringDamping(JointHandle joint, int axis_num, float erp, float cfm) {
-    // В Jolt упругость задается через SpringSettings (Frequency/Damping) 
-    // Заглушка, если потребуется тонкая настройка для специфических суставов машин.
+void JoltPhysicsCore::SetJointSpringDamping(JointHandle joint, int axis_num, float erp, float cfm)
+{
+    auto it = m_constraints.find(joint);
+    if (it == m_constraints.end()) return;
+    JPH::Constraint* c = it->second.GetPtr();
+
+    if (cfm <= 1e-8f) return;
+
+    const float h = 1.0f / 60.0f;
+    JPH::SpringSettings spring;
+    spring.mMode      = JPH::ESpringMode::StiffnessAndDamping;
+    spring.mStiffness = erp / (cfm * h);
+    spring.mDamping   = (1.0f - erp) / cfm;
+
+    switch (c->GetSubType())
+    {
+    case JPH::EConstraintSubType::Hinge:
+        if (axis_num == 0 || axis_num == -1)
+            static_cast<JPH::HingeConstraint*>(c)->SetLimitsSpringSettings(spring);
+        break;
+    case JPH::EConstraintSubType::Slider:
+        if (axis_num == 0 || axis_num == -1)
+            static_cast<JPH::SliderConstraint*>(c)->SetLimitsSpringSettings(spring);
+        break;
+    case JPH::EConstraintSubType::SixDOF:
+        if (axis_num >= 0) {
+            auto ax = axis_num == 0 ? JPH::SixDOFConstraintSettings::EAxis::RotationX
+                    : axis_num == 1 ? JPH::SixDOFConstraintSettings::EAxis::RotationY
+                                    : JPH::SixDOFConstraintSettings::EAxis::RotationZ;
+            static_cast<JPH::SixDOFConstraint*>(c)->SetLimitsSpringSettings(ax, spring);
+        }
+        break;
+    default: break;
+    }
 }
 
 void JoltPhysicsCore::SetJointAxisDir(JointHandle joint, int axis_num, const Fvector& axis) {}
@@ -1179,6 +1239,23 @@ void JoltPhysicsCore::SetBodyIgnoreStatic(BodyHandle body_handle) {
     JPH::BodyID id(body_handle);
     
     m_physics_system->GetBodyInterface().SetObjectLayer(id, Layers::NON_MOVING);
+}
+
+void JoltPhysicsCore::SetBodyCollideWithStatics(BodyHandle body_handle, bool collide) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+
+    if (collide)
+        m_ignore_static_bodies.erase(id);
+    else
+        m_ignore_static_bodies[id] = true;
+
+    JPH::EMotionType motion = m_physics_system->GetBodyLockInterface()
+        .TryGetBody(id)->GetMotionType();
+    JPH::ObjectLayer layer = collide ? Layers::MOVING : Layers::MOVING_NO_STATIC;
+
+    if (motion != JPH::EMotionType::Static)
+        m_physics_system->GetBodyInterface().SetObjectLayer(id, layer);
 }
 
 void JoltPhysicsCore::GetBodyPosition(BodyHandle body_handle, Fvector& position) const {

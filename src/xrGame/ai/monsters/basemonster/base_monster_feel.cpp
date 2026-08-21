@@ -89,6 +89,10 @@ void CBaseMonster::HitEntity(
     if (!pEntity || pEntity->getDestroy())
         return;
 
+    // Не наносить урон пока мутант в нокбэке (рэгдолл) — как у сталкеров
+    if (m_pPhysics_support && m_pPhysics_support->IsKnockedDown())
+        return;
+
     if (!EnemyMan.get_enemy())
         return;
 

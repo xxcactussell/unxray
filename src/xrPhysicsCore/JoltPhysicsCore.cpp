@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "JoltPhysicsCore.h"
+#include "xrMaterialSystem/GameMtlLib.h"
 
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Core/Factory.h>
@@ -238,8 +239,39 @@ void JoltPhysicsCore::SetDebugDrawDistance(float distance)
 
 struct CDB_TRI_Mock {
     u32 verts[3];
-    u32 dummy;
+    u16 material;
+    u16 sector;
 };
+
+static inline u32 PackTriangleUserData(u16 mtl_idx, u32 tri_idx) {
+    return (u32(mtl_idx) << 22) | (tri_idx & 0x003FFFFF);
+}
+
+static inline u16 UnpackMaterialIndex(u32 user_data) {
+    return (user_data == u32(-1)) ? GAMEMTL_NONE_IDX : static_cast<u16>(user_data >> 22);
+}
+
+static inline u32 UnpackTriangleIndex(u32 user_data) {
+    return (user_data == u32(-1)) ? u32(-1) : (user_data & 0x003FFFFF);
+}
+
+static inline bool IsPassableMaterial(const SGameMtl* mtl) {
+    if (!mtl) return false;
+    return (mtl->Flags.get() & (SGameMtl::flPassable | SGameMtl::flLiquid)) != 0;
+}
+
+static inline u32 GetTriangleUserDataForSubShape(const JPH::Shape* shape, const JPH::SubShapeID& sub_shape_id)
+{
+    if (!shape) return u32(-1);
+
+    JPH::SubShapeID remainder;
+    const JPH::Shape* leaf = shape->GetLeafShape(sub_shape_id, remainder);
+    if (leaf && leaf->GetSubType() == JPH::EShapeSubType::Mesh)
+    {
+        return static_cast<const JPH::MeshShape*>(leaf)->GetTriangleUserData(remainder);
+    }
+    return u32(-1);
+}
 
 PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris_raw, u32 t_cnt, const u32* tri_indices, u32 tri_indices_cnt) 
 {
@@ -257,20 +289,21 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
     
     for (u32 i = 0; i < actual_t_cnt; ++i) {
         u32 original_index = tri_indices ? tri_indices[i] : i;
+        u16 mtl = tris[original_index].material & 0x3FFF; // Очищаем от флагов компилятора
+        u32 packed_data = PackTriangleUserData(mtl, original_index);
+
         jolt_triangles.push_back(JPH::IndexedTriangle(
             tris[original_index].verts[0], 
             tris[original_index].verts[1],
             tris[original_index].verts[2],
             0,
-            original_index
+            packed_data
         ));
     }
-
     JPH::MeshShapeSettings settings(jolt_vertices, jolt_triangles);
     settings.mPerTriangleUserData = true;
 
     JPH::ShapeSettings::ShapeResult result = settings.Create();
-
     if (result.HasError()) {
         return nullptr;
     }
@@ -295,33 +328,6 @@ long JoltPhysicsCore::GetShapeMemoryUsage(PhysicsShapeHandle handle)
         return sizeof(shape);
     } else {
         return 0;
-    }
-}
-
-void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle, const Fvector& start, const Fvector& dir, float range, std::vector<CDBRaycastHit>& out_hits) 
-{
-    if (!handle) return;
-    
-    JPH::MeshShape* mesh_shape = static_cast<JPH::MeshShape*>(handle);
-
-    JPH::Vec3 j_start(start.x, start.y, start.z);
-    JPH::Vec3 j_dir(dir.x * range, dir.y * range, dir.z * range);
-    JPH::RayCast ray(j_start, j_dir);
-
-    JPH::RayCastSettings settings;
-    settings.mBackFaceModeTriangles = JPH::EBackFaceMode::CollideWithBackFaces;
-    settings.mTreatConvexAsSolid = false;
-
-    JPH::SubShapeIDCreator id_creator;
-    JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
-
-    mesh_shape->CastRay(ray, settings, id_creator, collector);
-
-    for (const JPH::RayCastResult& hit : collector.mHits) {
-        CDBRaycastHit cdb_hit;
-        cdb_hit.range = hit.mFraction * range;
-        cdb_hit.tri_index = mesh_shape->GetTriangleUserData(hit.mSubShapeID2); 
-        out_hits.push_back(cdb_hit);
     }
 }
 
@@ -351,7 +357,7 @@ void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle,
         if (collector.HadHit()) {
             out_hits.push_back({ 
                 collector.mHit.mFraction * range, 
-                mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2) 
+                UnpackTriangleIndex(mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2)) 
             });
         }
     } 
@@ -362,7 +368,7 @@ void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle,
         if (collector.HadHit()) {
             out_hits.push_back({ 
                 collector.mHit.mFraction * range, 
-                mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2) 
+                UnpackTriangleIndex(mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2)) 
             });
         }
     } 
@@ -373,7 +379,7 @@ void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle,
         for (const JPH::RayCastResult& hit : collector.mHits) {
             out_hits.push_back({ 
                 hit.mFraction * range, 
-                mesh_shape->GetTriangleUserData(hit.mSubShapeID2) 
+                UnpackTriangleIndex(mesh_shape->GetTriangleUserData(hit.mSubShapeID2)) 
             });
         }
         std::sort(out_hits.begin(), out_hits.end(), [](const CDBRaycastHit& a, const CDBRaycastHit& b) {
@@ -382,6 +388,33 @@ void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle,
         out_hits.erase(std::unique(out_hits.begin(), out_hits.end(), [](const CDBRaycastHit& a, const CDBRaycastHit& b) {
             return a.tri_index == b.tri_index;
         }), out_hits.end());
+    }
+}
+
+void JoltPhysicsCore::RaycastCDBModel(PhysicsShapeHandle handle, const Fvector& start, const Fvector& dir, float range, std::vector<CDBRaycastHit>& out_hits) 
+{
+    if (!handle) return;
+    
+    JPH::MeshShape* mesh_shape = static_cast<JPH::MeshShape*>(handle);
+
+    JPH::Vec3 j_start(start.x, start.y, start.z);
+    JPH::Vec3 j_dir(dir.x * range, dir.y * range, dir.z * range);
+    JPH::RayCast ray(j_start, j_dir);
+
+    JPH::RayCastSettings settings;
+    settings.mBackFaceModeTriangles = JPH::EBackFaceMode::CollideWithBackFaces;
+    settings.mTreatConvexAsSolid = false;
+
+    JPH::SubShapeIDCreator id_creator;
+    JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
+
+    mesh_shape->CastRay(ray, settings, id_creator, collector);
+
+    for (const JPH::RayCastResult& hit : collector.mHits) {
+        CDBRaycastHit cdb_hit;
+        cdb_hit.range = hit.mFraction * range;
+        cdb_hit.tri_index = UnpackTriangleIndex(mesh_shape->GetTriangleUserData(hit.mSubShapeID2));
+        out_hits.push_back(cdb_hit);
     }
 }
 
@@ -438,7 +471,6 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCompoundShape(PhysicsShapeHandle* shap
     JPH::ShapeSettings::ShapeResult result = compound_settings.Create();
     if (result.HasError())
     {
-        Msg("! [JOLT] CreateCompoundShape ERROR: %s, falling back to BoxShape", result.GetError().c_str());
         return CreateBoxShape({0.5f, 0.5f, 0.5f});
     }
 
@@ -464,6 +496,8 @@ BodyHandle JoltPhysicsCore::CreateBodyFromShape(PhysicsShapeHandle shape_handle,
     
     body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     body_settings.mMassPropertiesOverride.mMass = mass;
+    body_settings.mFriction = 0.7f;
+    body_settings.mRestitution = 0.1f;
 
     if (mass > 0.0f && mass <= 3.0f) {
         body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
@@ -496,6 +530,8 @@ BodyHandle JoltPhysicsCore::CreateBox(const Fvector& half_extents, const Fvector
 
     body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     body_settings.mMassPropertiesOverride.mMass = mass;
+    body_settings.mFriction = 0.7f;
+    body_settings.mRestitution = 0.1f;
 
     if (mass > 0.0f && mass <= 3.0f) {
         body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
@@ -527,6 +563,8 @@ BodyHandle JoltPhysicsCore::CreateSphere(float radius, const Fvector& position, 
 
     body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     body_settings.mMassPropertiesOverride.mMass = mass;
+    body_settings.mFriction = 0.7f;
+    body_settings.mRestitution = 0.1f;
 
     if (mass > 0.0f && mass <= 3.0f) {
         body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
@@ -554,6 +592,8 @@ BodyHandle JoltPhysicsCore::CreateCylinder(float radius, float half_height, cons
 
     body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
     body_settings.mMassPropertiesOverride.mMass = mass;
+    body_settings.mFriction = 0.7f;
+    body_settings.mRestitution = 0.1f;
 
     if (mass > 0.0f && mass <= 3.0f) {
         body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
@@ -711,7 +751,7 @@ bool JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
 
         virtual void AddHit(const JPH::CollideShapeResult &inResult) override {
             has_hit = true;
-            indices.push_back(m_mesh_shape->GetTriangleUserData(inResult.mSubShapeID2));
+            indices.push_back(UnpackTriangleIndex(m_mesh_shape->GetTriangleUserData(inResult.mSubShapeID2)));
         }
     };
     
@@ -737,9 +777,7 @@ void JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
 {
     if (!handle) return;
     
-    // Сразу приводим к MeshShape
     JPH::MeshShape* mesh_shape = static_cast<JPH::MeshShape*>(handle);
-
     JPH::BoxShape box(JPH::Vec3(extents.x, extents.y, extents.z));
     
     JPH::CollideShapeSettings settings;
@@ -761,7 +799,7 @@ void JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
             settings, collector, JPH::ShapeFilter()
         );
         if (collector.HadHit()) {
-            out_tri_indices.push_back(mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2));
+            out_tri_indices.push_back(UnpackTriangleIndex(mesh_shape->GetTriangleUserData(collector.mHit.mSubShapeID2)));
         }
     } 
     else 
@@ -775,8 +813,7 @@ void JoltPhysicsCore::BoxQueryCDB(PhysicsShapeHandle handle,
             settings, collector, JPH::ShapeFilter()
         );
         for (const JPH::CollideShapeResult& hit : collector.mHits) {
-            // Читаем UserData
-            out_tri_indices.push_back(mesh_shape->GetTriangleUserData(hit.mSubShapeID2));
+            out_tri_indices.push_back(UnpackTriangleIndex(mesh_shape->GetTriangleUserData(hit.mSubShapeID2)));
         }
         std::sort(out_tri_indices.begin(), out_tri_indices.end());
         out_tri_indices.erase(std::unique(out_tri_indices.begin(), out_tri_indices.end()), out_tri_indices.end());
@@ -1395,12 +1432,145 @@ public:
     }
 };
 
-void JoltPhysicsCore::MyCharacterContactListener::OnContactAdded(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact, JPH::CharacterContactSettings& ioSettings) {
+class JoltPassableShapeFilter : public JPH::ShapeFilter {
+public:
+    virtual bool ShouldCollide(const JPH::Shape* inShape2, const JPH::SubShapeID& inSubShapeIDOfShape2) const override {
+        if (inShape2) {
+            u32 user_data = inShape2->GetSubShapeUserData(inSubShapeIDOfShape2);
+            u16 mtl_idx = UnpackMaterialIndex(user_data);
+            SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+            if (user_data != u32(-1)) {
+                u16 mtl_idx = UnpackMaterialIndex(user_data);
+                SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+                if (IsPassableMaterial(mtl)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    virtual bool ShouldCollide(const JPH::Shape* inShape1, const JPH::SubShapeID& inSubShapeIDOfShape1,
+                               const JPH::Shape* inShape2, const JPH::SubShapeID& inSubShapeIDOfShape2) const override {
+        return ShouldCollide(inShape2, inSubShapeIDOfShape2);
+    }
+};
+
+void JoltPhysicsCore::MyContactListener::OnContactAdded(
+    const JPH::Body& inBody1, 
+    const JPH::Body& inBody2, 
+    const JPH::ContactManifold& inManifold, 
+    JPH::ContactSettings& ioSettings)
+{
+    const JPH::Body* static_body = inBody1.IsStatic() ? &inBody1 : (inBody2.IsStatic() ? &inBody2 : nullptr);
+    const JPH::Body* dynamic_body = inBody1.IsDynamic() ? &inBody1 : (inBody2.IsDynamic() ? &inBody2 : nullptr);
+
+    if (static_body && dynamic_body)
+    {
+        JPH::SubShapeID sub_shape = inBody1.IsStatic() ? inManifold.mSubShapeID1 : inManifold.mSubShapeID2;
+        const JPH::Shape* shape = static_body->GetShape();
+        
+        if (shape)
+        {
+            u32 user_data = GetTriangleUserDataForSubShape(shape, sub_shape);
+            if (user_data != u32(-1))
+            {
+                u16 mtl_idx = UnpackMaterialIndex(user_data); 
+                SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+                if (mtl)
+                {
+                    ioSettings.mCombinedFriction = std::sqrt(dynamic_body->GetFriction() * mtl->fPHFriction);
+                    
+                    if (mtl->Flags.test(SGameMtl::flBounceable))
+                        ioSettings.mCombinedRestitution = std::max(dynamic_body->GetRestitution(), mtl->fPHBouncing);
+                    else
+                        ioSettings.mCombinedRestitution = 0.0f;
+                    
+                    return;
+                }
+            }
+        }
+    }
+
+    ioSettings.mCombinedFriction = std::sqrt(inBody1.GetFriction() * inBody2.GetFriction());
+    ioSettings.mCombinedRestitution = std::max(inBody1.GetRestitution(), inBody2.GetRestitution());
+}
+
+void JoltPhysicsCore::MyContactListener::OnContactPersisted(
+    const JPH::Body& inBody1, 
+    const JPH::Body& inBody2, 
+    const JPH::ContactManifold& inManifold, 
+    JPH::ContactSettings& ioSettings)
+{
+    OnContactAdded(inBody1, inBody2, inManifold, ioSettings);
+}
+
+void JoltPhysicsCore::MyCharacterContactListener::OnContactAdded(
+    const JPH::CharacterVirtual* inCharacter, 
+    const JPH::CharacterContact& inContact, 
+    JPH::CharacterContactSettings& ioSettings) 
+{
+    if (!inContact.mBodyB.IsInvalid() && m_core->m_physics_system) 
+    {
+        JPH::BodyLockRead lock(m_core->m_physics_system->GetBodyLockInterface(), inContact.mBodyB);
+        if (lock.Succeeded()) 
+        {
+            const JPH::Body& body = lock.GetBody();
+            const JPH::Shape* shape = body.GetShape();
+            if (shape) 
+            {
+                u32 user_data = GetTriangleUserDataForSubShape(shape, inContact.mSubShapeIDB);
+                u16 mtl_idx   = UnpackMaterialIndex(user_data);
+                SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+
+                if (user_data != u32(-1)) 
+                {
+                    u16 mtl_idx = UnpackMaterialIndex(user_data);
+                    SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+                    if (mtl && mtl->Flags.test(SGameMtl::flPassable | SGameMtl::flLiquid)) 
+                    {
+                        ioSettings.mCanPushCharacter = false;
+                    }
+                }
+            }
+        }
+    }
+
     ProcessContact(inCharacter, inContact);
 }
 
-void JoltPhysicsCore::MyCharacterContactListener::OnContactPersisted(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact, JPH::CharacterContactSettings& ioSettings) {
-    ProcessContact(inCharacter, inContact);
+void JoltPhysicsCore::MyCharacterContactListener::OnContactPersisted(
+    const JPH::CharacterVirtual* inCharacter, 
+    const JPH::CharacterContact& inContact, 
+    JPH::CharacterContactSettings& ioSettings) 
+{
+    OnContactAdded(inCharacter, inContact, ioSettings);
+}
+
+bool JoltPhysicsCore::MyCharacterContactListener::OnContactValidate(
+    const JPH::CharacterVirtual* inCharacter,
+    const JPH::CharacterContact& inContact)
+{
+    if (inContact.mBodyB.IsInvalid() || !m_core->m_physics_system)
+        return true;
+
+    JPH::BodyLockRead lock(m_core->m_physics_system->GetBodyLockInterface(), inContact.mBodyB);
+    if (lock.Succeeded())
+    {
+        const JPH::Shape* shape = lock.GetBody().GetShape();
+        if (shape)
+        {
+            u32 user_data = GetTriangleUserDataForSubShape(shape, inContact.mSubShapeIDB);
+            if (user_data != u32(-1))
+            {
+                u16 mtl_idx = UnpackMaterialIndex(user_data);
+                SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+                if (IsPassableMaterial(mtl))
+                    return false;
+            }
+        }
+    }
+    return true;
 }
 
 void JoltPhysicsCore::MyCharacterContactListener::ProcessContact(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact) {
@@ -1420,7 +1590,8 @@ void JoltPhysicsCore::MyCharacterContactListener::ProcessContact(const JPH::Char
             }
             const JPH::Shape* shape = body.GetShape();
             if (shape) {
-                tri_user_data = shape->GetSubShapeUserData(inContact.mSubShapeIDB);
+                u32 packed_data = GetTriangleUserDataForSubShape(shape, inContact.mSubShapeIDB);
+                tri_user_data = UnpackTriangleIndex(packed_data);
             }
         }
     }
@@ -1438,6 +1609,43 @@ void JoltPhysicsCore::MyCharacterContactListener::ProcessContact(const JPH::Char
             break;
         }
     }
+}
+
+JPH::ValidateResult JoltPhysicsCore::MyContactListener::OnContactValidate(
+    const JPH::Body& inBody1, 
+    const JPH::Body& inBody2, 
+    JPH::RVec3Arg inBaseOffset, 
+    const JPH::CollideShapeResult& inCollisionResult)
+{
+    auto it = m_core->m_connected_bodies.find(inBody1.GetID());
+    if (it != m_core->m_connected_bodies.end()) {
+        const auto& connected = it->second;
+        if (std::find(connected.begin(), connected.end(), inBody2.GetID()) != connected.end()) {
+            return JPH::ValidateResult::RejectAllContactsForThisBodyPair;
+        }
+    }
+
+    const JPH::Body* static_body = inBody1.IsStatic() ? &inBody1 : (inBody2.IsStatic() ? &inBody2 : nullptr);
+    if (static_body)
+    {
+        JPH::SubShapeID sub_shape = inBody1.IsStatic() ? inCollisionResult.mSubShapeID1 : inCollisionResult.mSubShapeID2;
+        const JPH::Shape* shape = static_body->GetShape();
+        if (shape)
+        {
+            u32 tri_user_data = GetTriangleUserDataForSubShape(shape, sub_shape);
+            if (tri_user_data != u32(-1))
+            {
+                u16 mtl_idx = UnpackMaterialIndex(tri_user_data);
+                SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+                if (IsPassableMaterial(mtl))
+                {
+                    return JPH::ValidateResult::RejectContact;
+                }
+            }
+        }
+    }
+
+    return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
 }
 
 CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) {
@@ -1512,10 +1720,11 @@ void JoltPhysicsCore::SetCharacterVirtualShape(CharacterVirtualHandle handle, Ph
         if (!character) return;
         
         JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
+        JoltPassableShapeFilter shape_filter;
         if (character->SetShape(jolt_shape, 1.5f,
                              m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
                              m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
-                             body_filter, {}, *m_temp_allocator))
+                             body_filter, shape_filter, *m_temp_allocator))
         {
             character->SetInnerBodyShape(jolt_shape);
         }
@@ -1566,7 +1775,7 @@ void JoltPhysicsCore::GetCharacterVirtualGroundState(CharacterVirtualHandle hand
                 const JPH::Body& body = lock.GetBody();
                 const JPH::Shape* shape = body.GetShape();
                 if (shape) {
-                    out_state.ground_triangle_user_data = shape->GetSubShapeUserData(ground_sub_shape);
+                    out_state.ground_triangle_user_data = UnpackTriangleIndex(GetTriangleUserDataForSubShape(shape, ground_sub_shape));
                 }
             }
         }
@@ -1588,6 +1797,47 @@ void JoltPhysicsCore::SetCharacterVirtualContactCallback(CharacterVirtualHandle 
     }
 }
 
+
+class JoltPassableContactCollector : public JPH::CollideShapeCollector {
+public:
+    JPH::PhysicsSystem* m_system;
+    IPhysicsCore::CharacterContactCallbackFun m_callback;
+    void* m_user_data;
+    Fvector m_char_vel;
+
+    JoltPassableContactCollector(JPH::PhysicsSystem* sys, IPhysicsCore::CharacterContactCallbackFun cb, void* ud, const Fvector& vel)
+        : m_system(sys), m_callback(cb), m_user_data(ud), m_char_vel(vel) {}
+
+    virtual void AddHit(const JPH::CollideShapeResult& inResult) override {
+        if (inResult.mBodyID2.IsInvalid() || !m_callback || !m_system) return;
+
+        JPH::BodyLockRead lock(m_system->GetBodyLockInterface(), inResult.mBodyID2);
+        if (!lock.Succeeded()) return;
+
+        const JPH::Body& body = lock.GetBody();
+        const JPH::Shape* shape = body.GetShape();
+        if (!shape) return;
+
+        u32 user_data = GetTriangleUserDataForSubShape(shape, inResult.mSubShapeID2);
+        if (user_data == u32(-1)) return;
+
+        u16 mtl_idx = UnpackMaterialIndex(user_data);
+        SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+        
+        if (IsPassableMaterial(mtl)) {
+            JPH::RVec3 hit_pos = inResult.mContactPointOn2;
+            JPH::Vec3 hit_norm = -inResult.mPenetrationAxis.Normalized();
+
+            Fvector contact_pos = { (float)hit_pos.GetX(), (float)hit_pos.GetY(), (float)hit_pos.GetZ() };
+            Fvector contact_norm = { hit_norm.GetX(), hit_norm.GetY(), hit_norm.GetZ() };
+            u32 tri_idx = UnpackTriangleIndex(user_data);
+
+            m_callback(m_user_data, contact_pos, contact_norm, m_char_vel, tri_idx, INVALID_BODY_HANDLE, nullptr, true);
+        }
+    }
+};
+
+
 void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) {
     auto it = m_characters.find(handle);
     if (it != m_characters.end()) {
@@ -1598,8 +1848,6 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
             gravity_factor = m_character_gravity_factors[handle];
         }
 
-        // X-Ray doesn't automatically apply gravity to velocity when not on ground
-        // CharacterVirtual requires us to explicitly add gravity to mLinearVelocity
         JPH::Vec3 current_vel = character->GetLinearVelocity();
         JPH::Vec3 jolt_gravity(gravity.x, gravity.y, gravity.z);
         JPH::Vec3 applied_gravity = jolt_gravity * gravity_factor;
@@ -1614,7 +1862,6 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
             }
         } else {
             current_vel += applied_gravity * delta_time;
-            // ЖЕСТКИЙ ЛИМИТ: Не даем скорости падения превысить 100 м/с, чтобы не пробить геометрию
             if (current_vel.GetY() < -100.0f) {
                 current_vel.SetY(-100.0f);
             }
@@ -1636,6 +1883,7 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
         update_settings.mWalkStairsStepUp = character->GetUp() * 0.4f;
 
         JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
+        JoltPassableShapeFilter shape_filter;
 
         character->ExtendedUpdate(
             delta_time,
@@ -1643,8 +1891,37 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
             update_settings,
             m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
             m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
-            body_filter, {}, *m_temp_allocator
+            body_filter, shape_filter, *m_temp_allocator
         );
+
+        auto cb_it = m_character_callbacks.find(handle);
+        if (cb_it != m_character_callbacks.end() && cb_it->second.callback) {
+            JPH::CollideShapeSettings collide_settings;
+            collide_settings.mBackFaceMode = JPH::EBackFaceMode::CollideWithBackFaces;
+
+            Fvector vel;
+            GetCharacterVirtualVelocity(handle, vel);
+
+            JoltPassableContactCollector passable_collector(
+                m_physics_system,
+                cb_it->second.callback,
+                cb_it->second.user_data,
+                vel
+            );
+
+            m_physics_system->GetNarrowPhaseQuery().CollideShape(
+                character->GetShape(),
+                JPH::Vec3::sReplicate(1.0f),
+                character->GetCenterOfMassTransform(),
+                collide_settings,
+                character->GetPosition(),
+                passable_collector,
+                m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
+                m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
+                body_filter,
+                JPH::ShapeFilter()
+            );
+        }
     }
 }
 
@@ -1693,6 +1970,8 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         jph_part.mPosition = JPH::Vec3(part.position.x, part.position.y, part.position.z);
         JPH::Quat part_rot(-part.rotation.x, -part.rotation.y, -part.rotation.z, part.rotation.w);
         jph_part.mRotation = part_rot.Normalized();
+        jph_part.mFriction = 0.8f;
+        jph_part.mRestitution = 0.02f;
         
         float mass = std::max(part.mass, 0.05f);
         jph_part.mMassPropertiesOverride.mMass = mass;

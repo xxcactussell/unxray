@@ -365,14 +365,15 @@ void CCharacterPhysicsSupport::UpdateCollisionActivatingDellay()
 
 void CCharacterPhysicsSupport::in_shedule_Update(u32 DT)
 {
-    /// VERIFY( 0 );
-
-    // CPHSkeleton::Update(DT);
     if (m_collision_activating_delay)
         UpdateCollisionActivatingDellay();
 
     CPHDestroyable::SheduleUpdate(DT);
-    movement()->in_shedule_Update(DT);
+
+    if (!IsKnockedDown())
+        movement()->in_shedule_Update(DT);
+    else
+        movement()->SetVelocity(0, 0, 0);
 #if 0
 	if( anim_mov_state.active )
 	{
@@ -1639,6 +1640,23 @@ void CCharacterPhysicsSupport::in_ChangeVisual()
         m_death_anims.setup(KA, m_EntityAlife.cNameSect().c_str(), pSettings);
         if (Type() != etBitting)
             m_hit_animations.SetupHitMotions(*KA);
+    }
+
+    // Re-register Active Ragdoll on visual change (e.g. bloodsucker predator invisibility)
+    if (m_active_ragdoll)
+    {
+        CActiveRagdollManager::GetInstance().UnregisterRagdoll(m_active_ragdoll);
+        m_active_ragdoll = nullptr;
+    }
+    IKinematics* k = smart_cast<IKinematics*>(m_EntityAlife.Visual());
+    if (k && m_eType != etActor)
+    {
+        m_active_ragdoll = CActiveRagdollManager::GetInstance().RegisterRagdoll(k, &m_EntityAlife);
+        if (m_active_ragdoll)
+        {
+            m_active_ragdoll->SetGetUpCallback(fastdelegate::MakeDelegate(this, &CCharacterPhysicsSupport::OnActiveRagdollGetUp));
+            m_active_ragdoll->SetStartGetUpCallback(fastdelegate::MakeDelegate(this, &CCharacterPhysicsSupport::OnActiveRagdollStartGetUp));
+        }
     }
 
     if (!m_physics_skeleton && !m_pPhysicsShell)

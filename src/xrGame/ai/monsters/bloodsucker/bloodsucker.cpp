@@ -334,7 +334,7 @@ void CAI_Bloodsucker::vfAssignBones()
         smart_cast<IKinematics*>(Visual())->LL_BoneID("bip01_spine"));
     bone_head = &smart_cast<IKinematics*>(Visual())->LL_GetBoneInstance(
         smart_cast<IKinematics*>(Visual())->LL_BoneID("bip01_head"));
-    if (!PPhysicsShell()) //нельзя ставить колбеки, если создан физ шел - у него стоят свои колбеки!!!
+    if (!PPhysicsShell() && (!character_physics_support() || !character_physics_support()->is_active_ragdoll())) //нельзя ставить колбеки, если создан физ шел или ActiveRagdoll - у него стоят свои колбеки!!!
     {
         bone_spine->set_callback(bctCustom, BoneCallback, this);
         bone_head->set_callback(bctCustom, BoneCallback, this);
@@ -677,6 +677,7 @@ void CAI_Bloodsucker::predator_start()
         return;
 
     cNameVisual_set(m_visual_predator);
+    character_physics_support()->in_ChangeVisual();
     CDamageManager::reload(cNameSect().c_str(), "damage", pSettings);
 
     control().animation().restart();
@@ -744,10 +745,11 @@ void CAI_Bloodsucker::HitEntity(
 bool CAI_Bloodsucker::in_solid_state() { return true; }
 void CAI_Bloodsucker::Hit(SHit* pHDS)
 {
-    if (!collision_hit_off)
+    if (collision_hit_off && pHDS && pHDS->hit_type == ALife::eHitTypeStrike)
     {
-        inherited::Hit(pHDS);
+        return;
     }
+    inherited::Hit(pHDS);
 }
 
 void CAI_Bloodsucker::start_invisible_predator()

@@ -197,18 +197,25 @@ void CActiveRagdollController::Initialize(IKinematics* kinematics, IPhysicsShell
     m_mapper.Build(kinematics);
     
     if (m_mapper.m_part_to_bone.empty()) {
+        Msg("! ActiveRagdoll: no physics bones found for %s, ragdoll disabled", 
+            holder ? holder->ObjectName() : "?");   // holder тут ещё не передан в Build(), нужно прокинуть имя иначе
+    
         m_state = ERagdollState::Inactive;
         return;
     }
     
     SRagdollSettings settings = CActiveRagdollSettingsBuilder::BuildSettings(kinematics, m_mapper);
     if (settings.parts.empty()) {
+        Msg("! ActiveRagdoll: BuildSettings produced 0 parts for %s, ragdoll disabled", 
+            holder ? holder->ObjectName() : "?");
         m_state = ERagdollState::Inactive;
         return;
     }
 
     m_ragdoll_handle = GetPhysicsCore()->CreateRagdoll(settings);
     if (m_ragdoll_handle == INVALID_RAGDOLL_HANDLE) {
+        Msg("! ActiveRagdoll: CreateRagdoll failed (invalid handle) for %s, ragdoll disabled", 
+            holder ? holder->ObjectName() : "?");
         m_state = ERagdollState::Inactive;
         return;
     }

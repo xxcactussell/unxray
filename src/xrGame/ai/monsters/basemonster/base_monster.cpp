@@ -332,13 +332,19 @@ void CBaseMonster::UpdateCL()
 
     if (g_Alive())
     {
-        update_enemy_accessible_and_at_home_info();
-        CStepManager::update(false);
+        if (!m_pPhysics_support || !m_pPhysics_support->IsKnockedDown())
+        {
+            update_enemy_accessible_and_at_home_info();
+            CStepManager::update(false);
 
-        update_pos_by_grouping_behaviour();
+            update_pos_by_grouping_behaviour();
+        }
     }
 
-    control().update_frame();
+    if (!m_pPhysics_support || !m_pPhysics_support->IsKnockedDown())
+    {
+        control().update_frame();
+    }
 
     m_pPhysics_support->in_UpdateCL();
 }
@@ -367,9 +373,11 @@ void CBaseMonster::shedule_Update(u32 dt)
     m_base_aura.update_schedule();
     m_radiation_aura.update_schedule();
 
-    control().update_schedule();
-
-    Morale.update_schedule(dt);
+    if (!m_pPhysics_support || !m_pPhysics_support->IsKnockedDown())
+    {
+        control().update_schedule();
+        Morale.update_schedule(dt);
+    }
 
     m_anomaly_detector->update_schedule();
 

@@ -17,6 +17,9 @@ void CBaseMonster::Think()
     if (!g_Alive() || getDestroy())
         return;
 
+    if (m_pPhysics_support && m_pPhysics_support->IsKnockedDown())
+        return;
+
     // Инициализировать
     InitThink();
     anim().ScheduledInit();

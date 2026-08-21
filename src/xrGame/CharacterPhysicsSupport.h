@@ -134,6 +134,7 @@ public:
     MotionID SelectGetUpAnimation(bool& animation_movement_controller);
     void OnGetUpAnimationEnd();
     bool IsKnockedDown() const;
+    IC bool is_active_ragdoll() const { return m_active_ragdoll != nullptr; }
     void in_NetSave(NET_Packet& P);
     void in_ChangeVisual();
     void in_Die();

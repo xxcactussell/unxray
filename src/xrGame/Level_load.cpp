@@ -37,26 +37,10 @@ bool CLevel::Load_GameSpecific_After()
 {
     ZoneScoped;
 
-    // Сборка статической физической геометрии (без порталов и flPassable)
     auto static_model = ObjectSpace.GetStaticModel();
     if (static_model && static_model->get_tris_count() > 0)
     {
-        xr_vector<u32> solid_triangles;
-        solid_triangles.reserve(static_model->get_tris_count());
-        
-        CDB::TRI* tris = static_model->get_tris();
-        u32 count = static_model->get_tris_count();
-        
-        for (u32 i = 0; i < count; ++i)
-        {
-            const SGameMtl* mtl = GMLib.GetMaterialByIdx(tris[i].material);
-            if (mtl && !mtl->Flags.test(SGameMtl::flPassable))
-            {
-                solid_triangles.push_back(i);
-            }
-        }
-        
-        static_model->build_physics_model(solid_triangles.data(), solid_triangles.size());
+        static_model->build_physics_model(nullptr, static_model->get_tris_count());
     }
 
     R_ASSERT(m_StaticParticles.empty());

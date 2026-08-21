@@ -51,6 +51,9 @@
     <ProjectReference Include="$(SolutionDir)..\Externals\Jolt.vcxproj">
       <Project>{A3D739AE-4E46-4C5C-A77E-93C0A040B480}</Project>
     </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)xrMaterialSystem\xrMaterialSystem.vcxproj">
+      <Project>{2c419512-6eee-4707-bc51-2e834855552e}</Project>
+    </ProjectReference> 
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

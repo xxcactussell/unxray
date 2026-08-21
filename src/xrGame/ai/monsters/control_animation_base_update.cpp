@@ -268,31 +268,32 @@ void CControlAnimationBase::SelectVelocities()
         }
     }
 
-    // финальная корректировка скорости анимации по физической скорости
+    Fvector cur_vel;
+    m_object->character_physics_support()->movement()->GetCharacterVelocity(cur_vel);
+    float real_linear_velocity = _sqrt(cur_vel.x * cur_vel.x + cur_vel.z * cur_vel.z); // Только XZ!
 
     if (!m_object->state_invisible && !fis_zero(anim_vel.linear))
     {
         EMotionAnim new_anim;
-        float a_speed;
+        float a_speed = 1.0f;
 
-        if (accel_chain_get(m_man->movement().real_velocity(), cur_anim_info().get_motion(), new_anim, a_speed))
+        if (accel_chain_get(real_linear_velocity, cur_anim_info().get_motion(), new_anim, a_speed))
         {
             cur_anim_info().set_motion(new_anim);
-
-            if (a_speed < 0.5f)
-                a_speed += 0.5f;
-
+            // Зажимаем коэффициент скорости анимации в адекватные рамки
+            a_speed = std::clamp(a_speed, 0.6f, 1.4f);
             cur_anim_info().speed._set_target(a_speed);
         }
         else
+        {
             cur_anim_info().speed._set_target(-1.f);
+        }
     }
     else
         cur_anim_info().speed._set_target(-1.f);
 
     set_animation_speed();
 
-    // установка угловой скорости
     if (m_object->state_invisible)
         m_object->dir().set_heading_speed(path_vel.angular);
     else

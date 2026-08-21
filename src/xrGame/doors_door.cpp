@@ -31,11 +31,6 @@ door::door(CPhysicObject* object)
 
     R_ASSERT(m_object.get_door_vectors(m_closed_vector, m_open_vector));
 
-    Fmatrix invert;
-    invert.invert(m_object.XFORM());
-    invert.transform_dir(m_open_vector);
-    invert.transform_dir(m_closed_vector);
-
     float const length = 1.1f;
     m_open_vector.mul(length);
     m_closed_vector.mul(length);

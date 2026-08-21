@@ -943,16 +943,14 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
             settings.mNormalAxis1 = ref_normal;
             settings.mNormalAxis2 = ref_normal;
             
-            float min_limit = std::min(limits_lo.x, limits_hi.x);
-            float max_limit = std::max(limits_lo.x, limits_hi.x);
+            float src_min = limits_lo.x;
+            float src_max = limits_hi.x;
 
-            if (min_limit <= -float(M_PI) && max_limit >= float(M_PI)) {
-                settings.mLimitsMin = -JPH::JPH_PI;
-                settings.mLimitsMax = JPH::JPH_PI;
-            } else {
-                settings.mLimitsMin = std::clamp(min_limit, -JPH::JPH_PI, JPH::JPH_PI);
-                settings.mLimitsMax = std::clamp(max_limit, -JPH::JPH_PI, JPH::JPH_PI);
-            }
+            float jolt_min = -src_max;
+            float jolt_max = -src_min;
+
+            settings.mLimitsMin = std::clamp(jolt_min, -JPH::JPH_PI, JPH::JPH_PI);
+            settings.mLimitsMax = std::clamp(jolt_max, -JPH::JPH_PI, JPH::JPH_PI);
 
             settings.mLimitsSpringSettings.mMode = JPH::ESpringMode::FrequencyAndDamping;
             settings.mLimitsSpringSettings.mFrequency = 20.0f;

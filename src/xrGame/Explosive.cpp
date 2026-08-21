@@ -524,15 +524,14 @@ void CExplosive::OnAfterExplosion()
         CParticlesObject::Destroy(m_pExpParticle);
         m_pExpParticle = NULL;
     }
-    //ликвидировать сам объект
-    if (cast_game_object()->Local())
-        cast_game_object()->DestroyObject();
-
-    //	NET_Packet			P;
-    //	cast_game_object()->u_EventGen			(P,GE_DESTROY,cast_game_object()->ID());
-    //	//		Msg					("ge_destroy: [%d] - %s",ID(),*cName());
-    //	if (cast_game_object()->Local()) cast_game_object()->u_EventSend			(P);
+    
+    CGameObject* go = cast_game_object();
+    if (go && go->Local())
+    {
+        go->setDestroy(TRUE);
+    }
 }
+
 void CExplosive::OnBeforeExplosion()
 {
     m_bAlreadyHidden = false;

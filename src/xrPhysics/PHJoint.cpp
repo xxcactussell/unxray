@@ -93,10 +93,19 @@ void CPHJoint::CreateHinge()
     CalcAxis(0, axis0, lo, hi, first_matrix, second_matrix);
 
     Fvector ref_normal;
-    ref_normal.set(second_matrix.i);
+    if (b1 != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        first_matrix.transform_dir(ref_normal, Fvector().set(1.f, 0.f, 0.f));
+    else
+        pShell->mXFORM.transform_dir(ref_normal, Fvector().set(1.f, 0.f, 0.f));
+
     ref_normal.sub(Fvector(axis0).mul(axis0.dotproduct(ref_normal)));
     if (ref_normal.square_magnitude() < 0.001f)
-        ref_normal.set(second_matrix.k);
+    {
+        if (b1 != INVALID_CHARACTER_VIRTUAL_HANDLE)
+            first_matrix.transform_dir(ref_normal, Fvector().set(0.f, 0.f, 1.f));
+        else
+            pShell->mXFORM.transform_dir(ref_normal, Fvector().set(0.f, 0.f, 1.f));
+    }
     ref_normal.normalize_safe();
 
     float jolt_lo = -hi;

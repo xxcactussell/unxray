@@ -147,16 +147,15 @@ static void door_ignore(
 )
 {
     CPhysicsShellHolder* collide_obj = retrive_collide_object(bo1, geom1, geom2);
-    if (!collide_obj || collide_obj->cast_actor())
+    if (!collide_obj || collide_obj->cast_actor() || collide_obj->cast_stalker() || collide_obj->cast_custom_monster())
         return;
 
     CPhysicsShell* ph_shell = collide_obj->PPhysicsShell();
     if (!ph_shell)
     {
-        do_colide = false; //? must be AI
+        do_colide = false;
         return;
     }
-    VERIFY(ph_shell);
 
     if (ph_shell->HasTracedGeoms())
         return;
@@ -327,20 +326,18 @@ void CPhysicObject::UpdateCL()
 {
     inherited::UpdateCL();
 
-    //Если наш физический объект анимированный, то
-    //двигаем объект за анимацией
-    if (m_pPhysicsShell->PPhysicsShellAnimator())
+    if (m_pPhysicsShell && m_pPhysicsShell->PPhysicsShellAnimator())
     {
-        m_pPhysicsShell->AnimatorOnFrame();
+        m_pPhysicsShell->AnimatorOnFrame(); //
     }
 
     if (!IsGameTypeSingle())
     {
-        Interpolate();
+        Interpolate(); //
     }
 
-    m_anim_script_callback.update(*this);
-    PHObjectPositionUpdate();
+    m_anim_script_callback.update(*this); //
+    PHObjectPositionUpdate(); //
 
 #ifdef DEBUG
     if (dbg_draw_doors)
@@ -351,9 +348,10 @@ void CPhysicObject::UpdateCL()
 #endif
 
     if (!is_active(bones_snd_player))
-        return;
-    bones_snd_player->update(Device.fTimeDelta, *this);
+        return; //
+    bones_snd_player->update(Device.fTimeDelta, *this); //
 }
+
 void CPhysicObject::PHObjectPositionUpdate()
 {
     if (m_pPhysicsShell)

@@ -1201,6 +1201,7 @@ void JoltPhysicsCore::SetBodyLinearVelocity(BodyHandle body_handle, const Fvecto
     JPH::BodyID id(body_handle);
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
     
+    body_interface.ActivateBody(id); // Гарантируем пробуждение
     body_interface.SetLinearVelocity(id, JPH::Vec3(vel.x, vel.y, vel.z));
 }
 
@@ -1220,6 +1221,7 @@ void JoltPhysicsCore::SetBodyAngularVelocity(BodyHandle body_handle, const Fvect
     JPH::BodyID id(body_handle);
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
     
+    body_interface.ActivateBody(id); // Гарантируем пробуждение
     body_interface.SetAngularVelocity(id, JPH::Vec3(vel.x, vel.y, vel.z));
 }
 
@@ -1233,7 +1235,9 @@ void JoltPhysicsCore::SetBodyGravityFactor(BodyHandle body_handle, float factor)
 void JoltPhysicsCore::ApplyLinearImpulse(BodyHandle body_handle, const Fvector& impulse) {
     if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
     JPH::BodyID id(body_handle);
-    m_physics_system->GetBodyInterface().AddImpulse(id, JPH::Vec3(impulse.x, impulse.y, impulse.z));
+    JPH::BodyInterface& bi = m_physics_system->GetBodyInterface();
+    bi.ActivateBody(id);
+    bi.AddImpulse(id, JPH::Vec3(impulse.x, impulse.y, impulse.z));
 }
 
 void JoltPhysicsCore::ApplyPointImpulse(BodyHandle body_handle, const Fvector& impulse, const Fvector& point) {
@@ -1529,22 +1533,32 @@ void JoltPhysicsCore::MyCharacterContactListener::OnContactAdded(
 {
     if (!inContact.mBodyB.IsInvalid() && m_core->m_physics_system) 
     {
-        JPH::BodyLockRead lock(m_core->m_physics_system->GetBodyLockInterface(), inContact.mBodyB);
+        JPH::BodyLockWrite lock(m_core->m_physics_system->GetBodyLockInterface(), inContact.mBodyB);
         if (lock.Succeeded()) 
         {
-            const JPH::Body& body = lock.GetBody();
+            JPH::Body& body = lock.GetBody();
+            
+            if (body.IsDynamic())
+            {
+                JPH::Vec3 char_vel = inCharacter->GetLinearVelocity();
+                float vel_sq = char_vel.LengthSq();
+                if (vel_sq > 0.01f)
+                {
+                    JPH::Vec3 push_dir = -inContact.mContactNormal;
+                    float push_force = inCharacter->GetMass() * 0.4f;
+                    body.AddImpulse(push_dir * push_force, inContact.mPosition);
+                }
+            }
+
             const JPH::Shape* shape = body.GetShape();
             if (shape) 
             {
                 u32 user_data = GetTriangleUserDataForSubShape(shape, inContact.mSubShapeIDB);
-                u16 mtl_idx   = UnpackMaterialIndex(user_data);
-                SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
-
                 if (user_data != u32(-1)) 
                 {
                     u16 mtl_idx = UnpackMaterialIndex(user_data);
                     SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
-                    if (mtl && mtl->Flags.test(SGameMtl::flPassable | SGameMtl::flLiquid)) 
+                    if (IsPassableMaterial(mtl)) 
                     {
                         ioSettings.mCanPushCharacter = false;
                     }

@@ -56,33 +56,45 @@ void DamageReceiverCollisionCallback(bool& do_colide, bool bo1, CPhysicsGeom* ge
 void BreakableObjectCollisionCallback(
     bool& do_colide, bool bo1, CPhysicsGeom* geom1, CPhysicsGeom* geom2, const Fvector& contact_normal, const Fvector& contact_pos, SGameMtl* material_1, SGameMtl* material_2)
 {
-    VERIFY(geom1);
-    VERIFY(geom2);
+    VERIFY(geom1 && geom2);
 
-    ICollisionDamageReceiver* damag_receiver = 0;
-    CharacterVirtualHandle body = INVALID_CHARACTER_VIRTUAL_HANDLE;
-    float norm_sign = 0;
+    ICollisionDamageReceiver* damag_receiver = nullptr;
+    CPhysicsGeom* hitter_geom = bo1 ? geom2 : geom1;
+    CPhysicsGeom* target_geom = bo1 ? geom1 : geom2;
+    float norm_sign = bo1 ? -1.f : 1.f;
 
-    if (bo1)
+    if (!target_geom->ph_ref_object)
+        return;
+
+    damag_receiver = target_geom->ph_ref_object->ObjectPhCollisionDamageReceiver();
+    if (!damag_receiver)
+        return;
+
+    Fvector hitter_vel = {0.f, 0.f, 0.f};
+    float hitter_mass = 10.0f;
+
+    if (hitter_geom->m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        VERIFY(geom1->ph_ref_object);
-        damag_receiver = geom1->ph_ref_object->ObjectPhCollisionDamageReceiver();
-        body = geom2->m_char_handle;
-        norm_sign = -1.f;
+        GetPhysicsCore()->GetBodyLinearVelocity(hitter_geom->m_char_handle, hitter_vel);
+        hitter_mass = GetPhysicsCore()->GetBodyMass(hitter_geom->m_char_handle);
+    }
+
+    float norm_speed = hitter_vel.magnitude();
+    
+    float impact_impulse = norm_speed * hitter_mass;
+    float c_damage = impact_impulse * 0.1f;
+
+    Fvector dir;
+    if (norm_speed > 0.1f)
+    {
+        dir.set(hitter_vel);
+        dir.normalize();
     }
     else
     {
-        VERIFY(geom2->ph_ref_object);
-        damag_receiver = geom2->ph_ref_object->ObjectPhCollisionDamageReceiver();
-        body = geom1->m_char_handle;
-        norm_sign = 1.f;
+        dir.set(-contact_normal.x * norm_sign, -contact_normal.y * norm_sign, -contact_normal.z * norm_sign);
     }
-    VERIFY(damag_receiver);
 
-    float c_damage = E_NlS(body, contact_normal, norm_sign);
-    Fvector dir;
-    dir.set(-contact_normal.x * norm_sign, -contact_normal.y * norm_sign, -contact_normal.z * norm_sign);
-    
     Fvector pos = contact_pos;
 
     damag_receiver->CollisionHit(u16(-1), u16(-1), c_damage, dir, pos);

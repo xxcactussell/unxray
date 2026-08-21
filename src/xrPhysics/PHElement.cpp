@@ -22,6 +22,8 @@
 
 extern CPHWorld* ph_world;
 
+static const float GLOBAL_IMPULSE_SCALE = 2.4f;
+
 CPHElement::CPHElement() 
 {
     m_w_limit = default_w_limit;
@@ -534,7 +536,7 @@ void CPHElement::applyImpulseVsMC(const Fvector& pos, const Fvector& dir, float 
         
     Fvector impulse;
     impulse.set(dir);
-    impulse.mul(val); // Jolt takes direct impulse, not force (val / fixed_step)
+    impulse.mul(val* GLOBAL_IMPULSE_SCALE);
     
     Fmatrix tr;
     GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
@@ -554,7 +556,7 @@ void CPHElement::applyImpulseVsGF(const Fvector& pos, const Fvector& dir, float 
         
     Fvector impulse;
     impulse.set(dir);
-    impulse.mul(val);
+    impulse.mul(val* GLOBAL_IMPULSE_SCALE);
     
     GetPhysicsCore()->ApplyPointImpulse(m_char_handle, impulse, pos);
 }
@@ -923,7 +925,7 @@ void CPHElement::applyImpulse(const Fvector& dir, float val)
         
     Fvector impulse;
     impulse.set(dir);
-    impulse.mul(val);
+    impulse.mul(val * GLOBAL_IMPULSE_SCALE);
     GetPhysicsCore()->ApplyLinearImpulse(m_char_handle, impulse);
 }
 
@@ -1239,7 +1241,12 @@ void CPHElement::ClearDestroyInfo() { xr_delete(m_fratures_holder); }
 
 void CPHElement::GetPointVel(Fvector& res_vel, const Fvector& point) const
 {
-    res_vel.set(0, 0, 0);
+    if (!isActive() || m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        res_vel.set(0, 0, 0);
+        return;
+    }
+    GetPhysicsCore()->GetBodyPointVelocity(m_char_handle, point, res_vel);
 }
 
 #ifdef DEBUG

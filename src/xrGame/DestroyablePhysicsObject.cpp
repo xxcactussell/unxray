@@ -100,24 +100,24 @@ void CDestroyablePhysicsObject::Hit(SHit* pHDS)
             Destroy();
     }
 }
+
 void CDestroyablePhysicsObject::Destroy()
 {
     VERIFY(!physics_world()->Processing());
     const CGameObject* who_object = smart_cast<const CGameObject*>(FatalHit().initiator());
     callback(GameObject::eDeath)(lua_game_object(), who_object ? who_object->lua_game_object() : 0);
+    
     CPHDestroyable::Destroy(ID(), "physic_destroyable_object");
+    
     if (m_destroy_sound._handle())
     {
         m_destroy_sound.play_at_pos(this, Position());
     }
     if (m_destroy_particles.c_str())
     {
-        // Fvector dir;dir.set(0,1,0);
         Fmatrix m;
         m.identity();
-        /////////////////////////////////////////////////
         m.j.set(0, 1.f, 0);
-        ///////////////////////////////////////////////
 
         Fvector hdir;
         hdir.set(CPHDestroyable::FatalHit().direction());
@@ -134,8 +134,10 @@ void CDestroyablePhysicsObject::Destroy()
         m.k.crossproduct(m.i, m.j);
         StartParticles(m_destroy_particles, m, ID());
     }
+    
     SheduleRegister();
 }
+
 void CDestroyablePhysicsObject::InitServerObject(CSE_Abstract* D)
 {
     CSE_PHSkeleton* ps = smart_cast<CSE_PHSkeleton*>(D);

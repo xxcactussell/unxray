@@ -105,6 +105,8 @@ void CPHDestroyable::InitServerObject(CSE_Abstract* D)
 void CPHDestroyable::PhysicallyRemoveSelf()
 {
     CPhysicsShellHolder* obj = PPhysicsShellHolder();
+    if (!obj)
+        return;
 
     CActor* A = smart_cast<CActor*>(obj);
     if (A)
@@ -113,9 +115,10 @@ void CPHDestroyable::PhysicallyRemoveSelf()
     }
     else
     {
-        // obj->PPhysicsShell()->PureStep();
-        obj->PPhysicsShell()->Disable();
-        obj->PPhysicsShell()->DisableCollision();
+        if (obj->PPhysicsShell())
+        {
+            obj->PPhysicsShell()->Deactivate();
+        }
     }
 
     obj->setVisible(FALSE);
@@ -128,7 +131,6 @@ void CPHDestroyable::PhysicallyRemovePart(CPHDestroyableNotificate* dn)
     CPhysicsShell* s = sh->PPhysicsShell();
     sh->setVisible(FALSE);
     sh->setEnabled(FALSE);
-    s->Disable();
     s->DisableCollision();
 }
 

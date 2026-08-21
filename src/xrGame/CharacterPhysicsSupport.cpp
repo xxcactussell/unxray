@@ -618,25 +618,25 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
 {
     if (!m_active_ragdoll || !m_EntityAlife.g_Alive()) return;
     
-    // Reposition entity object to the settled pelvis position
     Fvector pelvis_pos = m_active_ragdoll->GetSimulatedPosition(0);
     if (_valid(pelvis_pos))
     {
         m_EntityAlife.Position() = pelvis_pos;
         m_EntityAlife.XFORM().c = pelvis_pos;
+        if (m_PhysicMovementControl)
+        {
+            m_PhysicMovementControl->SetPosition(pelvis_pos);
+            m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
+        }
     }
 
     CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
     bool is_wounded = false;
     if (stalker)
     {
-        // 1. Check if already marked wounded in engine
         if (stalker->wounded())
-        {
             is_wounded = true;
-        }
 
-        // 2. Force Lua xr_wounded to evaluate the new health against the NPC's actual custom logic
         if (!is_wounded && GEnv.ScriptEngine && GEnv.ScriptEngine->lua())
         {
             string256 lua_code;
@@ -650,13 +650,9 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
             
             int err = luaL_loadbuffer(GEnv.ScriptEngine->lua(), lua_code, xr_strlen(lua_code), "@ragdoll_wound_update");
             if (!err)
-            {
                 lua_pcall(GEnv.ScriptEngine->lua(), 0, 0, 0);
-            }
 
-            // Check if Lua wound_manager marked stalker as wounded
             is_wounded = stalker->wounded();
-            
         }
     }
 
@@ -673,11 +669,9 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
 
     if (stalker && is_wounded)
     {
-        // Smoothly hand off directly into the wounded state without standing up
         stalker->wounded(true);
         m_get_up_motion.invalidate();
 
-        // Inform state_mgr that the character is already lying down so it doesn't play waunded_1_in
         if (GEnv.ScriptEngine && GEnv.ScriptEngine->lua())
         {
             string256 lua_code;
@@ -690,9 +684,7 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
                 stalker->ID());
             int err = luaL_loadbuffer(GEnv.ScriptEngine->lua(), lua_code, xr_strlen(lua_code), "@ragdoll_state_mgr_set");
             if (!err)
-            {
                 lua_pcall(GEnv.ScriptEngine->lua(), 0, 0, 0);
-            }
         }
     }
 
@@ -705,6 +697,15 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
             CStalkerAnimationManager::AnimationCallback(this, &CCharacterPhysicsSupport::OnGetUpAnimationEnd));
         stalker->animation().global().reset();
         stalker->animation().global().make_inactual();
+    }
+    else if (m_eType == etBitting)
+    {
+        if (ka && m_get_up_motion.valid())
+        {
+            ka->PlayCycle(m_get_up_motion);
+        }
+        
+        OnGetUpAnimationEnd();
     }
 }
 
@@ -732,11 +733,20 @@ void CCharacterPhysicsSupport::OnGetUpAnimationEnd()
             stalker->movement().enable_movement(true);
         }
     }
+    else
+    {
+        CCustomMonster* monster = smart_cast<CCustomMonster*>(&m_EntityAlife);
+        if (monster)
+        {
+            monster->movement().enable_movement(true);
+        }
+    }
 
     if (m_PhysicMovementControl)
     {
         m_PhysicMovementControl->SetPosition(m_EntityAlife.Position());
         m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
+        m_PhysicMovementControl->EnableCharacter();
     }
 
     if (m_active_ragdoll)
@@ -844,12 +854,37 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
             if (H.type() == ALife::eHitTypeFireWound && k && H.bone() < k->LL_BoneCount()) {
                 LPCSTR bone_name = k->LL_BoneName_dbg(H.bone());
                 if (bone_name && (strstr(bone_name, "leg") || strstr(bone_name, "thigh") || strstr(bone_name, "calf") || strstr(bone_name, "foot"))) {
-                    is_leg_hit = (is_shotgun || is_sniper || H.damage() >= 0.4f);
+                    is_leg_hit = (is_shotgun || is_sniper || H.damage() >= 0.3f);
                 }
             }
 
-            if (is_explosion || is_heavy_strike || is_heavy_firearm || is_leg_hit || 
-                (m_active_ragdoll && (m_active_ragdoll->GetState() == ERagdollState::GettingUp || m_active_ragdoll->GetState() == ERagdollState::MotorRampingUp)))
+            bool can_knockdown = true;
+            if (m_eType == etBitting)
+            {
+                CLASS_ID cls = m_EntityAlife.CLS_ID;
+
+                if (cls == CLSID_AI_GIANT || 
+                    cls == CLSID_AI_POLTERGEIST || 
+                    cls == CLSID_AI_CONTROLLER || 
+                    cls == CLSID_AI_BURER)
+                {
+                    can_knockdown = false;
+                }
+                else
+                {
+                    LPCSTR sect = m_EntityAlife.cNameSect().c_str();
+                    if (strstr(sect, "gigant") || 
+                        strstr(sect, "polter") || 
+                        strstr(sect, "burer") || 
+                        strstr(sect, "controller"))
+                    {
+                        can_knockdown = false;
+                    }
+                }
+            }
+
+            if (can_knockdown && (is_explosion || is_heavy_strike || is_heavy_firearm || is_leg_hit || 
+                (m_active_ragdoll && (m_active_ragdoll->GetState() == ERagdollState::GettingUp || m_active_ragdoll->GetState() == ERagdollState::MotorRampingUp))))
             {
                 CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
                 if (stalker)

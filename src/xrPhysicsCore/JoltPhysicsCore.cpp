@@ -930,16 +930,33 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
             settings.mSpace = JPH::EConstraintSpace::WorldSpace;
             settings.mPoint1 = settings.mPoint2 = j_anchor;
             
-            JPH::Vec3 j_axis(axis0.x, axis0.y, axis0.z);
-            settings.mHingeAxis1 = settings.mHingeAxis2 = j_axis.Normalized();
+            JPH::Vec3 j_axis = JPH::Vec3(axis0.x, axis0.y, axis0.z).Normalized();
+            settings.mHingeAxis1 = settings.mHingeAxis2 = j_axis;
             
-            // Calculate a reference normal perpendicular to hinge axis
-            JPH::Vec3 ref_normal = settings.mHingeAxis1.GetNormalizedPerpendicular();
+            JPH::Vec3 ref_normal(axis1.x, axis1.y, axis1.z);
+            if (ref_normal.LengthSq() < 0.001f) {
+                ref_normal = j_axis.GetNormalizedPerpendicular();
+            } else {
+                ref_normal = ref_normal.Normalized();
+            }
+            
             settings.mNormalAxis1 = ref_normal;
             settings.mNormalAxis2 = ref_normal;
             
-            settings.mLimitsMin = limits_lo.x;
-            settings.mLimitsMax = limits_hi.x;
+            float min_limit = std::min(limits_lo.x, limits_hi.x);
+            float max_limit = std::max(limits_lo.x, limits_hi.x);
+
+            if (min_limit <= -float(M_PI) && max_limit >= float(M_PI)) {
+                settings.mLimitsMin = -JPH::JPH_PI;
+                settings.mLimitsMax = JPH::JPH_PI;
+            } else {
+                settings.mLimitsMin = std::clamp(min_limit, -JPH::JPH_PI, JPH::JPH_PI);
+                settings.mLimitsMax = std::clamp(max_limit, -JPH::JPH_PI, JPH::JPH_PI);
+            }
+
+            settings.mLimitsSpringSettings.mMode = JPH::ESpringMode::FrequencyAndDamping;
+            settings.mLimitsSpringSettings.mFrequency = 20.0f;
+            settings.mLimitsSpringSettings.mDamping = 1.0f;
             
             constraint = settings.Create(*const_cast<JPH::Body*>(b1), *const_cast<JPH::Body*>(b2));
             break;

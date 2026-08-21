@@ -215,31 +215,29 @@ void CTelekineticObject::fire_t(const Fvector& target, float time)
     if (sound_hold._handle() && sound_hold._feedback())
         sound_hold.stop();
 }
+
 void CTelekineticObject::fire(const Fvector& target, float power)
 {
-    // state				= TS_Fire;
     switch_state(TS_Fire);
-    // time_fire_started	= Device.dwTimeGlobal;
 
     if (!object || !object->m_pPhysicsShell || !object->m_pPhysicsShell->isActive())
         return;
 
-    // вычислить направление
     Fvector dir;
     dir.sub(target, object->Position());
     dir.normalize();
 
-    // включить гравитацию
     object->m_pPhysicsShell->set_ApplyByGravity(TRUE);
 
     if (OnServer())
     {
-        // выполнить бросок
+        float total_impulse = power * 15.0f * object->m_pPhysicsShell->getMass();
+        float per_element_impulse = total_impulse / object->m_pPhysicsShell->Elements().size();
+
         for (u32 i = 0; i < object->m_pPhysicsShell->get_ElementsNumber(); i++)
-            object->m_pPhysicsShell->get_ElementByStoreOrder(u16(i))->applyImpulse(
-                dir, power * 20.f * object->m_pPhysicsShell->getMass() / object->m_pPhysicsShell->Elements().size());
-    };
-};
+            object->m_pPhysicsShell->get_ElementByStoreOrder(u16(i))->applyImpulse(dir, per_element_impulse);
+    }
+}
 
 bool CTelekineticObject::check_height()
 {

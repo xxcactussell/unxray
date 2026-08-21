@@ -68,24 +68,24 @@ void CPHSimpleCharacter::UpdateDynamicDamage(const Fvector& normal, const Fvecto
     
     if (c_vel > m_collision_damage_info.m_contact_velocity)
     {
-        // Для Jolt можно извлечь IPhysicsShellHolder через userData тела 
-        // или передавать его снаружи (через CPhysicsGeom)
-        // Если userData в ядре настроена на возврат IPhysicsShellHolder:
-        IPhysicsShellHolder* obj = bo1 ? (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(b2) 
-                                       : (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(m_char_handle);
-        
-        if (obj && !obj->ObjectGetDestroy())
-        {
-            m_collision_damage_info.m_contact_velocity = c_vel;
-            m_collision_damage_info.m_dmc_signum = bo1 ? 1.f : -1.f;
-            m_collision_damage_info.m_dmc_type = SCollisionDamageInfo::ctObject;
-            
-            m_collision_damage_info.m_damage_normal = normal;
-            m_collision_damage_info.m_damage_pos = pos;
-            
-            m_collision_damage_info.m_hit_callback = obj->ObjectGetCollisionHitCallback();
-            m_collision_damage_info.m_obj_id = obj->ObjectID();
-        }
+        if (b2 != INVALID_BODY_HANDLE)
+            {
+                IPhysicsShellHolder* obj = bo1 ? (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(b2) 
+                                            : (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(m_char_handle);
+                
+                if (obj && !obj->ObjectGetDestroy())
+                {
+                    m_collision_damage_info.m_contact_velocity = c_vel;
+                    m_collision_damage_info.m_dmc_signum = bo1 ? 1.f : -1.f;
+                    m_collision_damage_info.m_dmc_type = SCollisionDamageInfo::ctObject;
+                    
+                    m_collision_damage_info.m_damage_normal = normal;
+                    m_collision_damage_info.m_damage_pos = pos;
+                    
+                    m_collision_damage_info.m_hit_callback = obj->ObjectGetCollisionHitCallback();
+                    m_collision_damage_info.m_obj_id = obj->ObjectID();
+                }
+    }
     }
 }
 

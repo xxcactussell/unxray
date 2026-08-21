@@ -1197,10 +1197,17 @@ void CPHElement::SetCollideWithStatics(bool collide)
 void CPHElement::applyGravityAccel(const Fvector& accel)
 {
     VERIFY(_valid(accel));
-    if (m_flags.test(flFixed))
+    if (!isActive() || m_flags.test(flFixed))
         return;
+
     if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
         GetPhysicsCore()->ActivateBody(m_char_handle);
+
+    Fvector force;
+    force.set(accel);
+    force.mul(m_mass);
+
+    GetPhysicsCore()->ApplyForce(m_char_handle, force);
     m_shell->EnableObject(0);
 }
 

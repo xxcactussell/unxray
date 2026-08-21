@@ -84,12 +84,6 @@ void CPHJoint::CreateHinge()
     default: NODEFAULT;
     }
 
-    Fmatrix first_matrix_inv;
-    first_matrix_inv.set(first_matrix);
-    first_matrix_inv.invert();
-    Fmatrix rotate;
-    rotate.mul(first_matrix_inv, second_matrix);
-
     float lo, hi;
     axis0.set(0, 0, 0);
 
@@ -97,17 +91,26 @@ void CPHJoint::CreateHinge()
     CharacterVirtualHandle b2 = body_for_joint(second);
 
     CalcAxis(0, axis0, lo, hi, first_matrix, second_matrix);
-    if (b1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis0.invert();
+
+    Fvector ref_normal;
+    ref_normal.set(second_matrix.i);
+    ref_normal.sub(Fvector(axis0).mul(axis0.dotproduct(ref_normal)));
+    if (ref_normal.square_magnitude() < 0.001f)
+        ref_normal.set(second_matrix.k);
+    ref_normal.normalize_safe();
+
+    float jolt_lo = -hi;
+    float jolt_hi = -lo;
+    if (jolt_lo > jolt_hi) std::swap(jolt_lo, jolt_hi);
 
     m_joint = GetPhysicsCore()->CreateJoint(hinge, b1, b2, pos, 
-                                            axis0, Fvector().set(0,0,0), Fvector().set(0,0,0), 
-                                            Fvector().set(lo,0,0), Fvector().set(hi,0,0));
+                                            axis0, ref_normal, Fvector().set(0,0,0), 
+                                            Fvector().set(jolt_lo, 0, 0), Fvector().set(jolt_hi, 0, 0));
 
     if (axes[0].force > 0.f)
         GetPhysicsCore()->SetJointMotor(m_joint, 0, axes[0].force, axes[0].velocity);
         
     GetPhysicsCore()->SetJointSpringDamping(m_joint, 0, axes[0].erp, axes[0].cfm);
-    GetPhysicsCore()->SetJointSpringDamping(m_joint, -1, m_erp, m_cfm);
 }
 
 void CPHJoint::CreateHinge2()

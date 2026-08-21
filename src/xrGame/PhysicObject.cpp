@@ -732,15 +732,14 @@ void CPhysicObject::PH_I_CrPr() // actions & operations between two phisic predi
     {};
 void CPhysicObject::PH_A_CrPr()
 {
-    if (m_just_after_spawn)
+if (m_just_after_spawn)
     {
         VERIFY(Visual());
         IKinematics* K = Visual()->dcast_PKinematics();
         VERIFY(K);
         if (!PPhysicsShell())
-        {
             return;
-        }
+
         if (!PPhysicsShell()->isFullActive())
         {
             K->CalculateBones_Invalidate();
@@ -766,9 +765,9 @@ void CPhysicObject::PH_A_CrPr()
         spatial_move();
         m_just_after_spawn = false;
 
-        if (!OnServer()) { return; };
+        if (!OnServer()) return;
 
-        PPhysicsShell()->get_ElementByStoreOrder(0)->Fix();
+        // Отключаем коллизию со статикой только для динамических костей двери
         PPhysicsShell()->SetElementsCollideWithStatics(false);
     }
     // CalculateInterpolationParams()

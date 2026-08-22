@@ -39,6 +39,54 @@ JoltPhysicsCore::~JoltPhysicsCore()
     Destroy();
 }
 
+
+
+
+
+// --- DEFERRED EVENT QUEUE (TLS) ---
+struct SDeferredCharacterContact {
+    IPhysicsCore::CharacterContactCallbackFun callback;
+    void* char_user_data;
+    Fvector contact_pos;
+    Fvector contact_norm;
+    Fvector contact_vel;
+    u32 tri_user_data;
+    BodyHandle other_body_handle;
+    void* other_body_user_data;
+    bool is_sensor;
+};
+
+static const int JOLT_MAX_THREADS = 64;
+static std::atomic<int> g_jolt_thread_counter{0};
+static thread_local int g_jolt_thread_idx = -1;
+static std::vector<SDeferredCharacterContact> g_deferred_contacts[JOLT_MAX_THREADS];
+
+static int GetJoltThreadIndex() {
+    if (g_jolt_thread_idx == -1) {
+        g_jolt_thread_idx = g_jolt_thread_counter.fetch_add(1) % JOLT_MAX_THREADS;
+    }
+    return g_jolt_thread_idx;
+}
+
+static void FlushDeferredContacts() {
+    int max_threads = g_jolt_thread_counter.load();
+    if (max_threads > JOLT_MAX_THREADS) max_threads = JOLT_MAX_THREADS;
+    
+    for (int i = 0; i < max_threads; ++i) {
+        auto& buffer = g_deferred_contacts[i];
+        for (const auto& ev : buffer) {
+            if (ev.callback) {
+                ev.callback(ev.char_user_data, ev.contact_pos, ev.contact_norm, ev.contact_vel, 
+                            ev.tri_user_data, ev.other_body_handle, ev.other_body_user_data, ev.is_sensor);
+            }
+        }
+        buffer.clear();
+    }
+}
+// ----------------------------------
+
+
+
 void JoltPhysicsCore::Initialize() 
 {
     if (m_physics_system) return;
@@ -79,8 +127,9 @@ void JoltPhysicsCore::Initialize()
 void JoltPhysicsCore::Clear()
 {
     if (!m_physics_system) return;
-
-    // 1. Remove and clear all constraints
+    int max_threads = std::min((int)g_jolt_thread_counter.load(), JOLT_MAX_THREADS);
+    for (int i = 0; i < max_threads; ++i) g_deferred_contacts[i].clear();
+    
     for (auto& pair : m_constraints) {
         if (pair.second) {
             m_physics_system->RemoveConstraint(pair.second);
@@ -89,7 +138,6 @@ void JoltPhysicsCore::Clear()
     m_constraints.clear();
     m_connected_bodies.clear();
 
-    // 2. Remove and clear all ragdolls
     for (auto& pair : m_ragdolls) {
         if (pair.second) {
             pair.second->RemoveFromPhysicsSystem();
@@ -98,12 +146,10 @@ void JoltPhysicsCore::Clear()
     m_ragdolls.clear();
     m_ragdoll_settings.clear();
 
-    // 3. Clear virtual characters
     m_characters.clear();
     m_stick_to_floor.clear();
     m_character_gravity_factors.clear();
 
-    // 4. Remove and destroy all rigid bodies
     JPH::BodyInterface& bi = m_physics_system->GetBodyInterface();
     JPH::BodyIDVector all_bodies;
     m_physics_system->GetBodies(all_bodies);
@@ -112,12 +158,10 @@ void JoltPhysicsCore::Clear()
         bi.DestroyBodies(all_bodies.data(), (int)all_bodies.size());
     }
 
-    // Reset handle counters
     m_next_joint_handle = 1;
     m_next_character_handle = 1;
     m_next_ragdoll_handle = 1;
 
-    // Optimize broadphase for clean state
     m_physics_system->OptimizeBroadPhase();
 }
 
@@ -133,6 +177,8 @@ void JoltPhysicsCore::Step(float delta_time)
     if (collision_steps > 4) collision_steps = 4;
 
     m_physics_system->Update(delta_time, collision_steps, m_temp_allocator, m_job_system);
+    
+    FlushDeferredContacts();
 }
 
 void JoltPhysicsCore::Destroy() 
@@ -645,11 +691,12 @@ void JoltPhysicsCore::GetBodyTransform(BodyHandle body_handle, Fmatrix& out_matr
         out_matrix.j.set(0.0f, 1.0f, 0.0f);
         out_matrix.k.set(0.0f, 0.0f, 1.0f);
         out_matrix.c.set(0.0f, 0.0f, 0.0f);
+        out_matrix._14_ = 0.0f; out_matrix._24_ = 0.0f; out_matrix._34_ = 0.0f; out_matrix._44_ = 1.0f;
         return;
     }
 
     JPH::BodyID id(body_handle);
-    JPH::Mat44 transform = m_physics_system->GetBodyInterface().GetWorldTransform(id);
+    JPH::Mat44 transform = m_physics_system->GetBodyInterface().GetCenterOfMassTransform(id);
     JPH::Vec3 pos = transform.GetTranslation();
 
     if (_isnan(pos.GetX()) || _isnan(pos.GetY()) || _isnan(pos.GetZ())) {
@@ -657,6 +704,7 @@ void JoltPhysicsCore::GetBodyTransform(BodyHandle body_handle, Fmatrix& out_matr
         out_matrix.j.set(0.0f, 1.0f, 0.0f);
         out_matrix.k.set(0.0f, 0.0f, 1.0f);
         out_matrix.c.set(0.0f, 0.0f, 0.0f);
+        out_matrix._14_ = 0.0f; out_matrix._24_ = 0.0f; out_matrix._34_ = 0.0f; out_matrix._44_ = 1.0f;
         return;
     }
 
@@ -677,7 +725,7 @@ void JoltPhysicsCore::SetBodyTransform(BodyHandle body_handle, const Fmatrix& ma
     JPH::BodyID id(body_handle);
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
     
-    JPH::Vec3 position(matrix.c.x, matrix.c.y, matrix.c.z);
+    JPH::Vec3 com_world(matrix.c.x, matrix.c.y, matrix.c.z);
     
     JPH::Mat44 transform(
         JPH::Vec4(matrix.i.x, matrix.i.y, matrix.i.z, 0),
@@ -685,9 +733,12 @@ void JoltPhysicsCore::SetBodyTransform(BodyHandle body_handle, const Fmatrix& ma
         JPH::Vec4(matrix.k.x, matrix.k.y, matrix.k.z, 0),
         JPH::Vec4(0, 0, 0, 1)
     );
-    JPH::Quat rotation = transform.GetQuaternion();
+    JPH::Quat rotation = transform.GetQuaternion().Normalized();
+    
+    JPH::Vec3 com_local = body_interface.GetShape(id)->GetCenterOfMass();
+    JPH::Vec3 shape_origin = com_world - rotation * com_local;
 
-    body_interface.SetPositionAndRotation(id, position, rotation, JPH::EActivation::Activate);
+    body_interface.SetPositionAndRotation(id, shape_origin, rotation, JPH::EActivation::Activate);
 }
 
 void JoltPhysicsCore::GetBodyAABB(BodyHandle body_handle, Fvector& center, Fvector& half_extents) const {
@@ -1335,6 +1386,8 @@ void JoltPhysicsCore::SetBodyCollideWithStatics(BodyHandle body_handle, bool col
         m_physics_system->GetBodyInterface().SetObjectLayer(id, layer);
 }
 
+
+
 void JoltPhysicsCore::GetBodyPosition(BodyHandle body_handle, Fvector& position) const {
     if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) {
         position.set(0.f, 0.f, 0.f);
@@ -1342,7 +1395,7 @@ void JoltPhysicsCore::GetBodyPosition(BodyHandle body_handle, Fvector& position)
     }
     
     JPH::BodyID id(body_handle);
-    JPH::Vec3 jolt_pos = m_physics_system->GetBodyInterface().GetPosition(id);
+    JPH::Vec3 jolt_pos = m_physics_system->GetBodyInterface().GetCenterOfMassPosition(id);
     
     position.set(jolt_pos.GetX(), jolt_pos.GetY(), jolt_pos.GetZ());
 }
@@ -1351,7 +1404,14 @@ void JoltPhysicsCore::SetBodyPosition(BodyHandle body_handle, const Fvector& pos
     if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
     
     JPH::BodyID id(body_handle);
-    m_physics_system->GetBodyInterface().SetPosition(id, JPH::Vec3(position.x, position.y, position.z), JPH::EActivation::Activate);
+    JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
+
+    JPH::Vec3 com_world(position.x, position.y, position.z);
+    JPH::Quat rotation = body_interface.GetRotation(id);
+    JPH::Vec3 com_local = body_interface.GetShape(id)->GetCenterOfMass();
+    
+    JPH::Vec3 shape_origin = com_world - rotation * com_local;
+    body_interface.SetPosition(id, shape_origin, JPH::EActivation::Activate);
 }
 
 void JoltPhysicsCore::GetBodyForce(BodyHandle body_handle, Fvector& force) const {
@@ -1633,7 +1693,12 @@ void JoltPhysicsCore::MyCharacterContactListener::ProcessContact(const JPH::Char
         if (char_ptr.GetPtr() == inCharacter) {
             auto cb_it = m_core->m_character_callbacks.find(handle);
             if (cb_it != m_core->m_character_callbacks.end() && cb_it->second.callback) {
-                cb_it->second.callback(cb_it->second.user_data, contact_pos, contact_norm, contact_vel, tri_user_data, other_body_handle, other_body_user_data, inContact.mIsSensorB);
+                int t_idx = GetJoltThreadIndex();
+                g_deferred_contacts[t_idx].push_back({
+                    cb_it->second.callback, cb_it->second.user_data,
+                    contact_pos, contact_norm, contact_vel,
+                    tri_user_data, other_body_handle, other_body_user_data, inContact.mIsSensorB
+                });
             }
             break;
         }
@@ -1747,9 +1812,10 @@ void JoltPhysicsCore::SetCharacterVirtualShape(CharacterVirtualHandle handle, Ph
         JPH::Shape* jolt_shape = reinterpret_cast<JPH::Shape*>(shape);
         JPH::CharacterVirtual* character = it->second.GetPtr();
         if (!character) return;
-        
+
         JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
         JoltPassableShapeFilter shape_filter;
+
         if (character->SetShape(jolt_shape, 1.5f,
                              m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
                              m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
@@ -1861,7 +1927,12 @@ public:
             Fvector contact_norm = { hit_norm.GetX(), hit_norm.GetY(), hit_norm.GetZ() };
             u32 tri_idx = UnpackTriangleIndex(user_data);
 
-            m_callback(m_user_data, contact_pos, contact_norm, m_char_vel, tri_idx, INVALID_BODY_HANDLE, nullptr, true);
+            int t_idx = GetJoltThreadIndex();
+            g_deferred_contacts[t_idx].push_back({
+                m_callback, m_user_data,
+                contact_pos, contact_norm, m_char_vel,
+                tri_idx, INVALID_BODY_HANDLE, nullptr, true
+            });
         }
     }
 };
@@ -1950,6 +2021,8 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
                 body_filter,
                 JPH::ShapeFilter()
             );
+            
+            FlushDeferredContacts();
         }
     }
 }

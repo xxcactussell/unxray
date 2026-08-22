@@ -32,9 +32,17 @@ void CPHElement::get_State(SPHNetState& state)
 void CPHElement::set_State(const SPHNetState& state)
 {
     // bUpdate=true;
-    m_flags.set(flUpdate, TRUE);
-    SetGlobalPositionDynamic(state.position);
-    setQuaternion(state.quaternion);
+    Fmatrix transform;
+    transform.rotation(state.quaternion);
+    transform.c.set(state.position);
+    
+    if (isActive())
+    {
+        GetPhysicsCore()->SetBodyTransform(m_char_handle, transform);
+        CPHDisablingFull::Reinit();
+        m_shell->spatial_move();
+    }
+    
     m_char_handle_interpolation.SetPosition(state.previous_position, 0);
     m_char_handle_interpolation.SetRotation(state.previous_quaternion, 0);
     m_char_handle_interpolation.SetPosition(state.position, 1);
@@ -52,13 +60,11 @@ void CPHElement::set_State(const SPHNetState& state)
     {
         bool is_active = GetPhysicsCore()->IsBodyActive(m_char_handle);
         
-        // Заменили dBodyEnable
         if (state.enabled && !is_active)
         {
-            GetPhysicsCore()->ActivateCharacterVirtual(m_char_handle);
+            GetPhysicsCore()->ActivateBody(m_char_handle);
             m_shell->EnableObject(0);
         }
-        // Заменили dBodyIsEnabled
         if (!state.enabled && is_active)
         {
             m_shell->DisableObject();

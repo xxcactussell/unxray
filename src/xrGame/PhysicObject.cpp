@@ -698,6 +698,16 @@ void CPhysicObject::net_Import_PH_Params(NET_Packet& P, net_update_PItem& N, mas
     P.r_float(N.State.quaternion.z);
     P.r_float(N.State.quaternion.w);
 
+    float mag2 = N.State.quaternion.x*N.State.quaternion.x + N.State.quaternion.y*N.State.quaternion.y + 
+                 N.State.quaternion.z*N.State.quaternion.z + N.State.quaternion.w*N.State.quaternion.w;
+    if (mag2 > EPS) {
+        float inv = 1.0f / _sqrt(mag2);
+        N.State.quaternion.x *= inv; N.State.quaternion.y *= inv;
+        N.State.quaternion.z *= inv; N.State.quaternion.w *= inv;
+    } else {
+        N.State.quaternion.identity();
+    }
+
     N.State.enabled = num_items.mask & CSE_ALifeObjectPhysic::inventory_item_state_enabled;
     // UI().Font().pFontStat->OutNext("Import N.State.enabled:%i",int(N.State.enabled));
     if (!(num_items.mask & CSE_ALifeObjectPhysic::inventory_item_angular_null))
@@ -835,6 +845,22 @@ float CPhysicObject::interpolate_states(
     current.previous_position = current.position;
 
     current.quaternion.slerp(first.State.quaternion, last.State.quaternion, factor);
+    
+    float mag2 = current.quaternion.x * current.quaternion.x + 
+                 current.quaternion.y * current.quaternion.y + 
+                 current.quaternion.z * current.quaternion.z + 
+                 current.quaternion.w * current.quaternion.w;
+                 
+    if (mag2 > EPS) {
+        float inv = 1.0f / _sqrt(mag2);
+        current.quaternion.x *= inv; 
+        current.quaternion.y *= inv;
+        current.quaternion.z *= inv; 
+        current.quaternion.w *= inv;
+    } else {
+        current.quaternion.identity();
+    }
+
     current.previous_quaternion = current.quaternion;
     return ret_val;
 }

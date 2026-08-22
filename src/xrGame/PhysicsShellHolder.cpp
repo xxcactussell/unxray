@@ -437,13 +437,15 @@ void CPhysicsShellHolder::PHSaveState(NET_Packet& P)
 }
 void CPhysicsShellHolder::PHLoadState(IReader& P)
 {
-    //	Flags8 lflags;
     IKinematics* K = smart_cast<IKinematics*>(Visual());
-    //	P.r_u8 (lflags.flags);
+    
+    u64 saved_bones_visible = P.r_u64();
+    u16 saved_bone_root = P.r_u16();
+
     if (K)
     {
-        K->LL_SetBonesVisible(P.r_u64());
-        K->LL_SetBoneRoot(P.r_u16());
+        K->LL_SetBonesVisible(saved_bones_visible);
+        K->LL_SetBoneRoot(saved_bone_root);
     }
 
     Fvector min = P.r_vec3();
@@ -456,7 +458,10 @@ void CPhysicsShellHolder::PHLoadState(IReader& P)
     {
         SPHNetState state;
         state.net_Load(P, min, max);
-        PHGetSyncItem(i)->set_State(state);
+        
+        if (auto* sync_item = PHGetSyncItem(i)) {
+            sync_item->set_State(state);
+        }
     }
 }
 

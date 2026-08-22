@@ -55,10 +55,15 @@ void CPHElement::build()
 {
     if (m_geoms.empty())
     {
-        // Фоллбэк только для пустышек
-        Fvector half_extents = {0.5f, 0.5f, 0.5f};
+        // Для элементов без геометрии (косяки дверей и т.д.) создаем тело в слое NO_COLLISION.
+        // Оно абсолютно призрачное (не коллизит ни с чем), но имеет валидный BodyID и трансформ для X-Ray/Jolt.
+        Fvector half_extents = {0.01f, 0.01f, 0.01f};
         m_char_handle = GetPhysicsCore()->CreateBox(half_extents, m_mass_center, 1.f);
         Fix();
+        if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        {
+            GetPhysicsCore()->SetBodyMotionType(m_char_handle, 0); // Static / Non-moving
+        }
     }
     else
     {
@@ -623,7 +628,7 @@ void CPHElement::applyImpact(const SPHImpact& I)
 
 void CPHElement::InterpolateGlobalTransform(Fmatrix* m)
 {
-    if (!m_flags.test(flUpdate))
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE || !m_flags.test(flUpdate))
     {
         GetGlobalTransformDynamic(m);
         VERIFY(_valid(*m));
@@ -638,6 +643,13 @@ void CPHElement::InterpolateGlobalTransform(Fmatrix* m)
 
 void CPHElement::GetGlobalTransformDynamic(Fmatrix* m) const
 {
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        m->set(mXFORM);
+        VERIFY(_valid(*m));
+        return;
+    }
+
     GetPhysicsCore()->GetBodyTransform(m_char_handle, *m);
     MulB43InverceLocalForm(*m);
     VERIFY(_valid(*m));
@@ -645,6 +657,13 @@ void CPHElement::GetGlobalTransformDynamic(Fmatrix* m) const
 
 void CPHElement::InterpolateGlobalPosition(Fvector* v)
 {
+    if (m_char_handle == INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        v->set(mXFORM.c);
+        VERIFY(_valid(*v));
+        return;
+    }
+
     m_char_handle_interpolation.InterpolatePosition(*v);
     VERIFY(_valid(*v));
 }

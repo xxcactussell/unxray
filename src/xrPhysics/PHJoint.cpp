@@ -108,8 +108,8 @@ void CPHJoint::CreateHinge()
     }
     ref_normal.normalize_safe();
 
-    float jolt_lo = -hi;
-    float jolt_hi = -lo;
+    float jolt_lo = lo;
+    float jolt_hi = hi;
     if (jolt_lo > jolt_hi) std::swap(jolt_lo, jolt_hi);
 
     m_joint = GetPhysicsCore()->CreateJoint(hinge, b1, b2, pos, 
@@ -546,28 +546,61 @@ void CPHJoint::SetLoLimitDynamic(int axis_num, float limit)
 {
     VERIFY(axis_num >= 0 && axis_num <= 2);
     VERIFY(bActive);
+    axes[axis_num].low = limit;
     if (m_joint != INVALID_JOINT_HANDLE)
-        GetPhysicsCore()->SetJointLimits(m_joint, axis_num, limit, axes[axis_num].high);
+    {
+        float lo, hi;
+        Fvector axis;
+        Fmatrix first_matrix, second_matrix;
+        pFirst_element->GetGlobalTransformDynamic(&first_matrix);
+        pSecond_element->GetGlobalTransformDynamic(&second_matrix);
+        CalcAxis(axis_num, axis, lo, hi, first_matrix, second_matrix);
+        GetPhysicsCore()->SetJointLimits(m_joint, axis_num, lo, hi);
+    }
 }
 
 void CPHJoint::SetHiLimitDynamic(int axis_num, float limit)
 {
     VERIFY(axis_num >= 0 && axis_num <= 2);
     VERIFY(bActive);
+    axes[axis_num].high = limit;
     if (m_joint != INVALID_JOINT_HANDLE)
-        GetPhysicsCore()->SetJointLimits(m_joint, axis_num, axes[axis_num].low, limit);
+    {
+        float lo, hi;
+        Fvector axis;
+        Fmatrix first_matrix, second_matrix;
+        pFirst_element->GetGlobalTransformDynamic(&first_matrix);
+        pSecond_element->GetGlobalTransformDynamic(&second_matrix);
+        CalcAxis(axis_num, axis, lo, hi, first_matrix, second_matrix);
+        GetPhysicsCore()->SetJointLimits(m_joint, axis_num, lo, hi);
+    }
 }
 
 void CPHJoint::SetLimitsActive(int axis_num)
 {
     if (m_joint == INVALID_JOINT_HANDLE) return;
     
+    Fmatrix first_matrix, second_matrix;
+    if (pFirst_element && pSecond_element)
+    {
+        pFirst_element->GetGlobalTransformDynamic(&first_matrix);
+        pSecond_element->GetGlobalTransformDynamic(&second_matrix);
+    }
+
     if (axis_num == -1) {
         for (size_t i = 0; i < axes.size(); ++i) {
-            GetPhysicsCore()->SetJointLimits(m_joint, i, axes[i].low, axes[i].high);
+            float lo = axes[i].low, hi = axes[i].high;
+            Fvector axis;
+            if (pFirst_element && pSecond_element)
+                CalcAxis((int)i, axis, lo, hi, first_matrix, second_matrix);
+            GetPhysicsCore()->SetJointLimits(m_joint, (int)i, lo, hi);
         }
     } else {
-        GetPhysicsCore()->SetJointLimits(m_joint, axis_num, axes[axis_num].low, axes[axis_num].high);
+        float lo = axes[axis_num].low, hi = axes[axis_num].high;
+        Fvector axis;
+        if (pFirst_element && pSecond_element)
+            CalcAxis(axis_num, axis, lo, hi, first_matrix, second_matrix);
+        GetPhysicsCore()->SetJointLimits(m_joint, axis_num, lo, hi);
     }
 }
 
@@ -582,7 +615,10 @@ float CPHJoint::GetAxisAngleRate(int axis_num)
 float CPHJoint::GetAxisAngle(int axis_num)
 {
     if (m_joint == INVALID_JOINT_HANDLE) return FLT_MAX;
-    return GetPhysicsCore()->GetJointAxisAngle(m_joint, axis_num);
+    float angle = GetPhysicsCore()->GetJointAxisAngle(m_joint, axis_num);
+    if (!pFirst_element || pFirst_element->isFixed() || !pFirst_element->has_geoms())
+        angle = -angle;
+    return angle;
 }
 
 void CPHJoint::LimitAxisNum(int& axis_num)
@@ -721,23 +757,11 @@ void CPHJoint::CalcAxis(int ax_num, Fvector& axis, float& lo, float& hi, const F
     hi = axes[ax_num].high;
     if (lo < -float(M_PI))
     {
-        hi -= (lo + float(M_PI));
         lo = -float(M_PI);
-    }
-    if (lo > 0.f)
-    {
-        hi -= lo;
-        lo = 0.f;
     }
     if (hi > float(M_PI))
     {
-        lo -= (hi - float(M_PI));
         hi = float(M_PI);
-    }
-    if (hi < 0.f)
-    {
-        lo -= hi;
-        hi = 0.f;
     }
 }
 
@@ -772,30 +796,18 @@ void CPHJoint::CalcAxis(int ax_num, Fvector& axis, float& lo, float& hi, const F
     hi = axes[ax_num].high;
     if (lo < -float(M_PI))
     {
-        hi -= (lo + float(M_PI));
         lo = -float(M_PI);
-    }
-    if (lo > 0.f)
-    {
-        hi -= lo;
-        lo = 0.f;
     }
     if (hi > float(M_PI))
     {
-        lo -= (hi - float(M_PI));
         hi = float(M_PI);
-    }
-    if (hi < 0.f)
-    {
-        lo -= hi;
-        hi = 0.f;
     }
 }
 
 void CPHJoint::GetLimits(float& lo_limit, float& hi_limit, int axis_num)
 {
     LimitAxisNum(axis_num);
-    if (body_for_joint(pFirst_element) != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    if (pFirst_element && !pFirst_element->isFixed() && pFirst_element->has_geoms())
     {
         lo_limit = axes[axis_num].low;
         hi_limit = axes[axis_num].high;

@@ -984,28 +984,26 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
             JPH::Vec3 j_axis = JPH::Vec3(axis0.x, axis0.y, axis0.z).Normalized();
             settings.mHingeAxis1 = settings.mHingeAxis2 = j_axis;
             
-            JPH::Vec3 ref_normal(axis1.x, axis1.y, axis1.z);
-            if (ref_normal.LengthSq() < 0.001f) {
-                ref_normal = j_axis.GetNormalizedPerpendicular();
+            JPH::Vec3 ref_normal1(axis1.x, axis1.y, axis1.z);
+            if (ref_normal1.LengthSq() < 0.001f) {
+                ref_normal1 = j_axis.GetNormalizedPerpendicular();
             } else {
-                ref_normal = ref_normal.Normalized();
+                ref_normal1 = ref_normal1.Normalized();
             }
             
-            settings.mNormalAxis1 = ref_normal;
-            settings.mNormalAxis2 = ref_normal;
+            settings.mNormalAxis1 = ref_normal1;
+            settings.mNormalAxis2 = ref_normal1;
             
             float src_min = limits_lo.x;
             float src_max = limits_hi.x;
+            if (src_min > src_max) std::swap(src_min, src_max);
 
-            float jolt_min = -src_max;
-            float jolt_max = -src_min;
-
-            settings.mLimitsMin = std::clamp(jolt_min, -JPH::JPH_PI, JPH::JPH_PI);
-            settings.mLimitsMax = std::clamp(jolt_max, -JPH::JPH_PI, JPH::JPH_PI);
+            settings.mLimitsMin = std::clamp(src_min, -JPH::JPH_PI, JPH::JPH_PI);
+            settings.mLimitsMax = std::clamp(src_max, -JPH::JPH_PI, JPH::JPH_PI);
 
             settings.mLimitsSpringSettings.mMode = JPH::ESpringMode::FrequencyAndDamping;
-            settings.mLimitsSpringSettings.mFrequency = 20.0f;
-            settings.mLimitsSpringSettings.mDamping = 1.0f;
+            settings.mLimitsSpringSettings.mFrequency = 0.0f; // 0.0f = completely rigid / non-springy hard limits in Jolt
+            settings.mLimitsSpringSettings.mDamping = 0.0f;
             
             constraint = settings.Create(*const_cast<JPH::Body*>(b1), *const_cast<JPH::Body*>(b2));
             break;
@@ -1127,12 +1125,23 @@ void JoltPhysicsCore::SetJointLimits(JointHandle joint, int axis_num, float lo, 
     if (it == m_constraints.end()) return;
 
     JPH::Constraint* c = it->second.GetPtr();
+    if (lo > hi) std::swap(lo, hi);
+
     if (c->GetSubType() == JPH::EConstraintSubType::Hinge) {
         static_cast<JPH::HingeConstraint*>(c)->SetLimits(lo, hi);
     } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {
         static_cast<JPH::SliderConstraint*>(c)->SetLimits(lo, hi);
     } else if (c->GetSubType() == JPH::EConstraintSubType::SixDOF) {
         // 
+    }
+
+    if (m_physics_system) {
+        JPH::TwoBodyConstraint* two_body_c = static_cast<JPH::TwoBodyConstraint*>(c);
+        const JPH::Body* b1 = two_body_c->GetBody1();
+        const JPH::Body* b2 = two_body_c->GetBody2();
+        JPH::BodyInterface& bi = m_physics_system->GetBodyInterface();
+        if (b1 && b1->IsDynamic()) bi.ActivateBody(b1->GetID());
+        if (b2 && b2->IsDynamic()) bi.ActivateBody(b2->GetID());
     }
 }
 
@@ -1142,14 +1151,24 @@ void JoltPhysicsCore::SetJointMotor(JointHandle joint, int axis_num, float force
     if (it == m_constraints.end()) return;
 
     JPH::Constraint* c = it->second.GetPtr();
-    bool active = (force > 0.0f || velocity > 0.0f);
+    bool active = (force > 0.0f && std::abs(velocity) > 1e-6f);
 
     if (c->GetSubType() == JPH::EConstraintSubType::Hinge) {
         auto* hinge = static_cast<JPH::HingeConstraint*>(c);
+        float cur_vel = (hinge->GetMotorState() == JPH::EMotorState::Velocity) ? hinge->GetTargetAngularVelocity() : 0.0f;
+        if (std::abs(cur_vel - velocity) > 1e-3f || (hinge->GetMotorState() == JPH::EMotorState::Velocity) != active) {
+            float cur_angle = hinge->GetCurrentAngle();
+            float lim_min = hinge->GetLimitsMin();
+            float lim_max = hinge->GetLimitsMax();
+            Msg("[Jolt Joint %d CHANGE] SetMotor: force=%.2f, vel=%.2f, active=%d | Hinge angle=%.3f, limits=[%.3f, %.3f]", 
+                joint, force, velocity, active, cur_angle, lim_min, lim_max);
+        }
+
         hinge->SetMotorState(active ? JPH::EMotorState::Velocity : JPH::EMotorState::Off);
         if (active) {
             hinge->SetTargetAngularVelocity(velocity);
             hinge->GetMotorSettings().SetTorqueLimit(force);
+            hinge->ResetWarmStart();
         }
     } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {
         auto* slider = static_cast<JPH::SliderConstraint*>(c);
@@ -1172,6 +1191,15 @@ void JoltPhysicsCore::SetJointMotor(JointHandle joint, int axis_num, float force
             six->SetTargetAngularVelocityCS(target_vel);
             six->GetMotorSettings(axis).SetTorqueLimit(force);
         }
+    }
+
+    if (m_physics_system) {
+        JPH::TwoBodyConstraint* two_body_c = static_cast<JPH::TwoBodyConstraint*>(c);
+        const JPH::Body* b1 = two_body_c->GetBody1();
+        const JPH::Body* b2 = two_body_c->GetBody2();
+        JPH::BodyInterface& bi = m_physics_system->GetBodyInterface();
+        if (b1 && b1->IsDynamic()) bi.ActivateBody(b1->GetID());
+        if (b2 && b2->IsDynamic()) bi.ActivateBody(b2->GetID());
     }
 }
 

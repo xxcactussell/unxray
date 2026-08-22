@@ -8,7 +8,8 @@ namespace Layers {
     static constexpr JPH::ObjectLayer MOVING = 1;
     static constexpr JPH::ObjectLayer RAGDOLL = 2;
     static constexpr JPH::ObjectLayer MOVING_NO_STATIC = 3;
-    static constexpr JPH::uint NUM_LAYERS = 4;
+    static constexpr JPH::ObjectLayer NO_COLLISION = 4;
+    static constexpr JPH::uint NUM_LAYERS = 5;
 }
 
 namespace BroadPhaseLayers {
@@ -16,7 +17,8 @@ namespace BroadPhaseLayers {
     static constexpr JPH::BroadPhaseLayer MOVING(1);
     static constexpr JPH::BroadPhaseLayer RAGDOLL(2);
     static constexpr JPH::BroadPhaseLayer MOVING_NO_STATIC(3);
-    static constexpr JPH::uint NUM_LAYERS(4);
+    static constexpr JPH::BroadPhaseLayer NO_COLLISION(4);
+    static constexpr JPH::uint NUM_LAYERS(5);
 }
 
 
@@ -27,6 +29,7 @@ public:
         m_object_to_broad_phase[Layers::MOVING] = BroadPhaseLayers::MOVING;
         m_object_to_broad_phase[Layers::RAGDOLL] = BroadPhaseLayers::RAGDOLL;
         m_object_to_broad_phase[Layers::MOVING_NO_STATIC] = BroadPhaseLayers::MOVING_NO_STATIC;
+        m_object_to_broad_phase[Layers::NO_COLLISION] = BroadPhaseLayers::NO_COLLISION;
     }
 
     virtual JPH::uint GetNumBroadPhaseLayers() const override {
@@ -45,6 +48,7 @@ public:
             case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::MOVING:     return "MOVING";
             case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::RAGDOLL:    return "RAGDOLL";
             case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::MOVING_NO_STATIC:    return "MOVING_NO_STATIC";
+            case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::NO_COLLISION:        return "NO_COLLISION";
             default:                                                       JPH_ASSERT(false); return "INVALID";
         }
     }
@@ -62,11 +66,13 @@ public:
             case Layers::NON_MOVING:
                 return inLayer2 == BroadPhaseLayers::MOVING || inLayer2 == BroadPhaseLayers::RAGDOLL;
             case Layers::MOVING:
-                return true;
+                return inLayer2 != BroadPhaseLayers::NO_COLLISION;
             case Layers::RAGDOLL:
-                return true;
+                return inLayer2 != BroadPhaseLayers::NO_COLLISION;
             case Layers::MOVING_NO_STATIC:
                 return inLayer2 == BroadPhaseLayers::MOVING || inLayer2 == BroadPhaseLayers::RAGDOLL;
+            case Layers::NO_COLLISION:
+                return false;
             default:
                 JPH_ASSERT(false);
                 return false;
@@ -81,11 +87,13 @@ public:
         case Layers::NON_MOVING:
             return inObject2 == Layers::MOVING || inObject2 == Layers::RAGDOLL;
         case Layers::MOVING:
-            return true;
+            return inObject2 != Layers::NO_COLLISION;
         case Layers::RAGDOLL:
-            return true;
+            return inObject2 != Layers::NO_COLLISION;
         case Layers::MOVING_NO_STATIC:
             return inObject2 == Layers::MOVING || inObject2 == Layers::RAGDOLL;
+        case Layers::NO_COLLISION:
+            return false;
         default:
             JPH_ASSERT(false);
             return false;

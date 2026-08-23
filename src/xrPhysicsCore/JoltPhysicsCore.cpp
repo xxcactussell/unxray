@@ -1002,8 +1002,8 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
             settings.mLimitsMax = std::clamp(src_max, -JPH::JPH_PI, JPH::JPH_PI);
 
             settings.mLimitsSpringSettings.mMode = JPH::ESpringMode::FrequencyAndDamping;
-            settings.mLimitsSpringSettings.mFrequency = 0.0f; // 0.0f = completely rigid / non-springy hard limits in Jolt
-            settings.mLimitsSpringSettings.mDamping = 0.0f;
+            settings.mLimitsSpringSettings.mFrequency = 5.0f; // 5 Hz soft limit spring (allows pushing past limit on force)
+            settings.mLimitsSpringSettings.mDamping = 0.7f;   // slightly underdamped for natural spring feel
             
             constraint = settings.Create(*const_cast<JPH::Body*>(b1), *const_cast<JPH::Body*>(b2));
             break;
@@ -1128,7 +1128,10 @@ void JoltPhysicsCore::SetJointLimits(JointHandle joint, int axis_num, float lo, 
     if (lo > hi) std::swap(lo, hi);
 
     if (c->GetSubType() == JPH::EConstraintSubType::Hinge) {
-        static_cast<JPH::HingeConstraint*>(c)->SetLimits(lo, hi);
+        auto* hinge = static_cast<JPH::HingeConstraint*>(c);
+        Msg("[Jolt Joint %d] SetLimits: lo=%.3f, hi=%.3f (prev=[%.3f, %.3f], cur_angle=%.3f)",
+            joint, lo, hi, hinge->GetLimitsMin(), hinge->GetLimitsMax(), hinge->GetCurrentAngle());
+        hinge->SetLimits(lo, hi);
     } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {
         static_cast<JPH::SliderConstraint*>(c)->SetLimits(lo, hi);
     } else if (c->GetSubType() == JPH::EConstraintSubType::SixDOF) {
@@ -1168,6 +1171,8 @@ void JoltPhysicsCore::SetJointMotor(JointHandle joint, int axis_num, float force
         if (active) {
             hinge->SetTargetAngularVelocity(velocity);
             hinge->GetMotorSettings().SetTorqueLimit(force);
+            hinge->ResetWarmStart();
+        } else {
             hinge->ResetWarmStart();
         }
     } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {

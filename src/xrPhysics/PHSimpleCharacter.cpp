@@ -1078,48 +1078,9 @@ bool CPHSimpleCharacter::UpdateRestrictionType(CPHCharacter* ach)
     VERIFY(ph_world && ph_world->Exist());
     if (m_restriction_type == m_new_restriction_type)
         return true;
-    ach->Enable();
-    Enable();
-    restrictor_depth = 0.f;
-
-    ph_world->Freeze();
-    ERestrictionType old = m_restriction_type;
+    
     m_restriction_type = m_new_restriction_type;
-    AddObjectContactCallback(TestRestrictorContactCallbackFun);
-    UnFreeze();
-    ph_world->StepTouch();
-    ach->SwitchOFFInitContact();
-    
-    if (restrictor_depth < resolve_depth)
-    {
-        RemoveObjectContactCallback(TestRestrictorContactCallbackFun);
-        ph_world->UnFreeze();
-        ach->SwitchInInitContact();
-        return true;
-    }
-    
-    u16 num_steps = 2 * (u16)iCeil(restrictor_depth / resolve_depth);
-    for (u16 i = 0; num_steps > i; ++i)
-    {
-        restrictor_depth = 0.f;
-        ach->Enable();
-        Enable();
-        ph_world->Step();
-
-        if (restrictor_depth < resolve_depth)
-        {
-            RemoveObjectContactCallback(TestRestrictorContactCallbackFun);
-            ph_world->UnFreeze();
-            ach->SwitchInInitContact();
-            return true;
-        }
-    }
-    
-    RemoveObjectContactCallback(TestRestrictorContactCallbackFun);
-    ach->SwitchInInitContact();
-    ph_world->UnFreeze();
-    m_new_restriction_type = old;
-    return false;
+    return true;
 }
 
 bool CPHSimpleCharacter::TouchRestrictor(ERestrictionType rttype)

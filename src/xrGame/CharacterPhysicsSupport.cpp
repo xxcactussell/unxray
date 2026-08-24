@@ -1784,43 +1784,11 @@ void CCharacterPhysicsSupport::FlyTo(const Fvector& disp)
     float ammount = disp.magnitude();
     if (fis_zero(ammount, EPS_L))
         return;
-    physics_world()->Freeze();
-    bool g = m_pPhysicsShell->get_ApplyByGravity();
-    m_pPhysicsShell->set_ApplyByGravity(false);
-    m_pPhysicsShell->add_ObjectContactCallback(StaticEnvironmentCB);
-    void* cd = m_pPhysicsShell->get_CallbackData();
-    m_pPhysicsShell->set_CallbackData(m_pPhysicsShell->PIsland());
-    m_pPhysicsShell->UnFreeze();
-    Fvector vel;
-    vel.set(disp);
-    const u16 steps_num = 10;
-    const float fsteps_num = steps_num;
-    vel.mul(1.f / fsteps_num / fixed_step);
-
-    for (u16 i = 0; steps_num > i; ++i)
-    {
-        m_pPhysicsShell->set_LinearVel(vel);
-#if 0
-	DBG_OpenCashedDraw();
-	//m_pPhysicsShell->dbg_draw_geometry( 0.2f, color_xrgb( 255, 100, 0 ) );
-	m_pPhysicsShell->dbg_draw_velocity( 0.01f, color_xrgb( 0, 255, 0 ) );
-	m_pPhysicsShell->dbg_draw_force( 0.1f, color_xrgb( 0, 0, 255 ) );
-//	DBG_ClosedCashedDraw( 50000 );
-#endif
-        physics_world()->Step();
-#if 0
-//	DBG_OpenCashedDraw();
-	//m_pPhysicsShell->dbg_draw_geometry( 0.2f, color_xrgb( 255, 100, 0 ) );
-	m_pPhysicsShell->dbg_draw_velocity( 0.01f, color_xrgb( 100, 255, 0 ) );
-	m_pPhysicsShell->dbg_draw_force( 0.1f, color_xrgb( 100, 0, 255 ) );
-	DBG_ClosedCashedDraw( 50000 );
-#endif
-    }
-    // u16 step_num=disp.magnitude()/fixed_step;
-    m_pPhysicsShell->set_ApplyByGravity(g);
-    m_pPhysicsShell->set_CallbackData(cd);
-    m_pPhysicsShell->remove_ObjectContactCallback(StaticEnvironmentCB);
-    physics_world()->UnFreeze();
+    
+    Fmatrix trans;
+    trans.identity();
+    trans.c.set(disp);
+    m_pPhysicsShell->TransformPosition(trans, mh_clear);
 }
 
 void CCharacterPhysicsSupport::on_create_anim_mov_ctrl()

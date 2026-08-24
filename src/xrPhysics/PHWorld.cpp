@@ -305,27 +305,13 @@ void CPHWorld::RemoveFreezedObject(PH_OBJECT_I i) { m_freezed_objects.erase(i); 
 
 void CPHWorld::Freeze()
 {
-    R_ASSERT2(!b_world_freezed, "already freezed!!!");
-    m_freezed_objects.move_items(m_objects);
-    PH_OBJECT_I iter = m_freezed_objects.begin(), e = m_freezed_objects.end();
-    for (; e != iter; ++iter)
-        (*iter)->FreezeContent();
-    m_freezed_update_objects.move_items(m_update_objects);
-    b_world_freezed = true;
 }
 
 void CPHWorld::UnFreeze()
 {
-    R_ASSERT2(b_world_freezed, "is not freezed!!!");
-    PH_OBJECT_I iter = m_freezed_objects.begin(), e = m_freezed_objects.end();
-    for (; e != iter; ++iter)
-        (*iter)->UnFreezeContent();
-    m_objects.move_items(m_freezed_objects);
-    m_update_objects.move_items(m_freezed_update_objects);
-    b_world_freezed = false;
 }
 
-bool CPHWorld::IsFreezed() { return b_world_freezed; }
+bool CPHWorld::IsFreezed() { return false; }
 
 void CPHWorld::CutVelocity(float l_limit, float a_limit)
 {

@@ -62,6 +62,7 @@ IRender_Sector::sector_id_t R_dsgraph_structure::detect_sector(const Fvector& P,
         // Take sector, facing to our point from portal
         CDB::TRI* pTri = RImplementation.rmPortals->get_tris() + ID;
         CPortal* pPortal = Portals[pTri->dummy];
+        pPortal->bDualRender = TRUE;
         return pPortal->getSectorFacing(P)->unique_id;
     }
     // Take triangle at ID and use it's Sector

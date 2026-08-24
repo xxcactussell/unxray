@@ -126,78 +126,8 @@ bool CPHActivationShape::Activate(const Fvector need_size, u16 steps, float max_
 
     VERIFY(m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE);
     CPHObject::activate();
-    ph_world->Freeze();
-    UnFreeze();
-    max_depth = 0.f;
 
-    ph_world->StepTouch();
-    
-    u16 num_it = 15;
-    float fnum_it = float(num_it);
-    float fnum_steps = float(steps);
-    float fnum_steps_r = 1.f / fnum_steps;
-    float resolve_depth = 0.01f;
-    float max_vel = max_depth / fnum_it * fnum_steps_r / fixed_step;
-    float limit_l_vel = _max(_max(need_size.x, need_size.y), need_size.z) / fnum_it * fnum_steps_r / fixed_step;
-
-    if (limit_l_vel > default_l_limit) limit_l_vel = default_l_limit;
-    if (max_vel > limit_l_vel) max_vel = limit_l_vel;
-
-    float max_a_vel = max_rotation / fnum_it * fnum_steps_r / fixed_step;
-    if (max_a_vel > default_w_limit) max_a_vel = default_w_limit;
-
-    max_depth = 0.f;
-
-    Fvector from_size;
-    Fvector step_size, size;
-    
-    // Получаем текущие half_extents и переводим в полный размер
-    GetPhysicsCore()->GetBoxExtents(m_char_handle, from_size); 
-    from_size.mul(2.0f); 
-    
-    step_size.sub(need_size, from_size);
-    step_size.mul(fnum_steps_r);
-    size.set(from_size);
-    
-    bool ret = false;
-    V_PH_WORLD_STATE temp_state;
-    ph_world->GetState(temp_state);
-    
-    for (int m = 0; steps > m; ++m)
-    {
-        size.add(step_size);
-        
-        // Устанавливаем новый размер (метод необходимо добавить в IPhysicsCore)
-        GetPhysicsCore()->SetBoxExtents(m_char_handle, Fvector().set(size).mul(0.5f)); 
-        
-        u16 attempts = 10;
-        do
-        {
-            ret = false;
-            for (int i = 0; num_it > i; ++i)
-            {
-                max_depth = 0.f;
-                ph_world->Step();
-                CHECK_POS(Position(), "pos after ph_world->Step()", false);
-                
-                CutVelocity(max_vel, max_a_vel);
-                CHECK_POS(Position(), "pos after CutVelocity", true);
-                
-                if (max_depth < resolve_depth)
-                {
-                    ret = true;
-                    break;
-                }
-            }
-            attempts--;
-        } while (!ret && attempts > 0);
-    }
-    
-    RestoreVelocityState(temp_state);
-    CHECK_POS(Position(), "pos after RestoreVelocityState(temp_state);", true);
-    
-    if (!un_freeze_later)
-        ph_world->UnFreeze();
+    GetPhysicsCore()->SetBoxExtents(m_char_handle, Fvector().set(need_size).mul(0.5f));
 
 #ifdef DEBUG
     if (debug_output().ph_dbg_draw_mask().test(phDbgDrawDeathActivationBox))
@@ -211,7 +141,7 @@ bool CPHActivationShape::Activate(const Fvector need_size, u16 steps, float max_
         debug_output().DBG_ClosedCashedDraw(30000);
     }
 #endif
-    return ret;
+    return true;
 }
 
 const Fvector& CPHActivationShape::Position() 

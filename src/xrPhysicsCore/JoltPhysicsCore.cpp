@@ -398,9 +398,6 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
     JPH::IndexedTriangleList jolt_triangles;
     jolt_triangles.reserve(actual_t_cnt);
 
-    const float min_edge_len_sq = 1e-7f;
-    const float min_area_sq = 1e-8f;
-    
     for (u32 i = 0; i < actual_t_cnt; ++i) {
         u32 original_index = tri_indices ? tri_indices[i] : i;
         const auto& tri = tris[original_index];
@@ -424,32 +421,8 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
         if (!_valid(v0) || !_valid(v1) || !_valid(v2))
             continue;
 
-        // 4. Check geometric edge lengths (via JPH::Vec3 SIMD)
-        JPH::Vec3 p0(v0.x, v0.y, v0.z);
-        JPH::Vec3 p1(v1.x, v1.y, v1.z);
-        JPH::Vec3 p2(v2.x, v2.y, v2.z);
-
-        JPH::Vec3 e1 = p1 - p0;
-        JPH::Vec3 e2 = p2 - p0;
-        JPH::Vec3 e3 = p2 - p1;
-
-        if (e1.LengthSq() < min_edge_len_sq || 
-            e2.LengthSq() < min_edge_len_sq || 
-            e3.LengthSq() < min_edge_len_sq)
-            continue;
-
-        // 5. Check triangle area (cross product length squared)
-        JPH::Vec3 normal = e1.Cross(e2);
-        if (normal.LengthSq() < min_area_sq)
-            continue;
-
-        // 6. Check duplicate triangles (sorted indices)
-        u32 k0 = idx0, k1 = idx1, k2 = idx2;
-        if (k0 > k1) std::swap(k0, k1);
-        if (k1 > k2) std::swap(k1, k2);
-        if (k0 > k1) std::swap(k0, k1);
-
-        if (!unique_triangles.insert({k0, k1, k2}).second)
+        // 4. Check duplicate triangles preserving winding order (for double-sided geometry)
+        if (!unique_triangles.insert({idx0, idx1, idx2}).second)
             continue;
 
         u16 mtl = tri.material & 0x3FFF; // Очищаем от флагов компилятора

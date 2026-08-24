@@ -49,7 +49,7 @@ void render_main::calculate()
     dsgraph_main.o.view_pos = Device.vCameraPosition;
     dsgraph_main.o.xform = Device.mFullTransform;
     dsgraph_main.o.view_frustum = RImplementation.ViewBase;
-    dsgraph_main.o.query_box_side = VIEWPORT_NEAR + EPS_L;
+    dsgraph_main.o.query_box_side = _max(VIEWPORT_NEAR * 4.0f, 0.5f);
     dsgraph_main.o.precise_portals = true;
     dsgraph_main.o.mt_calculate = o.mt_calc_enabled;
 

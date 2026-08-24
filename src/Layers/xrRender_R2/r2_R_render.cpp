@@ -132,7 +132,7 @@ void CRender::Render()
             dsgraph.o.view_pos = Device.vCameraPosition;
             dsgraph.o.xform = m_zfill;
             dsgraph.o.view_frustum = ViewBase;
-            dsgraph.o.query_box_side = VIEWPORT_NEAR + EPS_L;
+            dsgraph.o.query_box_side = _max(VIEWPORT_NEAR * 4.0f, 0.5f);
             dsgraph.o.precise_portals = true;
 
             dsgraph.build_subspace();

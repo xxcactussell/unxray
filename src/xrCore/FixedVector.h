@@ -15,8 +15,8 @@ public:
     typedef const value_type& const_reference;
 
 private:
-    value_type array[dim];
-    u32 count;
+    value_type array[dim]{};
+    u32 count = 0;
 
 public:
     svector() : count(0) {}
@@ -101,8 +101,9 @@ public:
     IC void assign(const_iterator p, size_t c)
     {
         VERIFY(c > 0 && c <= dim);
+        c = std::min(c, (size_t)dim);
         CopyMemory(array, p, c * sizeof(value_type));
-        count = c;
+        count = u32(c);
     }
     IC bool equal(const svector<value_type, dim>& base) const
     {

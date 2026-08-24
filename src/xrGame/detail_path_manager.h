@@ -21,11 +21,11 @@ class CDetailPathManager
 public:
     struct STravelParams
     {
-        float linear_velocity;
-        float angular_velocity;
-        float real_angular_velocity;
+        float linear_velocity = 0.f;
+        float angular_velocity = 0.f;
+        float real_angular_velocity = 0.f;
 
-        STravelParams() {}
+        STravelParams() : linear_velocity(0.f), angular_velocity(0.f), real_angular_velocity(0.f) {}
         STravelParams(float l, float a) : linear_velocity(l), angular_velocity(a), real_angular_velocity(a) {}
         STravelParams(float l, float a, float ra) : linear_velocity(l), angular_velocity(a), real_angular_velocity(ra)
         {
@@ -34,9 +34,9 @@ public:
 
     struct STravelParamsIndex : public STravelParams
     {
-        u32 index;
+        u32 index = 0;
 
-        STravelParamsIndex() {}
+        STravelParamsIndex() : STravelParams(), index(0) {}
         STravelParamsIndex(float l, float a, u32 i) : STravelParams(l, a), index(i) {}
     };
 

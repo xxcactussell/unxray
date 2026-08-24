@@ -35,7 +35,7 @@ struct SStepInfo
 
     u8 cur_cycle;
 
-    SStepInfo() { disable = true; }
+    SStepInfo() : activity{}, params{}, disable(true), cur_cycle(0) {}
 };
 
 enum ELegType

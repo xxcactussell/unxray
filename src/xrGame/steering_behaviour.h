@@ -85,14 +85,14 @@ class evade : public base
 public:
     struct params : base::params
     {
-        vec pos;
-        vec dest;
+        vec pos{};
+        vec dest{};
         float max_evade_range;
         vec (*pf_random_dir)(); // randomizer func in case we're in 0 dist from dest
 
         params(float max_evade_range, vec_arg factor, float min_factor_dist = base::s_min_factor_dist,
             vec (*pf_random_dir)() = &detail::random_vec)
-            : base::params(factor, min_factor_dist), max_evade_range(max_evade_range), pf_random_dir(pf_random_dir)
+            : base::params(factor, min_factor_dist), max_evade_range(max_evade_range), pf_random_dir(pf_random_dir), pos{}, dest{}
         {
         }
 
@@ -117,8 +117,8 @@ class pursue : public base
 public:
     struct params : base::params
     {
-        vec pos;
-        vec dest;
+        vec pos{};
+        vec dest{};
         float min_range2dest;
         float change_vel_range;
         float arrive_vel;
@@ -127,7 +127,7 @@ public:
 
         params(vec_arg factor, float arrive_range, float change_vel_range, float arrive_vel,
             float min_factor_dist = base::s_min_factor_dist)
-            : base::params(factor, min_factor_dist), min_range2dest(0),
+            : base::params(factor, min_factor_dist), pos{}, dest{}, min_range2dest(0),
               arrive_range(arrive_range), vel(0),
               change_vel_range(change_vel_range),
               arrive_vel(arrive_vel) {}
@@ -153,12 +153,12 @@ class restrictor : public base
 public:
     struct params : base::params
     {
-        vec pos;
-        vec restrictor_pos;
+        vec pos{};
+        vec restrictor_pos{};
         float max_allowed_range;
 
         params(vec_arg restrictor_pos, float max_allowed_range, vec_arg factor)
-            : base::params(factor), restrictor_pos(restrictor_pos), max_allowed_range(max_allowed_range)
+            : base::params(factor), pos{}, restrictor_pos(restrictor_pos), max_allowed_range(max_allowed_range)
         {
         }
 
@@ -192,10 +192,10 @@ public:
 
         float conservativeness; // how much we're taking current dir into account?
         float angle_change; // how big angle changes can be? (radians)
-        vec dir;
+        vec dir{};
 
         params(plane_t plane, float conservativeness, float angle_change, float factor)
-            : base::params(cr_fvector3(factor, 0, 0)), plane(plane), conservativeness(conservativeness),
+            : base::params(cr_fvector3(factor, 0, 0)), dir{}, plane(plane), conservativeness(conservativeness),
               angle_change(angle_change)
         {
         }
@@ -227,17 +227,17 @@ class containment : public base
 public:
     struct params : base::params
     {
-        vec pos;
-        vec dir;
-        vec up;
+        vec pos{};
+        vec dir{};
+        vec up{};
         float turn_factor;
-        vec thrust_factor;
+        vec thrust_factor{};
 
         typedef std::vector<vec> Probes;
         Probes probes; // obstacle-scanners (vectors in local (dir,up) space)
 
         params(float turn_factor, vec_arg thrust_factor, float min_factor_dist = base::s_min_factor_dist)
-            : base::params(thrust_factor, min_factor_dist), turn_factor(turn_factor), thrust_factor(thrust_factor)
+            : base::params(thrust_factor, min_factor_dist), pos{}, dir{}, up{}, turn_factor(turn_factor), thrust_factor(thrust_factor)
         {
         }
 
@@ -264,15 +264,15 @@ class grouping : public base
 public:
     struct params : base::params
     {
-        vec pos;
-        vec cohesion_factor;
-        vec separation_factor;
+        vec pos{};
+        vec cohesion_factor{};
+        vec separation_factor{};
         float max_separate_range;
         vec (*pf_random_dir)();
 
         params(vec_arg cohesion_factor, vec_arg separation_factor, float max_separate_range,
             float min_factor_dist = base::s_min_factor_dist, vec (*pf_random_dir)() = &detail::random_vec)
-            : base::params(separation_factor, min_factor_dist), pf_random_dir(pf_random_dir),
+            : base::params(separation_factor, min_factor_dist), pos{}, pf_random_dir(pf_random_dir),
               cohesion_factor(cohesion_factor), separation_factor(separation_factor),
               max_separate_range(max_separate_range)
         {

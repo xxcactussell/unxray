@@ -107,6 +107,21 @@ void CPHShell::Build(bool disable)
 
 void CPHShell::RunSimulation(bool place_current_forms)
 {
+    if (isActive())
+        return;
+
+    m_flags.set(flActive, TRUE);
+    PresetActive();
+
+    for (auto i = elements.begin(), e = elements.end(); i != e; ++i)
+    {
+        (*i)->RunSimulation();
+    }
+
+    for (auto i = joints.begin(), e = joints.end(); i != e; ++i)
+        (*i)->RunSimulation();
+
+    spatial_register();
 }
 
 void CPHShell::Deactivate()

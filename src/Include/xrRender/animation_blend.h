@@ -182,7 +182,7 @@ IC bool CBlend::update(float dt, PlayCallback _Callback)
 {
     switch (blend)
     {
-    case eFREE_SLOT: NODEFAULT;
+    case eFREE_SLOT: NODEFAULT; break;
     case eAccrue: update_play(dt, _Callback); break;
     case eFalloff:
         if (update_falloff(dt))

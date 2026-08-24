@@ -8,7 +8,13 @@
 
 #pragma once
 
-IC CSpaceRestrictor::CSpaceRestrictor() { m_space_restrictor_type = RestrictionSpace::eRestrictorTypeNone; }
+IC CSpaceRestrictor::CSpaceRestrictor()
+{
+    m_space_restrictor_type = RestrictionSpace::eRestrictorTypeNone;
+    m_actuality = false;
+    m_selfbounds.P.set(0.f, 0.f, 0.f);
+    m_selfbounds.R = 0.f;
+}
 IC bool CSpaceRestrictor::actual() const { return (m_actuality); }
 IC void CSpaceRestrictor::actual(bool value) const { m_actuality = value; }
 IC RestrictionSpace::ERestrictorTypes CSpaceRestrictor::restrictor_type() const

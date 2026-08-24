@@ -1035,7 +1035,7 @@ public:
 
         string1024 digits;
         pstr p = buff + len - 1;
-        while (isdigit(*p))
+        while (isdigit((unsigned char)*p))
         {
             if (p == buff)
                 break;
@@ -1102,7 +1102,7 @@ public:
 
         string1024 digits;
         pstr p = buff + len - 1;
-        while (isdigit(*p))
+        while (isdigit((unsigned char)*p))
         {
             if (p == buff)
                 break;

@@ -290,7 +290,7 @@ IC u8 TransferenceAndThrowVelToThrowDir(const Fvector& transference, float throw
     switch (ret)
     {
     case 0: return 0; break;
-    case 2: throw_dir[1].y = tgA.y * s; throw_dir[1].normalize();
+    case 2: throw_dir[1].y = tgA.y * s; throw_dir[1].normalize(); [[fallthrough]];
     case 1:
         throw_dir[0].y = tgA.x * s;
         throw_dir[0].normalize();
@@ -444,9 +444,9 @@ IC u8 TransferenceAndThrowVelToThrowDir(const Fvector& transference, float throw
 
 struct SInertVal
 {
-    float val;
+    float val = 0.f;
     const float inertion;
-    SInertVal(float inert) : inertion(inert) { R_ASSERT(inert > 0.f && inert < 1.f); }
+    SInertVal(float inert) : val(0.f), inertion(inert) { R_ASSERT(inert > 0.f && inert < 1.f); }
     IC void new_val(float new_val) { val = inertion * val + (1 - inertion) * new_val; }
 private:
     SInertVal& operator=(SInertVal& v) = delete;

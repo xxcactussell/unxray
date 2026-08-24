@@ -38,7 +38,7 @@ BOOL _parse(pstr dest, LPCSTR src)
                     *dest++ = *src++;
                     continue;
                 }
-                while (*src && isspace(*src))
+                while (*src && isspace((u8)*src))
                 {
                     ++src;
                 }

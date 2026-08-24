@@ -119,3 +119,5 @@ IC void dGeomUserDataResetLastPos(CPhysicsGeom* geom)
     geom->last_aabb_size.set(0, 0, 0);
     geom->last_aabb_pos.set(0, 0, 0);
 }
+
+XRPHYSICS_API bool IsCyliderContact(CPhysicsGeom* geom1, CPhysicsGeom* geom2);

@@ -32,10 +32,10 @@ class
     SLevel
 {
     shared_str m_name;
-    Fvector m_offset;
-    _LEVEL_ID m_id;
+    Fvector m_offset{};
+    _LEVEL_ID m_id = 0;
     shared_str m_section;
-    xrGUID m_guid;
+    xrGUID m_guid{};
 
 public:
     IC const shared_str& name() const { return (m_name); }
@@ -102,11 +102,11 @@ public:
 #else
 private:
 #endif
-    u8 m_version;
-    _GRAPH_ID m_vertex_count;
-    u32 m_edge_count;
-    u32 m_death_point_count;
-    xrGUID m_guid;
+    u8 m_version = 0;
+    _GRAPH_ID m_vertex_count = 0;
+    u32 m_edge_count = 0;
+    u32 m_death_point_count = 0;
+    xrGUID m_guid{};
     LEVEL_MAP m_levels;
 
 public:

@@ -40,7 +40,7 @@ void CScriptBaseAction::setup(_object_type* object, CPropertyStorage* storage)
 TEMPLATE_SPECIALIZATION
 void CScriptBaseAction::setup(CScriptGameObject* object, CPropertyStorage* storage)
 {
-    VERIFY(object);
+    R_ASSERT(object);
     inherited::setup(object, storage);
     setup(smart_cast<_object_type*>(&object->object()), storage);
 }

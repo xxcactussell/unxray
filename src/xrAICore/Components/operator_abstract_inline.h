@@ -40,7 +40,8 @@ void CAbstractOperator::setup(bool* actuality)
 {
     VERIFY(actuality);
     m_actuality = actuality;
-    *m_actuality = false;
+    if (m_actuality)
+        *m_actuality = false;
 }
 
 TEMPLATE_SPECIALIZATION

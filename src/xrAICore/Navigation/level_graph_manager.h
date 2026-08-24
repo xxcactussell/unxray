@@ -47,7 +47,7 @@ private:
     }
 
 public:
-    CLevelGraphManager(IReader* stream, size_t vertex_count, u32 version) : m_vertex_count(vertex_count)
+    CLevelGraphManager(IReader* stream, size_t vertex_count, u32 version) : m_nodes(nullptr), m_vertex_count(vertex_count)
     {
         switch ((xrAI_Versions)version)
         {

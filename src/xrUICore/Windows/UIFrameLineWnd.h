@@ -27,7 +27,7 @@ public:
     void SetTextureRect(const Frect rect, RectSegment idx)
     {
         VERIFY(idx >= flFirst && idx < flMax);
-        if (idx >= flMax)
+        if (idx < flFirst || idx >= flMax)
             return;
         m_tex_rect[idx] = rect;
     }

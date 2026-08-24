@@ -24,6 +24,7 @@ public:
     vis_data() //--#SM+#--
     {
         obj_data = &obj_data_self;
+        clear();
     }
 
     IC void clear()

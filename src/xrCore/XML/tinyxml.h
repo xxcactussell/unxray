@@ -361,13 +361,15 @@ protected:
     {
         if (encoding == TIXML_ENCODING_UTF8)
         {
-            if (v < 128)
+            if (v >= 0 && v < 128)
                 return tolower(v);
             return v;
         }
         else
         {
-            return tolower(v);
+            if (v >= 0 && v <= 255)
+                return tolower(v);
+            return v;
         }
     }
     static void ConvertUTF32ToUTF8(unsigned long input, char* output, int* length);

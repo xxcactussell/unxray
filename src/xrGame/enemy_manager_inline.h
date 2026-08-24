@@ -23,7 +23,7 @@ IC CEntityAlive const* CEnemyManager::selected() const
 
 IC void CEnemyManager::set_enemy(CEntityAlive const* enemy)
 {
-    VERIFY2(enemy, "Bad enemy!");
+    R_ASSERT2(enemy, "Bad enemy!");
     VERIFY2(enemy->g_Alive(), "Enemy is already dead!");
 
     m_smart_cover_enemy = enemy;

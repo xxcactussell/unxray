@@ -164,9 +164,9 @@ public:
     TOnClick OnClickEvent;
 
 public:
-    u32 prop_color;
-    u32 val_color;
-    Irect draw_rect;
+    u32 prop_color = 0;
+    u32 val_color = 0;
+    Irect draw_rect{};
 
 public:
     enum
@@ -182,7 +182,11 @@ public:
 
 public:
     PropItem(EPropType _type)
-        : type(_type), prop_color(0), val_color(0), item(nullptr), key(nullptr), OnClickEvent(nullptr), OnDrawTextEvent(nullptr),
+        : type(_type),
+#ifdef XR_PLATFORM_WINDOWS
+          m_Owner(nullptr),
+#endif
+          prop_color(0), val_color(0), draw_rect{}, item(nullptr), key(nullptr), OnClickEvent(nullptr), OnDrawTextEvent(nullptr),
           OnItemFocused(nullptr)
     {
         m_Flags.zero();
@@ -551,13 +555,13 @@ template <class T>
 class NumericValue : public CustomValue<T>
 {
 public:
-    T lim_mn;
-    T lim_mx;
-    T inc;
-    int dec;
+    T lim_mn{};
+    T lim_mx{};
+    T inc{};
+    int dec = 0;
 
 public:
-    NumericValue(T* val) : CustomValue<T>(val)
+    NumericValue(T* val) : CustomValue<T>(val), lim_mn{}, lim_mx{}, inc{}, dec(0)
     {
         this->value = val;
         this->init_value = *this->value;
@@ -794,7 +798,7 @@ public:
         for (u32 i = 0; i < cnt; i++)
             if (items[i].ID == draw_val)
                 return items[i].str;
-        return nullptr;
+        return "";
     }
 };
 //------------------------------------------------------------------------------

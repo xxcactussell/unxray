@@ -170,7 +170,7 @@ uint64_t _cdecl _strtoui64_l(const char *nptr, char **endptr, int base, locale_t
     if (!(base <= 36))
         return 0;
 
-    while (isspace(*nptr))
+    while (isspace((u8)*nptr))
         nptr++;
 
     if (*nptr == '-')
@@ -181,7 +181,7 @@ uint64_t _cdecl _strtoui64_l(const char *nptr, char **endptr, int base, locale_t
     else if (*nptr == '+')
         nptr++;
 
-    if ((base == 0 || base == 16) && *nptr == '0' && tolower(*(nptr + 1)) == 'x')
+    if ((base == 0 || base == 16) && *nptr == '0' && tolower((u8)*(nptr + 1)) == 'x')
     {
         base = 16;
         nptr += 2;
@@ -197,10 +197,10 @@ uint64_t _cdecl _strtoui64_l(const char *nptr, char **endptr, int base, locale_t
 
     while (*nptr)
     {
-        char cur = tolower(*nptr);
+        char cur = tolower((u8)*nptr);
         int v;
 
-        if (isdigit(cur))
+        if (isdigit((u8)cur))
         {
             if (cur >= '0' + base)
                 break;
@@ -267,7 +267,7 @@ XRCORE_API bool _parse(pstr dest, pcstr src)
                     continue;
                 }
 
-                while (*src && isspace(*src))
+                while (*src && isspace((u8)*src))
                     ++src;
 
                 continue;

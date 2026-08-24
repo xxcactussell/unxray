@@ -13,6 +13,7 @@ IC CAttachableItem::CAttachableItem()
     m_item = 0;
     m_offset.identity();
     m_bone_name = "";
+    m_bone_id = u16(-1);
     m_enabled = true;
 //	m_auto_attach		= true;
 #ifdef DEBUG

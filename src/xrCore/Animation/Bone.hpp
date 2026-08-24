@@ -129,7 +129,7 @@ struct XRCORE_API vertBoned3W // 70 bytes
     [[nodiscard]] u16 get_bone_id(u8 bone) const
     {
         VERIFY(bone < bones_count);
-        return m[bone];
+        return m[bone < bones_count ? bone : 0];
     }
 #endif
 };
@@ -148,7 +148,7 @@ struct XRCORE_API vertBoned4W // 76 bytes
     [[nodiscard]] u16 get_bone_id(u8 bone) const
     {
         VERIFY(bone < bones_count);
-        return m[bone];
+        return m[bone < bones_count ? bone : 0];
     }
 #endif
 };
@@ -199,7 +199,7 @@ struct XRCORE_API SBoneShape
         sfNoFogCollider = (1u << 3u),
     };
 
-    u16 type; // 2
+    u16 type; // EShapeType
     Flags16 flags; // 2
     Fobb box; // 15*4
     Fsphere sphere; // 4*4
@@ -435,22 +435,22 @@ typedef vecBones::iterator vecBonesIt;
 class XRCORE_API CBoneData final : public IBoneData
 {
 protected:
-    u16 SelfID;
-    u16 ParentID;
+    u16 SelfID = BI_NONE;
+    u16 ParentID = BI_NONE;
 
 public:
     shared_str name;
 
-    Fobb obb;
+    Fobb obb{};
 
-    Fmatrix bind_transform;
-    Fmatrix m2b_transform; // model to bone conversion transform
+    Fmatrix bind_transform{};
+    Fmatrix m2b_transform{}; // model to bone conversion transform
     SBoneShape shape;
     shared_str game_mtl_name;
-    u16 game_mtl_idx;
+    u16 game_mtl_idx = u16(-1);
     SJointIKData IK_data;
-    float mass;
-    Fvector center_of_mass;
+    float mass = 0.f;
+    Fvector center_of_mass{};
 
     vecBones children; // bones which are slaves to this
 
@@ -458,7 +458,7 @@ public:
     using ChildFacesVec = xr_vector<FacesVec>;
     ChildFacesVec child_faces; // shared
 
-    explicit CBoneData(u16 ID) : SelfID(ID) { VERIFY(SelfID != BI_NONE); }
+    explicit CBoneData(u16 ID) : SelfID(ID), ParentID(BI_NONE), obb{}, bind_transform{}, m2b_transform{}, game_mtl_idx(u16(-1)), mass(0.f), center_of_mass{} { VERIFY(SelfID != BI_NONE); }
     virtual ~CBoneData() = default;
 #ifdef DEBUG
     typedef svector<int, 128> BoneDebug;

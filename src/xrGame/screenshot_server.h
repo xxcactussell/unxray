@@ -23,13 +23,13 @@ private:
     CMemoryWriter my_proxy_mem_file;
     void save_proxy_screenshot();
     void save_proxy_config(); // compressed
-    bool m_first_receive;
-    file_transfer::filereceiver_node* m_receiver;
+    bool m_first_receive = false;
+    file_transfer::filereceiver_node* m_receiver = nullptr;
 
-    file_transfer::server_site* m_ft_server;
+    file_transfer::server_site* m_ft_server = nullptr;
     // memory file
     void notify_admin(clientdata_event_t event_for_admin, char const* reason);
-    clientdata_proxy(){};
+    clientdata_proxy() : m_first_receive(false), m_receiver(nullptr), m_ft_server(nullptr) {};
 
 public:
     clientdata_proxy(file_transfer::server_site* ft_server);

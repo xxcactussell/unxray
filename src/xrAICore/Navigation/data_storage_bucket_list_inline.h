@@ -23,6 +23,9 @@ inline CBucketList::CDataStorage(const u32 vertex_count) : TManagerDataStorage(v
     m_max_bucket_value = typename TManagerDataStorage::Vertex::Distance(1000);
     ZeroMemory(m_buckets, BucketSize);
     m_min_bucket_id = 0;
+    ZeroMemory(m_list_data, sizeof(m_list_data));
+    m_list_head = nullptr;
+    m_list_tail = nullptr;
 }
 
 TEMPLATE_SPECIALIZATION

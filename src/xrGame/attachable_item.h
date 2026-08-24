@@ -61,6 +61,7 @@ public:
     static Fvector get_angle_offset()
     {
         VERIFY(m_dbgItem);
+        if (!m_dbgItem) return Fvector().set(0, 0, 0);
         Fvector v;
         m_dbgItem->m_offset.getHPB(v);
         return v;
@@ -68,10 +69,12 @@ public:
     static Fvector get_pos_offset()
     {
         VERIFY(m_dbgItem);
+        if (!m_dbgItem) return Fvector().set(0, 0, 0);
         return m_dbgItem->m_offset.c;
     };
     static void set_angle_offset(Fvector val)
     {
+        if (!m_dbgItem) return;
         Fvector c = get_pos_offset();
         m_dbgItem->m_offset.setHPB(VPUSH(val));
         m_dbgItem->m_offset.c = c;

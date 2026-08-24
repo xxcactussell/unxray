@@ -17,8 +17,8 @@ class CSoundPlayer : public CRandom32
 public:
     struct CSoundParams
     {
-        u32 m_priority;
-        u32 m_synchro_mask;
+        u32 m_priority = 0;
+        u32 m_synchro_mask = 0;
         shared_str m_bone_name;
     };
 
@@ -65,16 +65,18 @@ public:
 
     struct CSoundSingle : public CSoundParams
     {
-        ref_sound* m_sound;
-        u32 m_start_time;
-        u32 m_stop_time;
-        bool m_started;
-        u16 m_bone_id;
+        ref_sound* m_sound = nullptr;
+        u32 m_start_time = 0;
+        u32 m_stop_time = 0;
+        bool m_started = false;
+        u16 m_bone_id = u16(-1);
 
-        CSoundSingle() { m_started = false; }
+        CSoundSingle() : m_sound(nullptr), m_start_time(0), m_stop_time(0), m_started(false), m_bone_id(u16(-1)) {}
         void destroy()
         {
             VERIFY(m_sound);
+            if (!m_sound)
+                return;
             if (m_sound->_feedback())
                 m_sound->stop();
 

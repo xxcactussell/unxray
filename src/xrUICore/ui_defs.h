@@ -36,9 +36,9 @@ enum EUIItemAlign
 
 struct S2DVert
 {
-    Fvector2 pt;
-    Fvector2 uv;
-    S2DVert() {}
+    Fvector2 pt{};
+    Fvector2 uv{};
+    S2DVert() : pt{0.f, 0.f}, uv{0.f, 0.f} {}
     S2DVert(float pX, float pY, float tU, float tV)
     {
         pt.set(pX, pY);

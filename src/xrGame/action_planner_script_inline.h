@@ -16,7 +16,7 @@ IC _CActionPlannerScript::CActionPlannerScript() { m_object = 0; }
 TEMPLATE_SPECIALIZATION
 void _CActionPlannerScript::setup(_object_type* object)
 {
-    VERIFY(object);
+    R_ASSERT(object);
     inherited::setup(object->lua_game_object());
     m_object = object;
 }

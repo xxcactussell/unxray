@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "JoltPhysicsCore.h"
 #include "xrMaterialSystem/GameMtlLib.h"
+#include <unordered_set>
+#include <algorithm>
 
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Core/Factory.h>
@@ -37,6 +39,10 @@
 JoltPhysicsCore::~JoltPhysicsCore() 
 {
     Destroy();
+}
+
+static inline bool is_valid_pos(const Fvector& v) {
+    return _valid(v) && (v.x * v.x + v.y * v.y + v.z * v.z) < 10000000000.0f;
 }
 
 
@@ -87,9 +93,33 @@ static void FlushDeferredContacts() {
 
 
 
+static void JoltTraceImpl(const char* inFMT, ...)
+{
+    va_list list;
+    va_start(list, inFMT);
+    char buffer[1024];
+    vsnprintf(buffer, sizeof(buffer), inFMT, list);
+    va_end(list);
+
+    Msg("[Jolt] %s", buffer);
+}
+
+#ifdef JPH_ENABLE_ASSERTS
+static bool JoltAssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile, JPH::uint inLine)
+{
+    Msg("! [Jolt Assert Failed] (%s) %s at %s:%u", inExpression, inMessage ? inMessage : "", inFile, inLine);
+    return true;
+}
+#endif
+
 void JoltPhysicsCore::Initialize() 
 {
     if (m_physics_system) return;
+
+    JPH::Trace = JoltTraceImpl;
+#ifdef JPH_ENABLE_ASSERTS
+    JPH::AssertFailed = JoltAssertFailedImpl;
+#endif
 
     if (!JPH::Factory::sInstance) {
         JPH::RegisterDefaultAllocator();
@@ -321,6 +351,19 @@ static inline u32 GetTriangleUserDataForSubShape(const JPH::Shape* shape, const 
 
 PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris_raw, u32 t_cnt, const u32* tri_indices, u32 tri_indices_cnt) 
 {
+    if (!verts || v_cnt < 3 || !tris_raw)
+        return nullptr;
+
+    if (!JPH::Factory::sInstance) {
+        JPH::Trace = JoltTraceImpl;
+#ifdef JPH_ENABLE_ASSERTS
+        JPH::AssertFailed = JoltAssertFailedImpl;
+#endif
+        JPH::RegisterDefaultAllocator();
+        JPH::Factory::sInstance = new JPH::Factory();
+        JPH::RegisterTypes();
+    }
+
     const CDB_TRI_Mock* tris = static_cast<const CDB_TRI_Mock*>(tris_raw);
 
     JPH::VertexList jolt_vertices;
@@ -330,27 +373,107 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
     }
 
     u32 actual_t_cnt = tri_indices ? tri_indices_cnt : t_cnt;
+    if (actual_t_cnt == 0)
+        return nullptr;
+
+    struct TriangleKey {
+        u32 i0, i1, i2;
+        bool operator==(const TriangleKey& other) const noexcept {
+            return i0 == other.i0 && i1 == other.i1 && i2 == other.i2;
+        }
+    };
+
+    struct TriangleKeyHasher {
+        std::size_t operator()(const TriangleKey& k) const noexcept {
+            std::size_t h = k.i0;
+            h = h * 31 + k.i1;
+            h = h * 31 + k.i2;
+            return h;
+        }
+    };
+
+    std::unordered_set<TriangleKey, TriangleKeyHasher> unique_triangles;
+    unique_triangles.reserve(actual_t_cnt);
+
     JPH::IndexedTriangleList jolt_triangles;
     jolt_triangles.reserve(actual_t_cnt);
+
+    const float min_edge_len_sq = 1e-7f;
+    const float min_area_sq = 1e-8f;
     
     for (u32 i = 0; i < actual_t_cnt; ++i) {
         u32 original_index = tri_indices ? tri_indices[i] : i;
-        u16 mtl = tris[original_index].material & 0x3FFF; // Очищаем от флагов компилятора
+        const auto& tri = tris[original_index];
+        u32 idx0 = tri.verts[0];
+        u32 idx1 = tri.verts[1];
+        u32 idx2 = tri.verts[2];
+
+        // 1. Check index bounds
+        if (idx0 >= v_cnt || idx1 >= v_cnt || idx2 >= v_cnt)
+            continue;
+
+        // 2. Check index degeneracy
+        if (idx0 == idx1 || idx1 == idx2 || idx0 == idx2)
+            continue;
+
+        const Fvector& v0 = verts[idx0];
+        const Fvector& v1 = verts[idx1];
+        const Fvector& v2 = verts[idx2];
+
+        // 3. Check vertex validity
+        if (!_valid(v0) || !_valid(v1) || !_valid(v2))
+            continue;
+
+        // 4. Check geometric edge lengths (via JPH::Vec3 SIMD)
+        JPH::Vec3 p0(v0.x, v0.y, v0.z);
+        JPH::Vec3 p1(v1.x, v1.y, v1.z);
+        JPH::Vec3 p2(v2.x, v2.y, v2.z);
+
+        JPH::Vec3 e1 = p1 - p0;
+        JPH::Vec3 e2 = p2 - p0;
+        JPH::Vec3 e3 = p2 - p1;
+
+        if (e1.LengthSq() < min_edge_len_sq || 
+            e2.LengthSq() < min_edge_len_sq || 
+            e3.LengthSq() < min_edge_len_sq)
+            continue;
+
+        // 5. Check triangle area (cross product length squared)
+        JPH::Vec3 normal = e1.Cross(e2);
+        if (normal.LengthSq() < min_area_sq)
+            continue;
+
+        // 6. Check duplicate triangles (sorted indices)
+        u32 k0 = idx0, k1 = idx1, k2 = idx2;
+        if (k0 > k1) std::swap(k0, k1);
+        if (k1 > k2) std::swap(k1, k2);
+        if (k0 > k1) std::swap(k0, k1);
+
+        if (!unique_triangles.insert({k0, k1, k2}).second)
+            continue;
+
+        u16 mtl = tri.material & 0x3FFF; // Очищаем от флагов компилятора
         u32 packed_data = PackTriangleUserData(mtl, original_index);
 
         jolt_triangles.push_back(JPH::IndexedTriangle(
-            tris[original_index].verts[0], 
-            tris[original_index].verts[1],
-            tris[original_index].verts[2],
+            idx0, 
+            idx1, 
+            idx2, 
             0,
             packed_data
         ));
     }
+
+    if (jolt_triangles.empty())
+        return nullptr;
+
     JPH::MeshShapeSettings settings(jolt_vertices, jolt_triangles);
     settings.mPerTriangleUserData = true;
+    settings.Sanitize();
 
     JPH::ShapeSettings::ShapeResult result = settings.Create();
     if (result.HasError()) {
+        Msg("! [JoltPhysicsCore] BuildCDBModel error: %s", result.GetError().c_str());
         return nullptr;
     }
 
@@ -476,40 +599,36 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCompoundShape(PhysicsShapeHandle* shap
         if (!jph_shape) continue;
 
         const Fvector& pos = transforms[i].c;
+        if (!_valid(pos)) continue;
         JPH::Vec3 position(pos.x, pos.y, pos.z);
         
         const Fmatrix& m = transforms[i];
-        float trace = m._11 + m._22 + m._33;
-        float x, y, z, w;
+        if (!_valid(m)) continue;
 
-        if (trace > 0.0f) {
-            float s = std::sqrt(trace + 1.0f) * 2.0f;
-            w = 0.25f * s;
-            x = (m._32 - m._23) / s;
-            y = (m._13 - m._31) / s;
-            z = (m._21 - m._12) / s;
-        } else if ((m._11 > m._22) && (m._11 > m._33)) {
-            float s = std::sqrt(1.0f + m._11 - m._22 - m._33) * 2.0f;
-            w = (m._32 - m._23) / s;
-            x = 0.25f * s;
-            y = (m._21 + m._12) / s;
-            z = (m._13 + m._31) / s;
-        } else if (m._22 > m._33) {
-            float s = std::sqrt(1.0f + m._22 - m._11 - m._33) * 2.0f;
-            w = (m._13 - m._31) / s;
-            x = (m._21 + m._12) / s;
-            y = 0.25f * s;
-            z = (m._32 + m._23) / s;
-        } else {
-            float s = std::sqrt(1.0f + m._33 - m._11 - m._22) * 2.0f;
-            w = (m._21 - m._12) / s;
-            x = (m._13 + m._31) / s;
-            y = (m._32 + m._23) / s;
-            z = 0.25f * s;
-        }
+        JPH::Vec3 axis_x(m.i.x, m.i.y, m.i.z);
+        JPH::Vec3 axis_y(m.j.x, m.j.y, m.j.z);
+        JPH::Vec3 axis_z(m.k.x, m.k.y, m.k.z);
 
-        JPH::Quat rotation(x, y, z, w);
-        rotation = rotation.Normalized();
+        if (axis_x.LengthSq() > 1e-6f) axis_x = axis_x.Normalized();
+        else axis_x = JPH::Vec3::sAxisX();
+
+        if (axis_y.LengthSq() > 1e-6f) axis_y = axis_y.Normalized();
+        else axis_y = axis_x.GetNormalizedPerpendicular();
+
+        axis_z = axis_x.Cross(axis_y);
+        if (axis_z.LengthSq() > 1e-6f) axis_z = axis_z.Normalized();
+        else axis_z = JPH::Vec3::sAxisZ();
+
+        axis_y = axis_z.Cross(axis_x).Normalized();
+
+        JPH::Mat44 rot_mat(
+            JPH::Vec4(axis_x, 0.0f),
+            JPH::Vec4(axis_y, 0.0f),
+            JPH::Vec4(axis_z, 0.0f),
+            JPH::Vec4(0, 0, 0, 1)
+        );
+
+        JPH::Quat rotation = rot_mat.GetQuaternion().Normalized();
         // Добавляем форму с ее локальным смещением
         compound_settings.AddShape(position, rotation, jph_shape);
     }
@@ -529,6 +648,7 @@ PhysicsShapeHandle JoltPhysicsCore::CreateCompoundShape(PhysicsShapeHandle* shap
 BodyHandle JoltPhysicsCore::CreateBodyFromShape(PhysicsShapeHandle shape_handle, const Fvector& pos, float mass)
 {
     if (!m_physics_system || !shape_handle) return INVALID_BODY_HANDLE;
+    R_ASSERT2(is_valid_pos(pos), "CreateBodyFromShape: Invalid body position!");
 
     JPH::Shape* shape = static_cast<JPH::Shape*>(shape_handle);
     
@@ -561,6 +681,7 @@ BodyHandle JoltPhysicsCore::CreateBodyFromShape(PhysicsShapeHandle shape_handle,
 
 BodyHandle JoltPhysicsCore::CreateBox(const Fvector& half_extents, const Fvector& position, float mass) {
     if (!m_physics_system) return INVALID_BODY_HANDLE;
+    R_ASSERT2(is_valid_pos(position), "CreateBox: Invalid body position!");
 
     JPH::BoxShapeSettings shape_settings(JPH::Vec3(half_extents.x, half_extents.y, half_extents.z));
     JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
@@ -595,6 +716,7 @@ BodyHandle JoltPhysicsCore::CreateBox(const Fvector& half_extents, const Fvector
 
 BodyHandle JoltPhysicsCore::CreateSphere(float radius, const Fvector& position, float mass) {
     if (!m_physics_system) return INVALID_BODY_HANDLE;
+    R_ASSERT2(is_valid_pos(position), "CreateSphere: Invalid body position!");
 
     JPH::SphereShapeSettings shape_settings(radius);
     JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
@@ -624,6 +746,7 @@ BodyHandle JoltPhysicsCore::CreateSphere(float radius, const Fvector& position, 
 
 BodyHandle JoltPhysicsCore::CreateCylinder(float radius, float half_height, const Fvector& position, float mass) {
     if (!m_physics_system) return INVALID_BODY_HANDLE;
+    R_ASSERT2(is_valid_pos(position), "CreateCylinder: Invalid body position!");
 
     JPH::CylinderShapeSettings shape_settings(half_height, radius);
     JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
@@ -721,16 +844,34 @@ void JoltPhysicsCore::GetBodyTransform(BodyHandle body_handle, Fmatrix& out_matr
 
 void JoltPhysicsCore::SetBodyTransform(BodyHandle body_handle, const Fmatrix& matrix) {
     if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    R_ASSERT2(is_valid_pos(matrix.c), "SetBodyTransform: Invalid matrix position!");
+    if (!_valid(matrix)) return;
 
     JPH::BodyID id(body_handle);
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
     
     JPH::Vec3 com_world(matrix.c.x, matrix.c.y, matrix.c.z);
     
+    JPH::Vec3 axis_x(matrix.i.x, matrix.i.y, matrix.i.z);
+    JPH::Vec3 axis_y(matrix.j.x, matrix.j.y, matrix.j.z);
+    JPH::Vec3 axis_z(matrix.k.x, matrix.k.y, matrix.k.z);
+
+    if (axis_x.LengthSq() > 1e-6f) axis_x = axis_x.Normalized();
+    else axis_x = JPH::Vec3::sAxisX();
+
+    if (axis_y.LengthSq() > 1e-6f) axis_y = axis_y.Normalized();
+    else axis_y = axis_x.GetNormalizedPerpendicular();
+
+    axis_z = axis_x.Cross(axis_y);
+    if (axis_z.LengthSq() > 1e-6f) axis_z = axis_z.Normalized();
+    else axis_z = JPH::Vec3::sAxisZ();
+
+    axis_y = axis_z.Cross(axis_x).Normalized();
+
     JPH::Mat44 transform(
-        JPH::Vec4(matrix.i.x, matrix.i.y, matrix.i.z, 0),
-        JPH::Vec4(matrix.j.x, matrix.j.y, matrix.j.z, 0),
-        JPH::Vec4(matrix.k.x, matrix.k.y, matrix.k.z, 0),
+        JPH::Vec4(axis_x, 0.0f),
+        JPH::Vec4(axis_y, 0.0f),
+        JPH::Vec4(axis_z, 0.0f),
         JPH::Vec4(0, 0, 0, 1)
     );
     JPH::Quat rotation = transform.GetQuaternion().Normalized();
@@ -928,6 +1069,7 @@ void JoltPhysicsCore::SetBodyMotionType(BodyHandle body_handle, int motion_type)
 BodyHandle JoltPhysicsCore::CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) 
 {
     if (!m_physics_system || !shape_handle) return INVALID_BODY_HANDLE;
+    R_ASSERT2(is_valid_pos(position), "CreateStaticBody: Invalid static body position!");
 
     JPH::Shape* shape = static_cast<JPH::Shape*>(shape_handle);
 
@@ -957,11 +1099,22 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
 {
     if (!m_physics_system) return INVALID_JOINT_HANDLE;
 
-    JPH::BodyLockRead lock1(m_physics_system->GetBodyLockInterface(), JPH::BodyID(body1));
-    JPH::BodyLockRead lock2(m_physics_system->GetBodyLockInterface(), JPH::BodyID(body2));
+    JPH::BodyID ids[2];
+    int count = 0;
+    int idx1 = -1, idx2 = -1;
+    if (body1 != INVALID_BODY_HANDLE) {
+        idx1 = count;
+        ids[count++] = JPH::BodyID(body1);
+    }
+    if (body2 != INVALID_BODY_HANDLE) {
+        idx2 = count;
+        ids[count++] = JPH::BodyID(body2);
+    }
+
+    JPH::BodyLockMultiRead lock(m_physics_system->GetBodyLockInterface(), ids, count);
     
-    const JPH::Body* b1 = (body1 == INVALID_BODY_HANDLE) ? &JPH::Body::sFixedToWorld : (lock1.Succeeded() ? &lock1.GetBody() : nullptr);
-    const JPH::Body* b2 = (body2 == INVALID_BODY_HANDLE) ? &JPH::Body::sFixedToWorld : (lock2.Succeeded() ? &lock2.GetBody() : nullptr);
+    const JPH::Body* b1 = (body1 == INVALID_BODY_HANDLE) ? &JPH::Body::sFixedToWorld : (idx1 >= 0 ? lock.GetBody(idx1) : nullptr);
+    const JPH::Body* b2 = (body2 == INVALID_BODY_HANDLE) ? &JPH::Body::sFixedToWorld : (idx2 >= 0 ? lock.GetBody(idx2) : nullptr);
 
     if (!b1 || !b2) return INVALID_JOINT_HANDLE;
 
@@ -1214,13 +1367,16 @@ void JoltPhysicsCore::SetJointSpringDamping(JointHandle joint, int axis_num, flo
     if (it == m_constraints.end()) return;
     JPH::Constraint* c = it->second.GetPtr();
 
-    if (cfm <= 1e-8f) return;
+    // Use Jolt's stable FrequencyAndDamping mode.
+    // In ODE, stiffness = erp / (cfm * dt) resulted in values > 3,000,000 N/m,
+    // which caused the joint solver to explode.
+    float frequency = std::clamp(erp * 25.0f, 0.0f, 30.0f);
+    float damping = 1.0f;
 
-    const float h = 1.0f / 60.0f;
     JPH::SpringSettings spring;
-    spring.mMode      = JPH::ESpringMode::StiffnessAndDamping;
-    spring.mStiffness = erp / (cfm * h);
-    spring.mDamping   = (1.0f - erp) / cfm;
+    spring.mMode      = JPH::ESpringMode::FrequencyAndDamping;
+    spring.mFrequency = frequency;
+    spring.mDamping   = damping;
 
     switch (c->GetSubType())
     {
@@ -1233,11 +1389,11 @@ void JoltPhysicsCore::SetJointSpringDamping(JointHandle joint, int axis_num, flo
             static_cast<JPH::SliderConstraint*>(c)->SetLimitsSpringSettings(spring);
         break;
     case JPH::EConstraintSubType::SixDOF:
-        if (axis_num >= 0) {
+        if (axis_num >= 0 && axis_num < 3) {
             auto ax = axis_num == 0 ? JPH::SixDOFConstraintSettings::EAxis::RotationX
                     : axis_num == 1 ? JPH::SixDOFConstraintSettings::EAxis::RotationY
                                     : JPH::SixDOFConstraintSettings::EAxis::RotationZ;
-            static_cast<JPH::SixDOFConstraint*>(c)->SetLimitsSpringSettings(ax, spring);
+            static_cast<JPH::SixDOFConstraint*>(c)->GetMotorSettings(ax).mSpringSettings = spring;
         }
         break;
     default: break;
@@ -1435,6 +1591,7 @@ void JoltPhysicsCore::GetBodyPosition(BodyHandle body_handle, Fvector& position)
 
 void JoltPhysicsCore::SetBodyPosition(BodyHandle body_handle, const Fvector& position) {
     if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    R_ASSERT2(is_valid_pos(position), "SetBodyPosition: Invalid position!");
     
     JPH::BodyID id(body_handle);
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
@@ -1547,11 +1704,10 @@ public:
 class JoltPassableShapeFilter : public JPH::ShapeFilter {
 public:
     virtual bool ShouldCollide(const JPH::Shape* inShape2, const JPH::SubShapeID& inSubShapeIDOfShape2) const override {
-        if (inShape2) {
-            u32 user_data = inShape2->GetSubShapeUserData(inSubShapeIDOfShape2);
-            u16 mtl_idx = UnpackMaterialIndex(user_data);
-            SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
-            if (user_data != u32(-1)) {
+        if (inShape2 && !inSubShapeIDOfShape2.IsEmpty() && inShape2->GetSubType() == JPH::EShapeSubType::Mesh) {
+            const JPH::MeshShape* mesh = static_cast<const JPH::MeshShape*>(inShape2);
+            u32 user_data = mesh->GetTriangleUserData(inSubShapeIDOfShape2);
+            if (user_data != u32(-1) && user_data != 0) {
                 u16 mtl_idx = UnpackMaterialIndex(user_data);
                 SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
                 if (IsPassableMaterial(mtl)) {
@@ -1776,6 +1932,7 @@ JPH::ValidateResult JoltPhysicsCore::MyContactListener::OnContactValidate(
 }
 
 CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) {
+    R_ASSERT2(is_valid_pos(initial_pos), "CreateCharacterVirtual: Invalid initial character position!");
     JPH::Shape* jolt_shape = reinterpret_cast<JPH::Shape*>(shape);
 
     JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
@@ -1830,6 +1987,7 @@ void JoltPhysicsCore::GetCharacterVirtualPosition(CharacterVirtualHandle handle,
 }
 
 void JoltPhysicsCore::SetCharacterVirtualPosition(CharacterVirtualHandle handle, const Fvector& position) {
+    R_ASSERT2(is_valid_pos(position), "SetCharacterVirtualPosition: Invalid position!");
     auto it = m_characters.find(handle);
     if (it != m_characters.end()) {
         JPH::CharacterVirtual* character = it->second.GetPtr();
@@ -2069,9 +2227,16 @@ void JoltPhysicsCore::SetCharacterVirtualStickToFloor(CharacterVirtualHandle han
 PhysicsShapeHandle JoltPhysicsCore::CreateRotatedTranslatedShape(PhysicsShapeHandle base_shape, const Fvector& position, const Fquaternion& rotation) {
     if (!base_shape) return nullptr;
     JPH::Shape* inner = reinterpret_cast<JPH::Shape*>(base_shape);
+    JPH::Quat q(-rotation.x, -rotation.y, -rotation.z, rotation.w);
+    if (q.LengthSq() > 1e-6f) q = q.Normalized();
+    else q = JPH::Quat::sIdentity();
+
+    JPH::Vec3 pos(position.x, position.y, position.z);
+    if (!_valid(position)) pos = JPH::Vec3::sZero();
+
     JPH::RotatedTranslatedShapeSettings settings(
-        JPH::Vec3(position.x, position.y, position.z),
-        JPH::Quat(-rotation.x, -rotation.y, -rotation.z, rotation.w).Normalized(),
+        pos,
+        q,
         inner
     );
     JPH::ShapeSettings::ShapeResult result = settings.Create();
@@ -2104,7 +2269,9 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         jph_part.SetShape(static_cast<JPH::Shape*>(part.shape));
         jph_part.mPosition = JPH::Vec3(part.position.x, part.position.y, part.position.z);
         JPH::Quat part_rot(-part.rotation.x, -part.rotation.y, -part.rotation.z, part.rotation.w);
-        jph_part.mRotation = part_rot.Normalized();
+        if (part_rot.LengthSq() > 1e-6f) part_rot = part_rot.Normalized();
+        else part_rot = JPH::Quat::sIdentity();
+        jph_part.mRotation = part_rot;
         jph_part.mFriction = 0.8f;
         jph_part.mRestitution = 0.02f;
         
@@ -2136,8 +2303,13 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         JPH::Ref<JPH::SwingTwistConstraintSettings> constraint = new JPH::SwingTwistConstraintSettings();
         constraint->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
         
-        JPH::Quat rot_parent = JPH::Quat(-part_parent.rotation.x, -part_parent.rotation.y, -part_parent.rotation.z, part_parent.rotation.w).Normalized();
-        JPH::Quat rot_child = JPH::Quat(-part_child.rotation.x, -part_child.rotation.y, -part_child.rotation.z, part_child.rotation.w).Normalized();
+        JPH::Quat rot_parent(-part_parent.rotation.x, -part_parent.rotation.y, -part_parent.rotation.z, part_parent.rotation.w);
+        if (rot_parent.LengthSq() > 1e-6f) rot_parent = rot_parent.Normalized();
+        else rot_parent = JPH::Quat::sIdentity();
+
+        JPH::Quat rot_child(-part_child.rotation.x, -part_child.rotation.y, -part_child.rotation.z, part_child.rotation.w);
+        if (rot_child.LengthSq() > 1e-6f) rot_child = rot_child.Normalized();
+        else rot_child = JPH::Quat::sIdentity();
         
         JPH::Vec3 pos_parent(part_parent.position.x, part_parent.position.y, part_parent.position.z);
         JPH::Vec3 pos_child(part_child.position.x, part_child.position.y, part_child.position.z);
@@ -2249,16 +2421,40 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* 
         std::vector<JPH::Mat44> jph_matrices(count);
         for (u32 i = 0; i < count; ++i) {
             const Fmatrix& m = target_matrices[i];
+            if (!_valid(m) || !is_valid_pos(m.c)) {
+                jph_matrices[i] = JPH::Mat44::sIdentity();
+                continue;
+            }
+
+            JPH::Vec3 axis_x(m._11, m._12, m._13);
+            JPH::Vec3 axis_y(m._21, m._22, m._23);
+            JPH::Vec3 axis_z(m._31, m._32, m._33);
+
+            if (axis_x.LengthSq() > 1e-6f) axis_x = axis_x.Normalized();
+            else axis_x = JPH::Vec3::sAxisX();
+
+            if (axis_y.LengthSq() > 1e-6f) axis_y = axis_y.Normalized();
+            else axis_y = axis_x.GetNormalizedPerpendicular();
+
+            axis_z = axis_x.Cross(axis_y);
+            if (axis_z.LengthSq() > 1e-6f) axis_z = axis_z.Normalized();
+            else axis_z = JPH::Vec3::sAxisZ();
+
+            axis_y = axis_z.Cross(axis_x).Normalized();
+
             JPH::Mat44 mat(
-                JPH::Vec4(m._11, m._12, m._13, 0.0f),
-                JPH::Vec4(m._21, m._22, m._23, 0.0f),
-                JPH::Vec4(m._31, m._32, m._33, 0.0f),
-                JPH::Vec3(0, 0, 0)
+                JPH::Vec4(axis_x, 0.0f),
+                JPH::Vec4(axis_y, 0.0f),
+                JPH::Vec4(axis_z, 0.0f),
+                JPH::Vec4(0.0f, 0.0f, 0.0f, 1.0f)
             );
-            JPH::Quat q = mat.GetQuaternion();
+            JPH::Quat q = mat.GetQuaternion().Normalized();
             JPH::Quat jph_q(-q.GetX(), -q.GetY(), -q.GetZ(), q.GetW());
+            if (jph_q.LengthSq() > 1e-6f) jph_q = jph_q.Normalized();
+            else jph_q = JPH::Quat::sIdentity();
+
             JPH::Vec3 jph_pos(m.c.x, m.c.y, m.c.z);
-            jph_matrices[i] = JPH::Mat44::sRotationTranslation(jph_q.Normalized(), jph_pos);
+            jph_matrices[i] = JPH::Mat44::sRotationTranslation(jph_q, jph_pos);
         }
         
         // Check if there are kinematic vs dynamic bodies
@@ -2276,9 +2472,19 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* 
             }
         }
         
-        // 1. Smoothly drive kinematic bodies to the world target pose
+        // 1. Instantly update kinematic bodies to the target pose without runaway velocity integration
         if (has_kinematic) {
-            ragdoll->DriveToPoseUsingKinematics(JPH::RVec3::sZero(), jph_matrices.data(), 1.0f / 60.0f);
+            for (u32 i = 0; i < ragdoll->GetBodyCount() && i < count; ++i) {
+                JPH::BodyID id = ragdoll->GetBodyID(i);
+                if (!id.IsInvalid() && m_physics_system->GetBodyInterface().GetMotionType(id) == JPH::EMotionType::Kinematic) {
+                    m_physics_system->GetBodyInterface().SetPositionAndRotation(
+                        id,
+                        jph_matrices[i].GetTranslation(),
+                        jph_matrices[i].GetQuaternion(),
+                        JPH::EActivation::DontActivate
+                    );
+                }
+            }
         }
         
         // 2. Drive dynamic bodies using motors only if dynamic bodies actually exist (prevents 0/0 divide in constraints)
@@ -2338,18 +2544,46 @@ void JoltPhysicsCore::SetRagdollWorldPose(RagdollHandle handle, const Fmatrix& w
         for (u32 i = 0; i < count; ++i) {
             Fmatrix bone_world;
             MatrixMul43(bone_world, world_transform, bone_model_matrices[i]);
+
+            R_ASSERT2(_valid(bone_world) && is_valid_pos(bone_world.c), "SetRagdollWorldPose: input bone matrix is invalid!");
             
+            JPH::Vec3 axis_x(bone_world._11, bone_world._12, bone_world._13);
+            JPH::Vec3 axis_y(bone_world._21, bone_world._22, bone_world._23);
+            JPH::Vec3 axis_z(bone_world._31, bone_world._32, bone_world._33);
+
+            if (axis_x.LengthSq() > 1e-6f) axis_x = axis_x.Normalized();
+            else axis_x = JPH::Vec3::sAxisX();
+
+            if (axis_y.LengthSq() > 1e-6f) axis_y = axis_y.Normalized();
+            else axis_y = axis_x.GetNormalizedPerpendicular();
+
+            axis_z = axis_x.Cross(axis_y);
+            if (axis_z.LengthSq() > 1e-6f) axis_z = axis_z.Normalized();
+            else axis_z = JPH::Vec3::sAxisZ();
+
+            axis_y = axis_z.Cross(axis_x).Normalized();
+
             jph_matrices[i] = JPH::Mat44(
-                JPH::Vec4(bone_world._11, bone_world._12, bone_world._13, 0.0f),
-                JPH::Vec4(bone_world._21, bone_world._22, bone_world._23, 0.0f),
-                JPH::Vec4(bone_world._31, bone_world._32, bone_world._33, 0.0f),
-                JPH::Vec3(bone_world._41 - root_offset.GetX(), bone_world._42 - root_offset.GetY(), bone_world._43 - root_offset.GetZ())
+                JPH::Vec4(axis_x, 0.0f),
+                JPH::Vec4(axis_y, 0.0f),
+                JPH::Vec4(axis_z, 0.0f),
+                JPH::Vec4(bone_world._41 - root_offset.GetX(), bone_world._42 - root_offset.GetY(), bone_world._43 - root_offset.GetZ(), 1.0f)
             );
         }
         
         ragdoll->SetPose(root_offset, jph_matrices.data());
         ragdoll->ResetWarmStart();
         ragdoll->SetLinearAndAngularVelocity(JPH::Vec3::sZero(), JPH::Vec3::sZero());
+
+        // Проверка: все ли тела рэгдолла находятся в адекватных координатах прямо после SetPose
+        for (u32 i = 0; i < ragdoll->GetBodyCount(); ++i) {
+            JPH::BodyID id = ragdoll->GetBodyID(i);
+            if (!id.IsInvalid()) {
+                JPH::RVec3 p = m_physics_system->GetBodyInterface().GetPosition(id);
+                Fvector pos; pos.set(p.GetX(), p.GetY(), p.GetZ());
+                R_ASSERT2(is_valid_pos(pos), "SetRagdollWorldPose: body position exploded after SetPose!");
+            }
+        }
     }
 }
 
@@ -2368,7 +2602,11 @@ void JoltPhysicsCore::SetRagdollRootTransform(RagdollHandle handle, const Fvecto
     if (it != m_ragdolls.end() && m_physics_system) {
         JPH::BodyID root_id = it->second->GetBodyID(0);
         if (!root_id.IsInvalid()) {
-            m_physics_system->GetBodyInterface().SetPositionAndRotation(root_id, JPH::Vec3(position.x, position.y, position.z), JPH::Quat(-rotation.x, -rotation.y, -rotation.z, rotation.w).Normalized(), JPH::EActivation::DontActivate);
+            JPH::Quat q(-rotation.x, -rotation.y, -rotation.z, rotation.w);
+            if (q.LengthSq() > 1e-6f) q = q.Normalized();
+            else q = JPH::Quat::sIdentity();
+
+            m_physics_system->GetBodyInterface().SetPositionAndRotation(root_id, JPH::Vec3(position.x, position.y, position.z), q, JPH::EActivation::DontActivate);
         }
     }
 }
@@ -2525,10 +2763,14 @@ void JoltPhysicsCore::SetRagdollPartTransform(RagdollHandle handle, u32 part_ind
     if (it != m_ragdolls.end() && m_physics_system) {
         JPH::BodyID body_id = it->second->GetBodyID(part_index);
         if (!body_id.IsInvalid()) {
+            JPH::Quat q(-rotation.x, -rotation.y, -rotation.z, rotation.w);
+            if (q.LengthSq() > 1e-6f) q = q.Normalized();
+            else q = JPH::Quat::sIdentity();
+
             m_physics_system->GetBodyInterface().SetPositionAndRotation(
                 body_id, 
                 JPH::Vec3(position.x, position.y, position.z), 
-                JPH::Quat(-rotation.x, -rotation.y, -rotation.z, rotation.w).Normalized(), 
+                q, 
                 JPH::EActivation::DontActivate
             );
         }

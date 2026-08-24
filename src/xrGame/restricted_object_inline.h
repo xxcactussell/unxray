@@ -12,6 +12,9 @@ IC CRestrictedObject::CRestrictedObject(CCustomMonster* object)
 {
     VERIFY(object);
     m_object = object;
+    m_applied = false;
+    m_actual = false;
+    m_removed = false;
 }
 
 IC bool CRestrictedObject::applied() const { return (m_applied); }

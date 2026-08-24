@@ -877,7 +877,23 @@ void CPHSimpleCharacter::JoltCharacterContactCallback(void* char_user_data,
         IPhysicsShellHolder* other_obj = reinterpret_cast<IPhysicsShellHolder*>(other_body_user_data);
         if (other_obj && !other_obj->ObjectGetDestroy())
         {
-            self->UpdateDynamicDamage(contact_normal, contact_pos, other_body_handle, mat_idx, true);
+            u16 dyn_mat_idx = GAMEMTL_NONE_IDX;
+            CPhysicsShell* shell = other_obj->ObjectPPhysicsShell();
+            if (shell && shell->isActive() && shell->Elements().size() > 0)
+            {
+                CPhysicsElement* elem = shell->get_ElementByStoreOrder(0);
+                if (elem && elem->has_geoms() && elem->last_geom())
+                {
+                    dyn_mat_idx = elem->last_geom()->material;
+                }
+            }
+
+            if (dyn_mat_idx == GAMEMTL_NONE_IDX || dyn_mat_idx >= GMLib.CountMaterial())
+            {
+                dyn_mat_idx = GMLib.GetMaterialIdx("default_object");
+            }
+
+            self->UpdateDynamicDamage(contact_normal, contact_pos, other_body_handle, dyn_mat_idx, true);
         }
     }
 }
@@ -892,7 +908,11 @@ void CPHSimpleCharacter::GroundNormal(Fvector& norm)
 
 u16 CPHSimpleCharacter::ContactBone() { return RetriveContactBone(); }
 
-void CPHSimpleCharacter::SetMaterial(u16 material) { VERIFY(b_exist); }
+void CPHSimpleCharacter::SetMaterial(u16 material)
+{
+    if (!b_exist)
+        return;
+}
 
 void CPHSimpleCharacter::get_State(SPHNetState& state)
 {
@@ -1194,3 +1214,10 @@ void CPHSimpleCharacter::NetRelcase(IPhysicsShellHolder* O)
     inherited::NetRelcase(O);
     m_elevator_state.NetRelcase(O);
 }
+
+#ifdef DEBUG
+void CPHSimpleCharacter::OnRender()
+{
+}
+#endif
+

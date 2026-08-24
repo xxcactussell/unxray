@@ -30,7 +30,7 @@ inline void CGameGraph::Initialize(IReader& stream, bool own)
 IC CGameGraph::CGameGraph(LPCSTR file_name, u32 current_version)
 {
     IReader* stream = FS.r_open(file_name);
-    VERIFY(stream);
+    R_ASSERT2(stream, "Failed to open game graph file!");
     // XXX: current_version ?
     (void)current_version;
     Initialize(*stream, true);

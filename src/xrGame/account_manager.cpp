@@ -170,7 +170,7 @@ bool account_manager::verify_email(char const* email)
     char const* tmp_endchar = email + email_length;
     char const* tmp_char = std::find(email, tmp_endchar, '@');
     if ((tmp_char == tmp_endchar) || (tmp_char == email) || (tmp_char + 1 == tmp_endchar) ||
-        !isalnum(*(tmp_char + 1)) || !isalnum(*(tmp_char - 1)))
+        !isalnum((unsigned char)*(tmp_char + 1)) || !isalnum((unsigned char)*(tmp_char - 1)))
     {
         Msg("! ERROR: bad email");
         m_verifyer_error = "mp_gp_bad_email";

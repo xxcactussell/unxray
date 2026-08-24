@@ -57,26 +57,26 @@ static const pcstr ef_boosters_section_names[] =
 
 struct SBooster
 {
-    float fBoostTime;
-    float fBoostValue;
-    EBoostParams m_type;
-    SBooster() : fBoostTime(-1.0f){};
+    float fBoostTime = -1.0f;
+    float fBoostValue = 0.0f;
+    EBoostParams m_type = (EBoostParams)0;
+    SBooster() : fBoostTime(-1.0f), fBoostValue(0.0f), m_type((EBoostParams)0) {};
     void Load(const shared_str& sect, EBoostParams type);
 };
 
 struct SMedicineInfluenceValues
 {
-    float fHealth;
-    float fPower;
-    float fSatiety;
-    float fRadiation;
-    float fWoundsHeal;
-    float fMaxPowerUp;
-    float fAlcohol;
-    float fTimeTotal;
-    float fTimeCurrent;
+    float fHealth = 0.f;
+    float fPower = 0.f;
+    float fSatiety = 0.f;
+    float fRadiation = 0.f;
+    float fWoundsHeal = 0.f;
+    float fMaxPowerUp = 0.f;
+    float fAlcohol = 0.f;
+    float fTimeTotal = 0.f;
+    float fTimeCurrent = -1.0f;
 
-    SMedicineInfluenceValues() : fTimeCurrent(-1.0f) {}
+    SMedicineInfluenceValues() : fHealth(0.f), fPower(0.f), fSatiety(0.f), fRadiation(0.f), fWoundsHeal(0.f), fMaxPowerUp(0.f), fAlcohol(0.f), fTimeTotal(0.f), fTimeCurrent(-1.0f) {}
     bool InProcess() { return fTimeCurrent > 0.0f; }
     void Load(const shared_str& sect);
 };

@@ -136,6 +136,7 @@ void CPHElement::build()
 
 void CPHElement::RunSimulation()
 {
+    m_flags.set(flActive, TRUE);
     GetPhysicsCore()->ActivateBody(m_char_handle);
 }
 
@@ -456,8 +457,8 @@ void CPHElement::PhDataUpdate(float step)
     GetPhysicsCore()->GetBodyLinearVelocity(m_char_handle, linear_velocity);
     GetPhysicsCore()->GetBodyAngularVelocity(m_char_handle, angular_velocity);
 
-    VERIFY(dV_valid(linear_velocity));
-    VERIFY(dV_valid(angular_velocity));
+    VERIFY(_valid(linear_velocity));
+    VERIFY(_valid(angular_velocity));
 
     VERIFY(!fis_zero(m_l_scale));
     VERIFY(!fis_zero(m_w_scale));

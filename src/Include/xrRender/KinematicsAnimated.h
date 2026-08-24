@@ -29,7 +29,12 @@ struct SKeyTable
     CKey keys[MAX_CHANNELS][MAX_BLENDED]; // all keys
     CBlend* blends[MAX_CHANNELS][MAX_BLENDED]; // blend pointers
     int chanel_blend_conts[MAX_CHANNELS]; // channel counts
-    SKeyTable() { std::fill_n(chanel_blend_conts, MAX_CHANNELS, 0); }
+    SKeyTable()
+    {
+        std::fill_n(chanel_blend_conts, MAX_CHANNELS, 0);
+        std::fill_n(&blends[0][0], MAX_CHANNELS * MAX_BLENDED, nullptr);
+        std::fill_n(&keys[0][0], MAX_CHANNELS * MAX_BLENDED, CKey{});
+    }
 };
 
 class XR_NOVTABLE IKinematicsAnimated

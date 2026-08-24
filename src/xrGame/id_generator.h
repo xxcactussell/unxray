@@ -16,11 +16,11 @@ class CID_Generator
 private:
     struct SID_Block
     {
-        CHUNK_ID m_tCount;
-        TIME_ID m_tTimeID;
-        TYPE_ID m_tpIDs[tBlockSize];
+        CHUNK_ID m_tCount = 0;
+        TIME_ID m_tTimeID = 0;
+        TYPE_ID m_tpIDs[tBlockSize]{};
 
-        IC SID_Block() : m_tCount(0) {}
+        IC SID_Block() : m_tCount(0), m_tTimeID(0) {}
         IC bool operator<(const SID_Block& b) const { return (m_tCount && ((m_tTimeID < b.m_tTimeID) || !b.m_tCount)); }
     };
 
@@ -31,8 +31,8 @@ private:
     };
 
 private:
-    u32 m_available_count;
-    SID_Block m_tppBlocks[m_tBlockCount];
+    u32 m_available_count = 0;
+    SID_Block m_tppBlocks[m_tBlockCount]{};
 
 private:
     IC BLOCK_ID tfGetBlockByValue(VALUE_ID tValueID)
@@ -64,9 +64,14 @@ private:
     }
 
 public:
-    IC CID_Generator()
+    IC void reset()
     {
         m_available_count = 0;
+        for (u32 j = 0; j < m_tBlockCount; ++j)
+        {
+            m_tppBlocks[j].m_tCount = 0;
+            m_tppBlocks[j].m_tTimeID = 0;
+        }
         for (VALUE_ID i = tMinValue;; ++i)
         {
             vfFreeID(i, tStartTime);
@@ -76,6 +81,11 @@ public:
         VERIFY(m_available_count == m_tBlockCount);
         for (u32 j = 0; j < m_tBlockCount; ++j)
             std::reverse(m_tppBlocks[j].m_tpIDs, m_tppBlocks[j].m_tpIDs + m_tppBlocks[j].m_tCount);
+    }
+
+    IC CID_Generator()
+    {
+        reset();
     }
 
     IC VALUE_ID tfGetID(VALUE_ID tValueID = tInvalidValueID)

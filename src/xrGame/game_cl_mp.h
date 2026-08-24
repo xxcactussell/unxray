@@ -268,15 +268,15 @@ public:
 
     struct fr_callback_binder
     {
-        file_transfer::filereceiver_node* m_frnode;
+        file_transfer::filereceiver_node* m_frnode = nullptr;
         shared_str m_file_name;
-        clientdata_event_t m_response_type;
-        bool m_active;
-        u32 m_downloaded_size;
-        u32 m_max_size;
-        game_cl_mp* m_owner;
+        clientdata_event_t m_response_type = (clientdata_event_t)0;
+        bool m_active = false;
+        u32 m_downloaded_size = 0;
+        u32 m_max_size = 0;
+        game_cl_mp* m_owner = nullptr;
         CMemoryWriter m_writer;
-        fr_callback_binder() : m_frnode(NULL), m_active(false){}
+        fr_callback_binder() : m_frnode(nullptr), m_response_type((clientdata_event_t)0), m_active(false), m_downloaded_size(0), m_max_size(0), m_owner(nullptr) {}
         void receiving_file_callback(
             file_transfer::receiving_status_t status, u32 bytes_received, u32 data_size);
         void receiving_serverinfo_callback(

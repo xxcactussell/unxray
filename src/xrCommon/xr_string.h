@@ -8,7 +8,7 @@ using xr_string = std::basic_string<char, std::char_traits<char>, xr_allocator<c
 inline void xr_strlwr(xr_string& src)
 {
     for (auto& it : src)
-        it = xr_string::value_type(tolower(it));
+        it = xr_string::value_type(tolower((unsigned char)it));
 }
 
 inline xr_string xr_substrreplace(const xr_string& src, const xr_string& src_substr, const xr_string& dst_substr)

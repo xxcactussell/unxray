@@ -115,7 +115,7 @@ void CAI_Boar::BoneCallback(CBoneInstance* B)
 {
     CAI_Boar* P = static_cast<CAI_Boar*>(B->callback_param());
 
-    if (!P->look_at_enemy)
+    if (!P || !P->g_Alive() || !P->look_at_enemy)
         return;
 
     Fmatrix M;

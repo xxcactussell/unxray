@@ -421,10 +421,10 @@ bool is_similar(const Fmatrix& m0, const Fmatrix& m1, float param)
     return _abs(ang) < M_PI / 2.f;
 }
 
-// static struct callback_tracks_disable: public IUpdateTracksCallback
-//{
-//	virtual	bool	operator () ( float dt, IKinematicsAnimated& k ){return false;}
-//} tracks_disable_update;
+static struct callback_tracks_disable : public IUpdateTracksCallback
+{
+    virtual bool operator()(float dt, IKinematicsAnimated& k) { return true; } // return true skips LL_UpdateTracks and stops time
+} tracks_disable_update;
 
 void CCharacterPhysicsSupport::KillHit(SHit& H)
 {
@@ -435,6 +435,12 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
     VERIFY(m_EntityAlife.Visual());
     VERIFY(m_EntityAlife.Visual()->dcast_PKinematics());
 
+    IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
+    if (ka)
+    {
+        ka->SetUpdateTracksCalback(&tracks_disable_update);
+    }
+
     if (m_active_ragdoll)
     {
         CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
@@ -443,6 +449,7 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
             stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
             stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
             stalker->animation().global().reset();
+            stalker->animation().remove_bone_callbacks();
         }
         m_get_up_motion.invalidate();
 
@@ -817,6 +824,22 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
 
         if (is_killing || !m_EntityAlife.g_Alive())
         {
+            IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
+            if (ka)
+            {
+                ka->SetUpdateTracksCalback(&tracks_disable_update);
+            }
+
+            CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
+            if (stalker)
+            {
+                stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
+                stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
+                stalker->animation().global().reset();
+                stalker->animation().remove_bone_callbacks();
+            }
+            m_get_up_motion.invalidate();
+
             DestroyIKController();
             m_active_ragdoll->OnDeath();
             m_active_ragdoll->ApplyHit(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
@@ -1818,6 +1841,12 @@ bool CCharacterPhysicsSupport::can_drop_active_weapon()
 
 void CCharacterPhysicsSupport::in_Die()
 {
+    IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
+    if (ka)
+    {
+        ka->SetUpdateTracksCalback(&tracks_disable_update);
+    }
+
     if (m_active_ragdoll) {
         m_active_ragdoll->OnDeath();
     }

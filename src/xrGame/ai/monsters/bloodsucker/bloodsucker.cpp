@@ -323,6 +323,9 @@ void CAI_Bloodsucker::BoneCallback(CBoneInstance* B)
 {
     CAI_Bloodsucker* this_class = static_cast<CAI_Bloodsucker*>(B->callback_param());
 
+    if (!this_class || !this_class->g_Alive())
+        return;
+
     this_class->Bones.Update(B, Device.dwTimeGlobal);
 }
 

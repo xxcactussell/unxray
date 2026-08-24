@@ -2,6 +2,7 @@
 #include "ActiveRagdoll.h"
 #include "IPhysicsShellHolder.h"
 #include "MathUtils.h"
+#include "Include/xrRender/KinematicsAnimated.h"
 
 // Helper function
 static bool shape_is_physic(const SBoneShape& shape) {
@@ -150,8 +151,9 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             SRagdollConstraintDesc c_desc;
             c_desc.child_index = (int)part_idx;
             
-            c_desc.twist_axis = Fvector().set(1.f, 0.f, 0.f);
-            c_desc.plane_axis = Fvector().set(0.f, 1.f, 0.f);
+            // Standardize twist and plane axes in local bone space
+            c_desc.twist_axis = Fvector().set(0.f, 1.f, 0.f);
+            c_desc.plane_axis = Fvector().set(1.f, 0.f, 0.f);
             
             if (ik_data.type == jtRigid || ik_data.type == jtNone) {
                 c_desc.swing_limit_y = 0.05f;
@@ -161,19 +163,19 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             } else {
                 float lim_y = std::max(0.15f, _abs(ik_data.limits[1].limit.y - ik_data.limits[1].limit.x) * 0.5f);
                 float lim_z = std::max(0.15f, _abs(ik_data.limits[2].limit.y - ik_data.limits[2].limit.x) * 0.5f);
-                c_desc.swing_limit_y = std::clamp(lim_y, 0.15f, float(M_PI * 0.6f));
-                c_desc.swing_limit_z = std::clamp(lim_z, 0.15f, float(M_PI * 0.6f));
+                c_desc.swing_limit_y = std::clamp(lim_y, 0.15f, float(M_PI * 0.5f));
+                c_desc.swing_limit_z = std::clamp(lim_z, 0.15f, float(M_PI * 0.5f));
                 
                 float t_min = std::min(ik_data.limits[0].limit.x, ik_data.limits[0].limit.y);
                 float t_max = std::max(ik_data.limits[0].limit.x, ik_data.limits[0].limit.y);
                 if (t_max - t_min < 0.2f) {
-                    t_min -= 0.1f;
-                    t_max += 0.1f;
+                    t_min = -0.1f;
+                    t_max = 0.1f;
                 }
-                c_desc.twist_limit_min = std::clamp(t_min, -float(M_PI), float(M_PI));
-                c_desc.twist_limit_max = std::clamp(t_max, -float(M_PI), float(M_PI));
+                c_desc.twist_limit_min = std::clamp(t_min, -float(M_PI * 0.5f), float(M_PI * 0.5f));
+                c_desc.twist_limit_max = std::clamp(t_max, -float(M_PI * 0.5f), float(M_PI * 0.5f));
             }
-            c_desc.max_friction_torque = ik_data.friction;
+            c_desc.max_friction_torque = std::clamp(ik_data.friction, 0.0f, 100.0f);
             settings.constraints.push_back(c_desc);
         }
     }
@@ -334,6 +336,15 @@ void CActiveRagdollController::OnDeath() {
     
     GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
     GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
+
+    if (m_kinematics) {
+        for (u32 i = 0; i < m_cb_data.size(); ++i) {
+            u16 bone_id = m_mapper.PartToBone((u16)i);
+            if (bone_id != u16(-1) && bone_id < m_kinematics->LL_BoneCount()) {
+                m_kinematics->LL_GetBoneInstance(bone_id).set_callback_overwrite(TRUE);
+            }
+        }
+    }
 }
 
 void CActiveRagdollController::SetMotorDefaults(float stiffness, float damping) {
@@ -797,7 +808,7 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
     }
 
     // In KnockedDown, KnockdownResting, Dying, Dead:
-    // Visual bones are directly driven by physical / kinematic simulated transforms from Jolt!
+    // Physical bone: directly driven by physical / kinematic simulated transforms from Jolt!
     Fmatrix part_world = controller->m_simulated_matrices[part_idx];
     Fmatrix phys_object_space;
     if (controller->m_holder) {

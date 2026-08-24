@@ -176,6 +176,11 @@ void JoltPhysicsCore::Clear()
     m_ragdolls.clear();
     m_ragdoll_settings.clear();
 
+    for (auto& pair : m_characters) {
+        if (pair.second) {
+            m_char_vs_char_collision.Remove(pair.second.GetPtr());
+        }
+    }
     m_characters.clear();
     m_stick_to_floor.clear();
     m_character_gravity_factors.clear();
@@ -1918,6 +1923,8 @@ CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandl
     
     JPH::CharacterVirtual* character = new JPH::CharacterVirtual(settings, pos, JPH::Quat::sIdentity(), 0, m_physics_system);
     character->SetListener(&m_character_contact_listener);
+    character->SetCharacterVsCharacterCollision(&m_char_vs_char_collision);
+    m_char_vs_char_collision.Add(character);
     
     CharacterVirtualHandle handle = m_next_character_handle++;
     m_characters[handle] = character;
@@ -1928,6 +1935,9 @@ CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandl
 void JoltPhysicsCore::DestroyCharacterVirtual(CharacterVirtualHandle handle) {
     auto it = m_characters.find(handle);
     if (it != m_characters.end()) {
+        if (it->second) {
+            m_char_vs_char_collision.Remove(it->second.GetPtr());
+        }
         m_characters.erase(it);
         m_stick_to_floor.erase(handle);
         m_character_callbacks.erase(handle);
@@ -2312,8 +2322,8 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         constraint->mMaxFrictionTorque = c_desc.max_friction_torque;
         
         // Motor settings with bounded torque limits to prevent explosive constraint forces
-        constraint->mSwingMotorSettings = JPH::MotorSettings(JPH::ESpringMode::StiffnessAndDamping, settings.default_motor.stiffness, settings.default_motor.damping, 500.0f, 250.0f);
-        constraint->mTwistMotorSettings = JPH::MotorSettings(JPH::ESpringMode::StiffnessAndDamping, settings.default_motor.stiffness, settings.default_motor.damping, 500.0f, 250.0f);
+        constraint->mSwingMotorSettings = JPH::MotorSettings(JPH::ESpringMode::StiffnessAndDamping, settings.default_motor.stiffness, settings.default_motor.damping, 200.0f, 100.0f);
+        constraint->mTwistMotorSettings = JPH::MotorSettings(JPH::ESpringMode::StiffnessAndDamping, settings.default_motor.stiffness, settings.default_motor.damping, 200.0f, 100.0f);
         
         // Attach to part
         jph_settings->mParts[c_desc.child_index].mToParent = constraint;

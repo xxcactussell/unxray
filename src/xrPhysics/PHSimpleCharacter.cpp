@@ -214,8 +214,8 @@ void CPHSimpleCharacter::ApplyImpulse(const Fvector& dir, const float P)
         Fvector v;
         GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
 
-        // Scale impulse into realistic velocity delta (P in X-Ray is ~50-1000)
-        float speed_delta = std::clamp(P / 150.0f, 0.0f, 8.0f);
+        // Scale impulse into softer realistic velocity delta (reduced impulse impact on player)
+        float speed_delta = std::clamp(P / 350.0f, 0.0f, 4.0f);
 
         Fvector impulse_dir = dir;
         float sq_mag = impulse_dir.square_magnitude();
@@ -225,16 +225,16 @@ void CPHSimpleCharacter::ApplyImpulse(const Fvector& dir, const float P)
             impulse_dir.set(0.f, 0.f, 0.f);
         }
 
-        // Strongly limit vertical launch component (+3.0 m/s max hop)
+        // Strongly limit vertical launch component (+1.5 m/s max hop)
         float horiz_comp = speed_delta;
-        float vert_comp = std::clamp(impulse_dir.y * speed_delta, -4.0f, 3.0f);
+        float vert_comp = std::clamp(impulse_dir.y * speed_delta, -2.0f, 1.5f);
 
         v.x += impulse_dir.x * horiz_comp;
         v.y += vert_comp;
         v.z += impulse_dir.z * horiz_comp;
 
         // Ensure vertical velocity stays within sensible bounds
-        v.y = std::clamp(v.y, -30.0f, 7.0f);
+        v.y = std::clamp(v.y, -20.0f, 4.0f);
 
         GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, v);
     }
@@ -246,10 +246,10 @@ void CPHSimpleCharacter::ApplyForce(const Fvector& force)
     {
         Fvector v;
         GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
-        v.x += std::clamp(force.x / 150.0f, -6.0f, 6.0f);
-        v.y += std::clamp(force.y / 150.0f, -4.0f, 3.0f);
-        v.z += std::clamp(force.z / 150.0f, -6.0f, 6.0f);
-        v.y = std::clamp(v.y, -30.0f, 7.0f);
+        v.x += std::clamp(force.x / 350.0f, -3.0f, 3.0f);
+        v.y += std::clamp(force.y / 350.0f, -2.0f, 1.5f);
+        v.z += std::clamp(force.z / 350.0f, -3.0f, 3.0f);
+        v.y = std::clamp(v.y, -20.0f, 4.0f);
         GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, v);
     }
 }
@@ -395,8 +395,12 @@ void CPHSimpleCharacter::PhTune(float step)
             {
                 if (!b_jumping) 
                 {
-                    velocity.x = 0;
-                    velocity.z = 0;
+                    // Smoothly damp velocity using ground friction instead of abrupt hard-zeroing
+                    float damp = expf(-18.0f * step);
+                    velocity.x *= damp;
+                    velocity.z *= damp;
+                    if (_abs(velocity.x) < 0.05f) velocity.x = 0;
+                    if (_abs(velocity.z) < 0.05f) velocity.z = 0;
                 }
             }
         }

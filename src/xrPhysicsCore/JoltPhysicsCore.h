@@ -85,6 +85,7 @@ private:
     JointHandle m_next_joint_handle = 1;
 
     std::unordered_map<CharacterVirtualHandle, JPH::Ref<JPH::CharacterVirtual>> m_characters;
+    JPH::CharacterVsCharacterCollisionSimple m_char_vs_char_collision;
     std::unordered_map<CharacterVirtualHandle, bool> m_stick_to_floor;
     std::unordered_map<CharacterVirtualHandle, float> m_character_gravity_factors;
     struct CharacterCallbackInfo {

@@ -356,7 +356,7 @@ static inline u32 GetTriangleUserDataForSubShape(const JPH::Shape* shape, const 
 
 PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cnt, const void* tris_raw, u32 t_cnt, const u32* tri_indices, u32 tri_indices_cnt) 
 {
-    if (!verts || v_cnt < 3 || !tris_raw)
+    if (!verts || v_cnt < 3 || !tris_raw || t_cnt == 0)
         return nullptr;
 
     if (!JPH::Factory::sInstance) {
@@ -370,12 +370,6 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
     }
 
     const CDB_TRI_Mock* tris = static_cast<const CDB_TRI_Mock*>(tris_raw);
-
-    JPH::VertexList jolt_vertices;
-    jolt_vertices.reserve(v_cnt);
-    for (u32 i = 0; i < v_cnt; ++i) {
-        jolt_vertices.push_back(JPH::Float3(verts[i].x, verts[i].y, verts[i].z));
-    }
 
     u32 actual_t_cnt = tri_indices ? tri_indices_cnt : t_cnt;
     if (actual_t_cnt == 0)
@@ -403,18 +397,22 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
     JPH::IndexedTriangleList jolt_triangles;
     jolt_triangles.reserve(actual_t_cnt);
 
+    const float min_area_sq = 1e-8f;
+
     for (u32 i = 0; i < actual_t_cnt; ++i) {
         u32 original_index = tri_indices ? tri_indices[i] : i;
+        
+        if (original_index >= t_cnt)
+            continue;
+
         const auto& tri = tris[original_index];
         u32 idx0 = tri.verts[0];
         u32 idx1 = tri.verts[1];
         u32 idx2 = tri.verts[2];
 
-        // 1. Check index bounds
         if (idx0 >= v_cnt || idx1 >= v_cnt || idx2 >= v_cnt)
             continue;
 
-        // 2. Check index degeneracy
         if (idx0 == idx1 || idx1 == idx2 || idx0 == idx2)
             continue;
 
@@ -422,15 +420,36 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
         const Fvector& v1 = verts[idx1];
         const Fvector& v2 = verts[idx2];
 
-        // 3. Check vertex validity
         if (!_valid(v0) || !_valid(v1) || !_valid(v2))
             continue;
 
-        // 4. Check duplicate triangles preserving winding order (for double-sided geometry)
-        if (!unique_triangles.insert({idx0, idx1, idx2}).second)
+        float e1x = v1.x - v0.x;
+        float e1y = v1.y - v0.y;
+        float e1z = v1.z - v0.z;
+
+        float e2x = v2.x - v0.x;
+        float e2y = v2.y - v0.y;
+        float e2z = v2.z - v0.z;
+
+        float cx = e1y * e2z - e1z * e2y;
+        float cy = e1z * e2x - e1x * e2z;
+        float cz = e1x * e2y - e1y * e2x;
+
+        float cross_sq_mag = cx * cx + cy * cy + cz * cz;
+        if (cross_sq_mag < min_area_sq)
             continue;
 
-        u16 mtl = tri.material & 0x3FFF; // Очищаем от флагов компилятора
+        u32 c0 = idx0, c1 = idx1, c2 = idx2;
+        if (c1 < c0 && c1 < c2) {
+            c0 = idx1; c1 = idx2; c2 = idx0;
+        } else if (c2 < c0 && c2 < c1) {
+            c0 = idx2; c1 = idx0; c2 = idx1;
+        }
+
+        if (!unique_triangles.insert({c0, c1, c2}).second)
+            continue;
+
+        u16 mtl = tri.material & 0x3FFF;
         u32 packed_data = PackTriangleUserData(mtl, original_index);
 
         jolt_triangles.push_back(JPH::IndexedTriangle(
@@ -445,8 +464,16 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
     if (jolt_triangles.empty())
         return nullptr;
 
-    JPH::MeshShapeSettings settings(jolt_vertices, jolt_triangles);
+    JPH::VertexList jolt_vertices;
+    jolt_vertices.reserve(v_cnt);
+    for (u32 i = 0; i < v_cnt; ++i) {
+        jolt_vertices.push_back(JPH::Float3(verts[i].x, verts[i].y, verts[i].z));
+    }
+
+    JPH::MeshShapeSettings settings(std::move(jolt_vertices), std::move(jolt_triangles));
     settings.mPerTriangleUserData = true;
+    settings.mActiveEdgeCosThresholdAngle = 0.996195f; // ~5 градусов
+
     settings.Sanitize();
 
     JPH::ShapeSettings::ShapeResult result = settings.Create();
@@ -1795,12 +1822,60 @@ void JoltPhysicsCore::MyCharacterContactListener::OnContactAdded(
     ProcessContact(inCharacter, inContact);
 }
 
-void JoltPhysicsCore::MyCharacterContactListener::OnContactPersisted(
+void JoltPhysicsCore::MyCharacterContactListener::OnCharacterContactAdded(
     const JPH::CharacterVirtual* inCharacter, 
     const JPH::CharacterContact& inContact, 
     JPH::CharacterContactSettings& ioSettings) 
 {
-    OnContactAdded(inCharacter, inContact, ioSettings);
+    // Enable mutual pushing between characters so they don't lock each other rigidly
+    ioSettings.mCanPushCharacter = true;
+    ioSettings.mCanReceiveImpulses = true;
+}
+
+void JoltPhysicsCore::MyCharacterContactListener::OnCharacterContactPersisted(
+    const JPH::CharacterVirtual* inCharacter, 
+    const JPH::CharacterContact& inContact, 
+    JPH::CharacterContactSettings& ioSettings) 
+{
+    ioSettings.mCanPushCharacter = true;
+    ioSettings.mCanReceiveImpulses = true;
+}
+
+void JoltPhysicsCore::MyCharacterContactListener::OnCharacterContactSolve(
+    const JPH::CharacterVirtual* inCharacter, 
+    const JPH::CharacterVirtual* inOtherCharacter, 
+    const JPH::SubShapeID& inSubShapeID2, 
+    JPH::RVec3Arg inContactPosition, 
+    JPH::Vec3Arg inContactNormal, 
+    JPH::Vec3Arg inContactVelocity, 
+    const JPH::PhysicsMaterial* inContactMaterial, 
+    JPH::Vec3Arg inCharacterVelocity, 
+    JPH::Vec3& ioNewCharacterVelocity)
+{
+    if (!inCharacter || !inOtherCharacter) return;
+
+    // Calculate separation vector between character centers
+    JPH::RVec3 posA = inCharacter->GetPosition();
+    JPH::RVec3 posB = inOtherCharacter->GetPosition();
+    JPH::Vec3 diff = JPH::Vec3(posA - posB);
+    diff.SetY(0.0f); // only separate in horizontal plane
+
+    float dist_sq = diff.LengthSq();
+    if (dist_sq < 0.0001f)
+    {
+        // Degenerate case: characters are spawned in exact same position!
+        // Generate deterministic opposing separation normal based on memory addresses
+        uintptr_t addrA = reinterpret_cast<uintptr_t>(inCharacter);
+        uintptr_t addrB = reinterpret_cast<uintptr_t>(inOtherCharacter);
+        float angle = (addrA > addrB ? 0.0f : float(M_PI)) + float((addrA ^ addrB) % 360) * (float(M_PI) / 180.0f);
+        diff = JPH::Vec3(std::cos(angle), 0.0f, std::sin(angle));
+        dist_sq = 1.0f;
+    }
+
+    JPH::Vec3 sep_dir = diff.Normalized();
+    // Add soft separation push velocity away from the other character
+    float push_speed = 1.5f;
+    ioNewCharacterVelocity += sep_dir * push_speed;
 }
 
 bool JoltPhysicsCore::MyCharacterContactListener::OnContactValidate(
@@ -2913,3 +2988,102 @@ void JoltPhysicsCore::SetCharacterVirtualGravityFactor(CharacterVirtualHandle ha
         m_character_gravity_factors[handle] = factor;
     }
 }
+
+bool JoltPhysicsCore::CheckShapePlacement(PhysicsShapeHandle shape, const Fvector& pos, const Fquaternion& rot, bool check_characters, void* ignore_user_data) const {
+    if (!shape || !m_physics_system) return true;
+
+    const JPH::Shape* jolt_shape = reinterpret_cast<const JPH::Shape*>(shape);
+    JPH::Quat jph_rot(rot.x, rot.y, rot.z, rot.w);
+    JPH::RMat44 com_transform = JPH::RMat44::sRotationTranslation(jph_rot, JPH::RVec3(pos.x, pos.y, pos.z));
+
+    JPH::CollideShapeSettings settings;
+    settings.mBackFaceMode = JPH::EBackFaceMode::CollideWithBackFaces;
+
+    JPH::uint64 actor_user_data = reinterpret_cast<JPH::uint64>(ignore_user_data);
+    JPH::AnyHitCollisionCollector<JPH::CollideShapeCollector> collector;
+    JoltIgnoreActorBodyFilter body_filter(m_physics_system, actor_user_data);
+    JoltPassableShapeFilter shape_filter;
+
+    m_physics_system->GetNarrowPhaseQuery().CollideShape(
+        jolt_shape,
+        JPH::Vec3::sReplicate(1.0f),
+        com_transform,
+        settings,
+        JPH::RVec3(pos.x, pos.y, pos.z),
+        collector,
+        m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
+        m_physics_system->GetDefaultLayerFilter(Layers::MOVING),
+        body_filter,
+        shape_filter
+    );
+
+    if (collector.HadHit()) {
+        return false;
+    }
+
+    if (check_characters) {
+        JPH::AABox check_bounds = jolt_shape->GetWorldSpaceBounds(com_transform.ToMat44(), JPH::Vec3::sOne());
+        for (const auto& [handle, char_ptr] : m_characters) {
+            if (!char_ptr) continue;
+            if (actor_user_data != 0 && char_ptr->GetUserData() == actor_user_data) continue;
+
+            const JPH::Shape* other_shape = char_ptr->GetShape();
+            if (!other_shape) continue;
+
+            JPH::Mat44 other_transform = JPH::Mat44::sRotationTranslation(char_ptr->GetRotation(), JPH::Vec3(char_ptr->GetPosition()));
+            JPH::AABox other_bounds = other_shape->GetWorldSpaceBounds(other_transform, JPH::Vec3::sOne());
+            if (check_bounds.Overlaps(other_bounds)) {
+                // Perform detailed shape vs shape collision check
+                JPH::AnyHitCollisionCollector<JPH::CollideShapeCollector> char_collector;
+                JPH::CollisionDispatch::sCollideShapeVsShape(
+                    jolt_shape, other_shape,
+                    JPH::Vec3::sReplicate(1.0f), JPH::Vec3::sReplicate(1.0f),
+                    com_transform.ToMat44(), other_transform,
+                    JPH::SubShapeIDCreator(), JPH::SubShapeIDCreator(),
+                    settings, char_collector, JPH::ShapeFilter()
+                );
+                if (char_collector.HadHit()) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+bool JoltPhysicsCore::FindFreeShapePlacement(PhysicsShapeHandle shape, const Fvector& start_pos, const Fquaternion& rot, Fvector& out_pos, float search_radius, int samples, bool check_characters, void* ignore_user_data) const {
+    if (!shape || !m_physics_system) {
+        out_pos = start_pos;
+        return true;
+    }
+
+    // First check start position directly
+    if (CheckShapePlacement(shape, start_pos, rot, check_characters, ignore_user_data)) {
+        out_pos = start_pos;
+        return true;
+    }
+
+    // Search in horizontal spiral/rings around the start position
+    const int rings = 3;
+    const float radius_step = search_radius / float(rings);
+    for (int r = 1; r <= rings; ++r) {
+        float current_r = r * radius_step;
+        int ring_samples = samples + (r - 1) * 4;
+        for (int s = 0; s < ring_samples; ++s) {
+            float angle = (float(s) / float(ring_samples)) * float(2.0 * M_PI);
+            Fvector candidate_pos = start_pos;
+            candidate_pos.x += std::cos(angle) * current_r;
+            candidate_pos.z += std::sin(angle) * current_r;
+
+            if (CheckShapePlacement(shape, candidate_pos, rot, check_characters, ignore_user_data)) {
+                out_pos = candidate_pos;
+                return true;
+            }
+        }
+    }
+
+    out_pos = start_pos;
+    return false;
+}
+

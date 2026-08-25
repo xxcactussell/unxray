@@ -70,10 +70,26 @@ private:
             const JPH::CharacterContact& inContact, 
             JPH::CharacterContactSettings& ioSettings) override;
 
-        virtual void OnContactPersisted(
+        virtual void OnCharacterContactAdded(
             const JPH::CharacterVirtual* inCharacter, 
             const JPH::CharacterContact& inContact, 
             JPH::CharacterContactSettings& ioSettings) override;
+
+        virtual void OnCharacterContactPersisted(
+            const JPH::CharacterVirtual* inCharacter, 
+            const JPH::CharacterContact& inContact, 
+            JPH::CharacterContactSettings& ioSettings) override;
+
+        virtual void OnCharacterContactSolve(
+            const JPH::CharacterVirtual* inCharacter, 
+            const JPH::CharacterVirtual* inOtherCharacter, 
+            const JPH::SubShapeID& inSubShapeID2, 
+            JPH::RVec3Arg inContactPosition, 
+            JPH::Vec3Arg inContactNormal, 
+            JPH::Vec3Arg inContactVelocity, 
+            const JPH::PhysicsMaterial* inContactMaterial, 
+            JPH::Vec3Arg inCharacterVelocity, 
+            JPH::Vec3& ioNewCharacterVelocity) override;
 
         void ProcessContact(
             const JPH::CharacterVirtual* inCharacter, 
@@ -231,6 +247,8 @@ public:
     void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) override;
     void SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) override;
     void SetCharacterVirtualContactCallback(CharacterVirtualHandle handle, CharacterContactCallbackFun callback, void* char_user_data) override;
+    bool CheckShapePlacement(PhysicsShapeHandle shape, const Fvector& pos, const Fquaternion& rot, bool check_characters = true, void* ignore_user_data = nullptr) const override;
+    bool FindFreeShapePlacement(PhysicsShapeHandle shape, const Fvector& start_pos, const Fquaternion& rot, Fvector& out_pos, float search_radius = 2.5f, int samples = 16, bool check_characters = true, void* ignore_user_data = nullptr) const override;
 
     RagdollHandle CreateRagdoll(const SRagdollSettings& settings) override;
     void DestroyRagdoll(RagdollHandle handle) override;

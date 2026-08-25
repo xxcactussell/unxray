@@ -47,6 +47,15 @@ struct ActiveRagdollCallbackData {
     void* previous_param = nullptr;
 };
 
+struct NonPhysicalBoneCallbackData {
+    CActiveRagdollController* controller = nullptr;
+    u16 bone_id = 0;
+    u16 parent_bone_id = 0;
+    u16 child_phys_bone_id = 0;
+    BoneCallback previous_callback = nullptr;
+    void* previous_param = nullptr;
+};
+
 struct SPartHitReaction {
     Fvector impulse_dir = {0.0f, 0.0f, 0.0f};
     float flinch_factor = 0.0f;
@@ -100,6 +109,7 @@ private:
     xr_vector<SPartHitReaction> m_part_reactions;
     
     xr_vector<ActiveRagdollCallbackData> m_cb_data;
+    xr_vector<NonPhysicalBoneCallbackData> m_non_phys_cb_data;
     
 public:
     CActiveRagdollController() = default;
@@ -138,6 +148,7 @@ public:
     void SyncFromPhysics();
     
     static void BonesCallback(CBoneInstance* B);
+    static void NonPhysicalBonesCallback(CBoneInstance* B);
     
     RagdollHandle GetHandle() const { return m_ragdoll_handle; }
     ERagdollState GetState() const { return m_state; }

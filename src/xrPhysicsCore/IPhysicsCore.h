@@ -226,6 +226,9 @@ public:
     virtual void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) = 0;
     virtual void SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) = 0;
 
+    virtual bool CheckShapePlacement(PhysicsShapeHandle shape, const Fvector& pos, const Fquaternion& rot, bool check_characters = true, void* ignore_user_data = nullptr) const = 0;
+    virtual bool FindFreeShapePlacement(PhysicsShapeHandle shape, const Fvector& start_pos, const Fquaternion& rot, Fvector& out_pos, float search_radius = 2.5f, int samples = 16, bool check_characters = true, void* ignore_user_data = nullptr) const = 0;
+
     // --- Active Ragdoll API ---
     virtual RagdollHandle CreateRagdoll(const SRagdollSettings& settings) = 0;
     virtual void DestroyRagdoll(RagdollHandle handle) = 0;

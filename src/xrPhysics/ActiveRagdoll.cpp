@@ -273,6 +273,45 @@ void CActiveRagdollController::Initialize(IKinematics* kinematics, IPhysicsShell
             m_cb_data[i].previous_param = B.callback_param();
             B.set_callback(bctCustom, BonesCallback, &m_cb_data[i]);
         }
+
+        // 7. Setup non-physical intermediate bone callbacks (e.g. neck, clavicles)
+        m_non_phys_cb_data.clear();
+        u16 total_bones = m_kinematics->LL_BoneCount();
+        for (u16 bone_id = 0; bone_id < total_bones; ++bone_id) {
+            if (m_mapper.BoneToPart(bone_id) != u16(-1)) continue; // Already a physical bone
+
+            const IBoneData& bd = m_kinematics->GetBoneData(bone_id);
+            u16 parent_id = bd.GetParentID();
+            if (parent_id == u16(-1) || parent_id == BI_NONE) continue;
+
+            // Find first physical child bone down the hierarchy
+            u16 child_phys_id = u16(-1);
+            for (u16 c = 0; c < bd.GetNumChildren(); ++c) {
+                u16 cid = bd.GetChild(c).GetSelfID();
+                if (m_mapper.BoneToPart(cid) != u16(-1)) {
+                    child_phys_id = cid;
+                    break;
+                }
+            }
+
+            if (child_phys_id != u16(-1)) {
+                NonPhysicalBoneCallbackData np_data;
+                np_data.controller = this;
+                np_data.bone_id = bone_id;
+                np_data.parent_bone_id = parent_id;
+                np_data.child_phys_bone_id = child_phys_id;
+
+                CBoneInstance& B = m_kinematics->LL_GetBoneInstance(bone_id);
+                np_data.previous_callback = B.callback();
+                np_data.previous_param = B.callback_param();
+                m_non_phys_cb_data.push_back(np_data);
+            }
+        }
+
+        for (auto& np_data : m_non_phys_cb_data) {
+            CBoneInstance& B = m_kinematics->LL_GetBoneInstance(np_data.bone_id);
+            B.set_callback(bctCustom, NonPhysicalBonesCallback, &np_data);
+        }
         
         m_state = ERagdollState::Active;
     }
@@ -294,6 +333,14 @@ void CActiveRagdollController::Deactivate() {
             }
         }
         m_cb_data.clear();
+
+        for (auto& cb : m_non_phys_cb_data) {
+            if (cb.bone_id < m_kinematics->LL_BoneCount()) {
+                CBoneInstance& B = m_kinematics->LL_GetBoneInstance(cb.bone_id);
+                B.reset_callback();
+            }
+        }
+        m_non_phys_cb_data.clear();
     }
     m_part_reactions.clear();
 }
@@ -336,15 +383,6 @@ void CActiveRagdollController::OnDeath() {
     
     GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
     GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
-
-    if (m_kinematics) {
-        for (u32 i = 0; i < m_cb_data.size(); ++i) {
-            u16 bone_id = m_mapper.PartToBone((u16)i);
-            if (bone_id != u16(-1) && bone_id < m_kinematics->LL_BoneCount()) {
-                m_kinematics->LL_GetBoneInstance(bone_id).set_callback_overwrite(TRUE);
-            }
-        }
-    }
 }
 
 void CActiveRagdollController::SetMotorDefaults(float stiffness, float damping) {
@@ -820,6 +858,44 @@ void CActiveRagdollController::BonesCallback(CBoneInstance* B) {
     }
     
     B->mTransform = phys_object_space;
+    B->set_callback_overwrite(TRUE);
+}
+
+void CActiveRagdollController::NonPhysicalBonesCallback(CBoneInstance* B) {
+    if (!B) return;
+    NonPhysicalBoneCallbackData* cb_data = static_cast<NonPhysicalBoneCallbackData*>(B->callback_param());
+    if (!cb_data || !cb_data->controller) return;
+
+    CActiveRagdollController* controller = cb_data->controller;
+    if (controller->m_state == ERagdollState::Inactive) return;
+
+    if (controller->m_state == ERagdollState::Active || controller->m_state == ERagdollState::GettingUp) {
+        B->set_callback_overwrite(FALSE);
+        if (cb_data->previous_callback && cb_data->previous_callback != NonPhysicalBonesCallback) {
+            B->set_callback(B->callback_type(), cb_data->previous_callback, cb_data->previous_param, B->callback_overwrite());
+            cb_data->previous_callback(B);
+            B->set_callback(bctCustom, NonPhysicalBonesCallback, cb_data, FALSE);
+        }
+        return;
+    }
+
+    // In KnockedDown, KnockdownResting, Dying, Dead:
+    // Reconstruct non-physical intermediate bone matrix (e.g. neck or clavicle)
+    // by interpolating rotation & position between the parent bone (e.g. spine2) and the physical child (e.g. head / arm)
+    if (!controller->m_kinematics) return;
+
+    u16 parent_id = cb_data->parent_bone_id;
+    u16 child_id = cb_data->child_phys_bone_id;
+
+    if (parent_id >= controller->m_kinematics->LL_BoneCount() || child_id >= controller->m_kinematics->LL_BoneCount()) return;
+
+    const CBoneInstance& parent_bi = controller->m_kinematics->LL_GetBoneInstance(parent_id);
+    const CBoneInstance& child_bi = controller->m_kinematics->LL_GetBoneInstance(child_id);
+
+    Fmatrix blended;
+    BlendMatrix(blended, parent_bi.mTransform, child_bi.mTransform, 0.5f);
+
+    B->mTransform = blended;
     B->set_callback_overwrite(TRUE);
 }
 

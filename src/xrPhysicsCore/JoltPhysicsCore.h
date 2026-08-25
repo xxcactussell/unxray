@@ -62,10 +62,16 @@ private:
     public:
         MyCharacterContactListener(JoltPhysicsCore* core) : m_core(core) {}
 
-        bool OnContactValidate(const JPH::CharacterVirtual* inCharacter,
-                        const JPH::CharacterContact& inContact) override;
+        virtual bool OnContactValidate(
+            const JPH::CharacterVirtual* inCharacter,
+            const JPH::CharacterContact& inContact) override;
 
         virtual void OnContactAdded(
+            const JPH::CharacterVirtual* inCharacter, 
+            const JPH::CharacterContact& inContact, 
+            JPH::CharacterContactSettings& ioSettings) override;
+
+        virtual void OnContactPersisted(
             const JPH::CharacterVirtual* inCharacter, 
             const JPH::CharacterContact& inContact, 
             JPH::CharacterContactSettings& ioSettings) override;

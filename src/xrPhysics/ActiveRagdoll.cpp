@@ -6,7 +6,7 @@
 
 // Helper function
 static bool shape_is_physic(const SBoneShape& shape) {
-    return shape.type != SBoneShape::stNone && !shape.flags.test(SBoneShape::sfNoPhysics);
+    return !shape.flags.test(SBoneShape::sfNoPhysics);
 }
 
 // ===========================================================================
@@ -27,9 +27,7 @@ void CActiveRagdollSkeletonMapper::Build(IKinematics* kinematics) {
     u16 part_idx = 0;
     for (u16 bone_id = 0; bone_id < bone_count; ++bone_id) {
         const IBoneData& bone_data = kinematics->GetBoneData(bone_id);
-        const SBoneShape& shape = bone_data.get_shape();
-        
-        if (shape_is_physic(shape)) {
+        if (shape_is_physic(bone_data.get_shape())) {
             m_bone_to_part[bone_id] = part_idx;
             m_part_to_bone.push_back(bone_id);
             part_idx++;
@@ -77,7 +75,7 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
         SRagdollPartDesc& part_desc = settings.parts[part_idx];
         part_desc.bone_id = bone_id;
         
-        // Ищем родительскую ФИЗИЧЕСКУЮ кость вверх по цепочке
+        // Find direct parent in the mapper
         part_desc.parent_index = -1;
         u16 parent_bone_id = bone_data.GetParentID();
         while (parent_bone_id != u16(-1) && parent_bone_id != BI_NONE) {
@@ -89,7 +87,6 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             parent_bone_id = kinematics->GetBoneData(parent_bone_id).GetParentID();
         }
         
-        // Создаем Shape (тут у нас гарантированно физическая кость)
         const SBoneShape& shape = bone_data.get_shape();
         Fvector bone_direction = Fvector().set(0.f, 1.f, 0.f);
         
@@ -104,9 +101,11 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             box_rot.set(box_mat);
             part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_box, shape.box.m_translate, box_rot);
             bone_direction = Fvector().set(shape.box.m_rotate.k).normalize();
+            part_desc.mass = std::max(bone_data.get_mass(), 0.5f);
         } else if (shape.type == SBoneShape::stSphere) {
             PhysicsShapeHandle base_sphere = GetPhysicsCore()->CreateSphereShape(shape.sphere.R);
             part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_sphere, shape.sphere.P, Fquaternion().identity());
+            part_desc.mass = std::max(bone_data.get_mass(), 0.5f);
         } else if (shape.type == SBoneShape::stCylinder) {
             float half_height = (shape.cylinder.m_height - 2.0f * shape.cylinder.m_radius) / 2.0f;
             if (half_height < 0.01f) half_height = 0.01f;
@@ -130,9 +129,13 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             Fquaternion cyl_rot;
             cyl_rot.set(cyl_mat);
             part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_capsule, shape.cylinder.m_center, cyl_rot);
+            part_desc.mass = std::max(bone_data.get_mass(), 0.5f);
+        } else {
+            // Intermediate connecting bone (neck, clavicle, lumbar vertebra)
+            PhysicsShapeHandle helper_sphere = GetPhysicsCore()->CreateSphereShape(0.04f);
+            part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(helper_sphere, Fvector().set(0, 0, 0), Fquaternion().identity());
+            part_desc.mass = 0.5f;
         }
-        
-        part_desc.mass = std::max(bone_data.get_mass(), 0.5f); // честная минимальная масса
         
         // Model-Space Rest Pose
         if (bone_id < bind_matrices.size()) {
@@ -144,22 +147,23 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             part_desc.rotation.identity();
         }
         
-        // Настройка суставов с родителем
+        // Constraint settings with parent
         if (part_desc.parent_index != -1) {
             const SJointIKData& ik_data = bone_data.get_IK_data();
             
             SRagdollConstraintDesc c_desc;
             c_desc.child_index = (int)part_idx;
-            
             // Standardize twist and plane axes in local bone space
-            c_desc.twist_axis = Fvector().set(0.f, 1.f, 0.f);
-            c_desc.plane_axis = Fvector().set(1.f, 0.f, 0.f);
+            // X-Ray Twist is X axis, Swing Y is Y axis, Swing Z is Z axis
+            c_desc.twist_axis = Fvector().set(1.f, 0.f, 0.f);
+            c_desc.plane_axis = Fvector().set(0.f, 1.f, 0.f);
             
-            if (ik_data.type == jtRigid || ik_data.type == jtNone) {
-                c_desc.swing_limit_y = 0.05f;
-                c_desc.swing_limit_z = 0.05f;
-                c_desc.twist_limit_min = -0.05f;
-                c_desc.twist_limit_max = 0.05f;
+            if (shape.type == SBoneShape::stNone || ik_data.type == jtRigid || ik_data.type == jtNone) {
+                c_desc.swing_limit_y = 0.02f;
+                c_desc.swing_limit_z = 0.02f;
+                c_desc.twist_limit_min = -0.02f;
+                c_desc.twist_limit_max = 0.02f;
+                c_desc.max_friction_torque = 50.0f;
             } else {
                 float lim_y = std::max(0.15f, _abs(ik_data.limits[1].limit.y - ik_data.limits[1].limit.x) * 0.5f);
                 float lim_z = std::max(0.15f, _abs(ik_data.limits[2].limit.y - ik_data.limits[2].limit.x) * 0.5f);
@@ -174,8 +178,8 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
                 }
                 c_desc.twist_limit_min = std::clamp(t_min, -float(M_PI * 0.5f), float(M_PI * 0.5f));
                 c_desc.twist_limit_max = std::clamp(t_max, -float(M_PI * 0.5f), float(M_PI * 0.5f));
+                c_desc.max_friction_torque = std::clamp(ik_data.friction, 0.0f, 100.0f);
             }
-            c_desc.max_friction_torque = std::clamp(ik_data.friction, 0.0f, 100.0f);
             settings.constraints.push_back(c_desc);
         }
     }
@@ -880,22 +884,16 @@ void CActiveRagdollController::NonPhysicalBonesCallback(CBoneInstance* B) {
     }
 
     // In KnockedDown, KnockdownResting, Dying, Dead:
-    // Reconstruct non-physical intermediate bone matrix (e.g. neck or clavicle)
-    // by interpolating rotation & position between the parent bone (e.g. spine2) and the physical child (e.g. head / arm)
+    // Follow the parent bone (e.g. spine2) rigidly using the bone's local bind transform
     if (!controller->m_kinematics) return;
 
     u16 parent_id = cb_data->parent_bone_id;
-    u16 child_id = cb_data->child_phys_bone_id;
-
-    if (parent_id >= controller->m_kinematics->LL_BoneCount() || child_id >= controller->m_kinematics->LL_BoneCount()) return;
+    if (parent_id >= controller->m_kinematics->LL_BoneCount()) return;
 
     const CBoneInstance& parent_bi = controller->m_kinematics->LL_GetBoneInstance(parent_id);
-    const CBoneInstance& child_bi = controller->m_kinematics->LL_GetBoneInstance(child_id);
+    const IBoneData& bd = controller->m_kinematics->GetBoneData(cb_data->bone_id);
 
-    Fmatrix blended;
-    BlendMatrix(blended, parent_bi.mTransform, child_bi.mTransform, 0.5f);
-
-    B->mTransform = blended;
+    B->mTransform.mul_43(parent_bi.mTransform, bd.get_bind_transform());
     B->set_callback_overwrite(TRUE);
 }
 

@@ -100,14 +100,11 @@ static void JoltTraceImpl(const char* inFMT, ...)
     char buffer[1024];
     vsnprintf(buffer, sizeof(buffer), inFMT, list);
     va_end(list);
-
-    Msg("[Jolt] %s", buffer);
 }
 
 #ifdef JPH_ENABLE_ASSERTS
 static bool JoltAssertFailedImpl(const char* inExpression, const char* inMessage, const char* inFile, JPH::uint inLine)
 {
-    Msg("! [Jolt Assert Failed] (%s) %s at %s:%u", inExpression, inMessage ? inMessage : "", inFile, inLine);
     return true;
 }
 #endif
@@ -501,7 +498,6 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
 
     JPH::ShapeSettings::ShapeResult result = settings.Create();
     if (result.HasError()) {
-        Msg("! [JoltPhysicsCore] BuildCDBModel error: %s", result.GetError().c_str());
         return nullptr;
     }
 
@@ -1310,9 +1306,6 @@ void JoltPhysicsCore::SetJointLimits(JointHandle joint, int axis_num, float lo, 
 
     if (c->GetSubType() == JPH::EConstraintSubType::Hinge) {
         auto* hinge = static_cast<JPH::HingeConstraint*>(c);
-        Msg("[Jolt Joint %d] SetLimits: lo=%.3f, hi=%.3f (prev=[%.3f, %.3f], cur_angle=%.3f)",
-            joint, lo, hi, hinge->GetLimitsMin(), hinge->GetLimitsMax(), hinge->GetCurrentAngle());
-        hinge->SetLimits(lo, hi);
     } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {
         static_cast<JPH::SliderConstraint*>(c)->SetLimits(lo, hi);
     } else if (c->GetSubType() == JPH::EConstraintSubType::SixDOF) {
@@ -1344,8 +1337,6 @@ void JoltPhysicsCore::SetJointMotor(JointHandle joint, int axis_num, float force
             float cur_angle = hinge->GetCurrentAngle();
             float lim_min = hinge->GetLimitsMin();
             float lim_max = hinge->GetLimitsMax();
-            Msg("[Jolt Joint %d CHANGE] SetMotor: force=%.2f, vel=%.2f, active=%d | Hinge angle=%.3f, limits=[%.3f, %.3f]", 
-                joint, force, velocity, active, cur_angle, lim_min, lim_max);
         }
 
         hinge->SetMotorState(active ? JPH::EMotorState::Velocity : JPH::EMotorState::Off);
@@ -1800,10 +1791,6 @@ bool JoltPhysicsCore::MyCharacterContactListener::OnContactValidate(
                 if (mtl && IsPassableMaterial(mtl))
                 {
                     return false;
-                }
-                else
-                {
-                    Msg("! [Jolt Contact VC] Out of bounds material index: %u (Tri=%u)", (u32)mtl_idx, tri_idx);
                 }
             }
         }

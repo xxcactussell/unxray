@@ -277,45 +277,6 @@ void CActiveRagdollController::Initialize(IKinematics* kinematics, IPhysicsShell
             m_cb_data[i].previous_param = B.callback_param();
             B.set_callback(bctCustom, BonesCallback, &m_cb_data[i]);
         }
-
-        // 7. Setup non-physical intermediate bone callbacks (e.g. neck, clavicles)
-        m_non_phys_cb_data.clear();
-        u16 total_bones = m_kinematics->LL_BoneCount();
-        for (u16 bone_id = 0; bone_id < total_bones; ++bone_id) {
-            if (m_mapper.BoneToPart(bone_id) != u16(-1)) continue; // Already a physical bone
-
-            const IBoneData& bd = m_kinematics->GetBoneData(bone_id);
-            u16 parent_id = bd.GetParentID();
-            if (parent_id == u16(-1) || parent_id == BI_NONE) continue;
-
-            // Find first physical child bone down the hierarchy
-            u16 child_phys_id = u16(-1);
-            for (u16 c = 0; c < bd.GetNumChildren(); ++c) {
-                u16 cid = bd.GetChild(c).GetSelfID();
-                if (m_mapper.BoneToPart(cid) != u16(-1)) {
-                    child_phys_id = cid;
-                    break;
-                }
-            }
-
-            if (child_phys_id != u16(-1)) {
-                NonPhysicalBoneCallbackData np_data;
-                np_data.controller = this;
-                np_data.bone_id = bone_id;
-                np_data.parent_bone_id = parent_id;
-                np_data.child_phys_bone_id = child_phys_id;
-
-                CBoneInstance& B = m_kinematics->LL_GetBoneInstance(bone_id);
-                np_data.previous_callback = B.callback();
-                np_data.previous_param = B.callback_param();
-                m_non_phys_cb_data.push_back(np_data);
-            }
-        }
-
-        for (auto& np_data : m_non_phys_cb_data) {
-            CBoneInstance& B = m_kinematics->LL_GetBoneInstance(np_data.bone_id);
-            B.set_callback(bctCustom, NonPhysicalBonesCallback, &np_data);
-        }
         
         m_state = ERagdollState::Active;
     }
@@ -337,14 +298,6 @@ void CActiveRagdollController::Deactivate() {
             }
         }
         m_cb_data.clear();
-
-        for (auto& cb : m_non_phys_cb_data) {
-            if (cb.bone_id < m_kinematics->LL_BoneCount()) {
-                CBoneInstance& B = m_kinematics->LL_GetBoneInstance(cb.bone_id);
-                B.reset_callback();
-            }
-        }
-        m_non_phys_cb_data.clear();
     }
     m_part_reactions.clear();
 }

@@ -449,7 +449,6 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
             stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
             stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
             stalker->animation().global().reset();
-            stalker->animation().remove_bone_callbacks();
         }
         m_get_up_motion.invalidate();
 
@@ -836,7 +835,6 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
                 stalker->animation().global_selector(CStalkerAnimationManager::AnimationSelector());
                 stalker->animation().global_callback(CStalkerAnimationManager::AnimationCallback());
                 stalker->animation().global().reset();
-                stalker->animation().remove_bone_callbacks();
             }
             m_get_up_motion.invalidate();
 

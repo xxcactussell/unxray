@@ -128,9 +128,9 @@ void CPHElement::build()
         GetPhysicsCore()->SetBodyMotionType(m_char_handle, 0); // 0 = Static
     }
 
-    if (m_phys_ref_object && m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
-        GetPhysicsCore()->SetBodyUserData(m_char_handle, m_phys_ref_object);
+        GetPhysicsCore()->SetBodyUserData(m_char_handle, this);
     }
 }
 
@@ -145,6 +145,7 @@ void CPHElement::destroy()
     CPHGeometryOwner::destroy();
     if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
     {
+        GetPhysicsCore()->SetBodyUserData(m_char_handle, nullptr);
         GetPhysicsCore()->DestroyBody(m_char_handle);
         m_char_handle = INVALID_CHARACTER_VIRTUAL_HANDLE;
     }
@@ -337,6 +338,10 @@ void CPHElement::TransformPosition(const Fmatrix& form, motion_history_state his
 CPHElement::~CPHElement()
 {
     VERIFY(!isActive());
+    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    {
+        GetPhysicsCore()->SetBodyUserData(m_char_handle, nullptr);
+    }
     DeleteFracturesHolder();
 }
 
@@ -460,14 +465,6 @@ void CPHElement::PhDataUpdate(float step)
     VERIFY(_valid(linear_velocity));
     VERIFY(_valid(angular_velocity));
 
-    VERIFY(!fis_zero(m_l_scale));
-    VERIFY(!fis_zero(m_w_scale));
-    
-    linear_velocity.div(m_l_scale);
-    angular_velocity.div(m_w_scale);
-    GetPhysicsCore()->SetBodyLinearVelocity(m_char_handle, linear_velocity);
-    GetPhysicsCore()->SetBodyAngularVelocity(m_char_handle, angular_velocity);
-
     float linear_velocity_mag = linear_velocity.magnitude();
     float angular_velocity_mag = angular_velocity.magnitude();
 
@@ -476,24 +473,11 @@ void CPHElement::PhDataUpdate(float step)
         CutVelocity(m_l_limit, m_w_limit);
     }
 
-    if (is_active_body)
-        Disabling();
-
     Fmatrix tr;
     GetPhysicsCore()->GetBodyTransform(m_char_handle, tr);
     VERIFY_BOUNDARIES2(tr.c, phBoundaries, PhysicsRefObject(), "PhDataUpdate end, body position");
     
     UpdateInterpolation();
-
-    if (!GetPhysicsCore()->IsBodyActive(m_char_handle))
-        return;
-
-    if (!fis_zero(k_w))
-    {
-        Fvector torque = angular_velocity;
-        torque.mul(-k_w);
-        GetPhysicsCore()->ApplyTorque(m_char_handle, torque);
-    }
 }
 
 void CPHElement::Enable()
@@ -820,10 +804,6 @@ void CPHElement::BonesCallBack(CBoneInstance* B)
 void CPHElement::set_PhysicsRefObject(IPhysicsShellHolder* ref_object)
 {
     CPHGeometryOwner::set_PhysicsRefObject(ref_object);
-    if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
-    {
-        GetPhysicsCore()->SetBodyUserData(m_char_handle, ref_object);
-    }
 }
 
 void CPHElement::set_ObjectContactCallback(ObjectContactCallbackFun* callback)

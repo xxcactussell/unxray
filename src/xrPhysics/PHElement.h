@@ -88,6 +88,7 @@ public:
     virtual ObjectContactCallbackFun* get_ObjectContactCallback();
     virtual void set_PhysicsRefObject(IPhysicsShellHolder* ref_object); 
     virtual IPhysicsShellHolder* PhysicsRefObject() { return m_phys_ref_object; } 
+    CPHShell* ph_shell() { return m_shell; }
     virtual void SetMaterial(u16 m); 
     virtual void SetMaterial(LPCSTR m) { CPHGeometryOwner::SetMaterial(m); } 
     virtual u16 numberOfGeoms() const; 

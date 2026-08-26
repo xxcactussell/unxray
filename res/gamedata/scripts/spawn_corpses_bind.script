@@ -1,0 +1,62 @@
+-- gamedata/scripts/spawn_corpses_bind.script
+
+local stalker_sections = {
+    "sim_default_stalker_0",
+    "sim_default_stalker_1",
+    "sim_default_stalker_2",
+    "sim_default_bandit_0",
+    "sim_default_bandit_1",
+    "sim_default_bandit_2",
+    "sim_default_duty_0",
+    "sim_default_freedom_0",
+    "sim_default_military_0"
+}
+
+-- Функция для получения случайного смещения с шагом 0.5
+-- Например, при диапазоне [-4, 4] значения будут: -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0
+local function get_step_offset(min_steps, max_steps)
+    return math.random(min_steps, max_steps) * 0.5
+end
+
+function spawn()
+    local actor = db.actor
+    if not actor then return end
+
+    local start_pos = actor:bone_position("bip01_head")
+    local dir = device().cam_dir
+
+    local base_target_pos = vector():set(
+        start_pos.x + dir.x * 5.0,
+        start_pos.y + dir.y * 5.0,
+        start_pos.z + dir.z * 5.0
+    )
+
+    local lvid = actor:level_vertex_id()
+    local gvid = actor:game_vertex_id()
+
+    local count = 50
+
+    for index = 1, count do
+        -- Вычисляем случайное смещение по осям с шагом 0.5 (диапазон от -3.0 до 3.0 метров)
+        local offset_x = get_step_offset(-6, 6)
+        local offset_y = get_step_offset(0, 4)   -- Смещение по высоте (от 0.0 до 2.0 м)
+        local offset_z = get_step_offset(-6, 6)
+
+        local target_pos = vector():set(
+            base_target_pos.x + offset_x,
+            base_target_pos.y + offset_y,
+            base_target_pos.z + offset_z
+        )
+
+        local random_section = stalker_sections[math.random(#stalker_sections)]
+        local se_obj = alife():create(random_section, target_pos, lvid, gvid)
+
+        if se_obj then
+            level.client_spawn_manager():add(se_obj.id, 0, function(id, obj)
+                if obj and obj:alive() then
+                    obj:kill(obj)
+                end
+            end)
+        end
+    end
+end

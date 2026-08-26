@@ -62,10 +62,17 @@ struct SDeferredCharacterContact {
     bool is_sensor;
 };
 
+struct SDeferredBodyActivation {
+    BodyHandle body_handle;
+    void* user_data;
+    bool activated;
+};
+
 static const int JOLT_MAX_THREADS = 64;
 static std::atomic<int> g_jolt_thread_counter{0};
 static thread_local int g_jolt_thread_idx = -1;
 static std::vector<SDeferredCharacterContact> g_deferred_contacts[JOLT_MAX_THREADS];
+static std::vector<SDeferredBodyActivation> g_deferred_activations[JOLT_MAX_THREADS];
 
 static int GetJoltThreadIndex() {
     if (g_jolt_thread_idx == -1) {
@@ -84,6 +91,21 @@ static void FlushDeferredContacts() {
             if (ev.callback) {
                 ev.callback(ev.char_user_data, ev.contact_pos, ev.contact_norm, ev.contact_vel, 
                             ev.tri_user_data, ev.other_body_handle, ev.other_body_user_data, ev.is_sensor);
+            }
+        }
+        buffer.clear();
+    }
+}
+
+static void FlushDeferredActivations(IPhysicsCore::BodyActivationCallbackFun callback) {
+    int max_threads = g_jolt_thread_counter.load();
+    if (max_threads > JOLT_MAX_THREADS) max_threads = JOLT_MAX_THREADS;
+    
+    for (int i = 0; i < max_threads; ++i) {
+        auto& buffer = g_deferred_activations[i];
+        for (const auto& ev : buffer) {
+            if (callback) {
+                callback(ev.body_handle, ev.user_data, ev.activated);
             }
         }
         buffer.clear();
@@ -125,7 +147,7 @@ void JoltPhysicsCore::Initialize()
     }
 
     if (!m_temp_allocator) {
-        m_temp_allocator = new JPH::TempAllocatorImpl(10 * 1024 * 1024);
+        m_temp_allocator = new JPH::TempAllocatorImpl(32 * 1024 * 1024);
     }
     if (!m_job_system) {
         m_job_system = new JPH::JobSystemThreadPool(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, std::thread::hardware_concurrency() - 1);
@@ -138,10 +160,10 @@ void JoltPhysicsCore::Initialize()
 #endif
 
     m_physics_system = new JPH::PhysicsSystem();
-    const uint32_t cMaxBodies = 10240;
-    const uint32_t cNumBodyMutexes = 1024; 
-    const uint32_t cMaxBodyPairs = 10240;
-    const uint32_t cMaxContactConstraints = 10240;
+    const uint32_t cMaxBodies = 32768;
+    const uint32_t cNumBodyMutexes = 2048; 
+    const uint32_t cMaxBodyPairs = 65536;
+    const uint32_t cMaxContactConstraints = 65536;
 
     m_physics_system->Init(cMaxBodies, cNumBodyMutexes, cMaxBodyPairs, cMaxContactConstraints,
         m_broad_phase_layer_interface,
@@ -149,13 +171,17 @@ void JoltPhysicsCore::Initialize()
         m_object_vs_object_layer_filter);
 
     m_physics_system->SetContactListener(&m_contact_listener);
+    m_physics_system->SetBodyActivationListener(&m_body_activation_listener);
 }
 
 void JoltPhysicsCore::Clear()
 {
     if (!m_physics_system) return;
     int max_threads = std::min((int)g_jolt_thread_counter.load(), JOLT_MAX_THREADS);
-    for (int i = 0; i < max_threads; ++i) g_deferred_contacts[i].clear();
+    for (int i = 0; i < max_threads; ++i) {
+        g_deferred_contacts[i].clear();
+        g_deferred_activations[i].clear();
+    }
     
     for (auto& pair : m_constraints) {
         if (pair.second) {
@@ -201,16 +227,14 @@ void JoltPhysicsCore::Step(float delta_time)
 {
     if (!m_physics_system || !m_temp_allocator || !m_job_system) return;
 
-    int collision_steps = 1;
-    if (delta_time > 1.0f / 60.0f) {
-        collision_steps = (int)(delta_time * 60.0f) + 1; 
-    }
-    
-    if (collision_steps > 4) collision_steps = 4;
+    // Внешний цикл CPHWorld::FrameStep уже производит нарезку времени на фиксированные шаги (fixed_step = 1/60).
+    // Поэтому внутренний шаг коллизий Jolt фиксируем на 1 для исключения двойного сабстеппинга и лавинообразных просадок FPS.
+    const int collision_steps = 1;
 
     m_physics_system->Update(delta_time, collision_steps, m_temp_allocator, m_job_system);
     
     FlushDeferredContacts();
+    FlushDeferredActivations(m_body_activation_callback);
 }
 
 void JoltPhysicsCore::Destroy() 
@@ -275,6 +299,7 @@ void JoltPhysicsCore::DebugDraw(const Fvector& camera_pos)
 
         JPH::BodyManager::DrawSettings draw_settings;
         draw_settings.mDrawShape = (m_debug_draw_flags & 1) != 0;
+        draw_settings.mDrawShapeColor = JPH::BodyManager::EShapeColor::SleepColor; // Желтый = Активен, Красный = Спит, Серый = Статика
         draw_settings.mDrawShapeWireframe = true; // Force wireframe for reliable rendering
         draw_settings.mDrawBoundingBox = (m_debug_draw_flags & 2) != 0;
         draw_settings.mDrawGetSupportFunction = false;
@@ -649,10 +674,8 @@ BodyHandle JoltPhysicsCore::CreateBodyFromShape(PhysicsShapeHandle shape_handle,
     body_settings.mMassPropertiesOverride.mMass = mass;
     body_settings.mFriction = 0.7f;
     body_settings.mRestitution = 0.1f;
-
-    if (mass > 0.0f && mass <= 3.0f) {
-        body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
-    }
+    body_settings.mLinearDamping = 0.05f;
+    body_settings.mAngularDamping = 0.05f;
 
     JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
     if (!body) {
@@ -684,10 +707,8 @@ BodyHandle JoltPhysicsCore::CreateBox(const Fvector& half_extents, const Fvector
     body_settings.mMassPropertiesOverride.mMass = mass;
     body_settings.mFriction = 0.7f;
     body_settings.mRestitution = 0.1f;
-
-    if (mass > 0.0f && mass <= 3.0f) {
-        body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
-    }
+    body_settings.mLinearDamping = 0.05f;
+    body_settings.mAngularDamping = 0.05f;
 
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
     JPH::Body* body = body_interface.CreateBody(body_settings);
@@ -718,10 +739,8 @@ BodyHandle JoltPhysicsCore::CreateSphere(float radius, const Fvector& position, 
     body_settings.mMassPropertiesOverride.mMass = mass;
     body_settings.mFriction = 0.7f;
     body_settings.mRestitution = 0.1f;
-
-    if (mass > 0.0f && mass <= 3.0f) {
-        body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
-    }
+    body_settings.mLinearDamping = 0.05f;
+    body_settings.mAngularDamping = 0.05f;
 
     JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
     m_physics_system->GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);
@@ -748,10 +767,8 @@ BodyHandle JoltPhysicsCore::CreateCylinder(float radius, float half_height, cons
     body_settings.mMassPropertiesOverride.mMass = mass;
     body_settings.mFriction = 0.7f;
     body_settings.mRestitution = 0.1f;
-
-    if (mass > 0.0f && mass <= 3.0f) {
-        body_settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
-    }
+    body_settings.mLinearDamping = 0.05f;
+    body_settings.mAngularDamping = 0.05f;
 
     JPH::Body* body = m_physics_system->GetBodyInterface().CreateBody(body_settings);
     m_physics_system->GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);
@@ -785,6 +802,15 @@ void JoltPhysicsCore::SetBoxExtents(BodyHandle body_handle, const Fvector& exten
 
 void JoltPhysicsCore::DestroyBody(BodyHandle body_handle) {
     if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+
+    // Clean up any pending activation events for this body to prevent stale callbacks
+    int max_threads = std::min((int)g_jolt_thread_counter.load(), JOLT_MAX_THREADS);
+    for (int i = 0; i < max_threads; ++i) {
+        auto& vec = g_deferred_activations[i];
+        vec.erase(std::remove_if(vec.begin(), vec.end(), [body_handle](const SDeferredBodyActivation& ev) {
+            return ev.body_handle == body_handle;
+        }), vec.end());
+    }
 
     JPH::BodyID id(body_handle);
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
@@ -1419,7 +1445,6 @@ void JoltPhysicsCore::SetBodyLinearVelocity(BodyHandle body_handle, const Fvecto
     JPH::BodyID id(body_handle);
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
     
-    body_interface.ActivateBody(id); // Гарантируем пробуждение
     body_interface.SetLinearVelocity(id, JPH::Vec3(vel.x, vel.y, vel.z));
 }
 
@@ -1439,7 +1464,6 @@ void JoltPhysicsCore::SetBodyAngularVelocity(BodyHandle body_handle, const Fvect
     JPH::BodyID id(body_handle);
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
     
-    body_interface.ActivateBody(id); // Гарантируем пробуждение
     body_interface.SetAngularVelocity(id, JPH::Vec3(vel.x, vel.y, vel.z));
 }
 
@@ -1553,6 +1577,14 @@ void JoltPhysicsCore::SetBodyCollideWithStatics(BodyHandle body_handle, bool col
 
     if (motion != JPH::EMotionType::Static)
         m_physics_system->GetBodyInterface().SetObjectLayer(id, layer);
+}
+
+void JoltPhysicsCore::SetBodyObjectLayer(BodyHandle body_handle, u32 layer) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    if (m_physics_system->GetBodyInterface().IsAdded(id)) {
+        m_physics_system->GetBodyInterface().SetObjectLayer(id, static_cast<JPH::ObjectLayer>(layer));
+    }
 }
 
 
@@ -1684,6 +1716,34 @@ public:
     }
 };
 
+struct SMaterialPhysicsCache {
+    float friction = 0.7f;
+    float restitution = 0.0f;
+    bool valid = false;
+};
+static SMaterialPhysicsCache s_material_cache[1024];
+
+static inline const SMaterialPhysicsCache& GetMaterialPhysicsProperties(u16 mtl_idx)
+{
+    if (mtl_idx < 1024)
+    {
+        SMaterialPhysicsCache& entry = s_material_cache[mtl_idx];
+        if (!entry.valid)
+        {
+            SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+            if (mtl)
+            {
+                entry.friction = mtl->fPHFriction;
+                entry.restitution = mtl->Flags.test(SGameMtl::flBounceable) ? mtl->fPHBouncing : 0.0f;
+                entry.valid = true;
+            }
+        }
+        return entry;
+    }
+    static SMaterialPhysicsCache s_default;
+    return s_default;
+}
+
 void JoltPhysicsCore::MyContactListener::OnContactAdded(
     const JPH::Body& inBody1, 
     const JPH::Body& inBody2, 
@@ -1703,18 +1763,10 @@ void JoltPhysicsCore::MyContactListener::OnContactAdded(
             u16 mtl_idx = GetMaterialIndexForSubShape(shape, sub_shape);
             if (mtl_idx != GAMEMTL_NONE_IDX)
             {
-                SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
-                if (mtl)
-                {
-                    ioSettings.mCombinedFriction = std::sqrt(dynamic_body->GetFriction() * mtl->fPHFriction);
-                    
-                    if (mtl->Flags.test(SGameMtl::flBounceable))
-                        ioSettings.mCombinedRestitution = std::max(dynamic_body->GetRestitution(), mtl->fPHBouncing);
-                    else
-                        ioSettings.mCombinedRestitution = 0.0f;
-                    
-                    return;
-                }
+                const auto& mtl = GetMaterialPhysicsProperties(mtl_idx);
+                ioSettings.mCombinedFriction = std::sqrt(dynamic_body->GetFriction() * mtl.friction);
+                ioSettings.mCombinedRestitution = std::max(dynamic_body->GetRestitution(), mtl.restitution);
+                return;
             }
         }
     }
@@ -1729,7 +1781,45 @@ void JoltPhysicsCore::MyContactListener::OnContactPersisted(
     const JPH::ContactManifold& inManifold, 
     JPH::ContactSettings& ioSettings)
 {
-    OnContactAdded(inBody1, inBody2, inManifold, ioSettings);
+    // В Jolt коэффициенты трения и упругости сохраняются на протяжении жизни контакта после OnContactAdded.
+    // Оставление пустым устраняет пересчет квадратных корней и поиск по библиотеке материалов для десятков тысяч контактов каждый шаг.
+}
+
+void JoltPhysicsCore::MyBodyActivationListener::OnBodyActivated(const JPH::BodyID& inBodyID, JPH::uint64 inBodyUserData)
+{
+    if (inBodyUserData == 0) return;
+    if (m_core->m_physics_system) {
+        JPH::ObjectLayer layer = m_core->m_physics_system->GetBodyInterfaceNoLock().GetObjectLayer(inBodyID);
+        if (layer != Layers::MOVING) return;
+    }
+
+    int t_idx = GetJoltThreadIndex();
+    g_deferred_activations[t_idx].push_back({
+        inBodyID.GetIndexAndSequenceNumber(),
+        reinterpret_cast<void*>(inBodyUserData),
+        true
+    });
+}
+
+void JoltPhysicsCore::MyBodyActivationListener::OnBodyDeactivated(const JPH::BodyID& inBodyID, JPH::uint64 inBodyUserData)
+{
+    if (inBodyUserData == 0) return;
+    if (m_core->m_physics_system) {
+        JPH::ObjectLayer layer = m_core->m_physics_system->GetBodyInterfaceNoLock().GetObjectLayer(inBodyID);
+        if (layer != Layers::MOVING) return;
+    }
+
+    int t_idx = GetJoltThreadIndex();
+    g_deferred_activations[t_idx].push_back({
+        inBodyID.GetIndexAndSequenceNumber(),
+        reinterpret_cast<void*>(inBodyUserData),
+        false
+    });
+}
+
+void JoltPhysicsCore::SetBodyActivationCallback(BodyActivationCallbackFun callback)
+{
+    m_body_activation_callback = callback;
 }
 
 bool JoltPhysicsCore::MyCharacterContactListener::OnContactValidate(
@@ -1843,7 +1933,7 @@ void JoltPhysicsCore::MyCharacterContactListener::ProcessContact(const JPH::Char
         JPH::BodyLockRead lock(m_core->m_physics_system->GetBodyLockInterface(), inContact.mBodyB);
         if (lock.Succeeded()) {
             const JPH::Body& body = lock.GetBody();
-            if (body.IsDynamic()) {
+            if (body.IsDynamic() && body.GetObjectLayer() == Layers::MOVING) {
                 other_body_handle = inContact.mBodyB.GetIndexAndSequenceNumber();
                 other_body_user_data = reinterpret_cast<void*>(body.GetUserData());
             }
@@ -2367,6 +2457,7 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
     RagdollHandle handle = m_next_ragdoll_handle++;
     for (int i = 0; i < (int)settings.parts.size(); ++i) {
         jph_settings->mParts[i].mCollisionGroup.SetGroupID(handle);
+        jph_settings->mParts[i].mUserData = 0;
     }
 
     jph_settings->CalculateConstraintPriorities();
@@ -2376,6 +2467,14 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
     
     JPH::Ragdoll* ragdoll = jph_settings->CreateRagdoll(handle, 0, m_physics_system);
     if (!ragdoll) return INVALID_RAGDOLL_HANDLE;
+    
+    // Ensure all spawned ragdoll bodies have 0 user data initially
+    for (u32 i = 0; i < ragdoll->GetBodyCount(); ++i) {
+        JPH::BodyID id = ragdoll->GetBodyID(i);
+        if (!id.IsInvalid()) {
+            m_physics_system->GetBodyInterface().SetUserData(id, 0);
+        }
+    }
     m_ragdolls[handle] = ragdoll;
     m_ragdoll_settings[handle] = jph_settings;
     

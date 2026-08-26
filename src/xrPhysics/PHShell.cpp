@@ -87,8 +87,25 @@ void CPHShell::Disable()
     ClearCashedTries();
 }
 
-void CPHShell::DisableCollision() { CPHObject::collision_disable(); }
-void CPHShell::EnableCollision() { CPHObject::collision_enable(); }
+void CPHShell::DisableCollision()
+{
+    CPHObject::collision_disable();
+    for (auto& it : elements)
+    {
+        if (it->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE)
+            GetPhysicsCore()->SetBodyObjectLayer(it->get_body(), 4); // 4 = Layers::NO_COLLISION
+    }
+}
+
+void CPHShell::EnableCollision()
+{
+    CPHObject::collision_enable();
+    for (auto& it : elements)
+    {
+        if (it->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE)
+            GetPhysicsCore()->SetBodyObjectLayer(it->get_body(), 1); // 1 = Layers::MOVING
+    }
+}
 
 void CPHShell::ReanableObject()
 {

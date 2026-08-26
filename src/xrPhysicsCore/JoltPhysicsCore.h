@@ -7,6 +7,7 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
+#include <Jolt/Physics/Body/BodyActivationListener.h>
 #include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Ragdoll/Ragdoll.h>
@@ -56,6 +57,18 @@ private:
     };
 
     MyContactListener m_contact_listener{this};
+
+    class MyBodyActivationListener : public JPH::BodyActivationListener {
+        JoltPhysicsCore* m_core;
+    public:
+        MyBodyActivationListener(JoltPhysicsCore* core) : m_core(core) {}
+
+        virtual void OnBodyActivated(const JPH::BodyID& inBodyID, JPH::uint64 inBodyUserData) override;
+        virtual void OnBodyDeactivated(const JPH::BodyID& inBodyID, JPH::uint64 inBodyUserData) override;
+    };
+
+    MyBodyActivationListener m_body_activation_listener{this};
+    BodyActivationCallbackFun m_body_activation_callback = nullptr;
 
     class MyCharacterContactListener : public JPH::CharacterContactListener {
         JoltPhysicsCore* m_core;
@@ -213,6 +226,7 @@ public:
 
     void SetBodyIgnoreStatic(BodyHandle body) override;
     void SetBodyCollideWithStatics(BodyHandle body_handle, bool collide) override;
+    void SetBodyObjectLayer(BodyHandle body_handle, u32 layer) override;
 
     void GetBodyPosition(BodyHandle body, Fvector& position) const override;
     void SetBodyPosition(BodyHandle body, const Fvector& position) override;
@@ -284,4 +298,5 @@ public:
     float GetRagdollTotalEnergy(RagdollHandle handle) const override;
     u32 GetRagdollPartCount(RagdollHandle handle) const override;
     void SetRagdollCollisionGroup(RagdollHandle handle, u32 group_id) override;
+    void SetBodyActivationCallback(BodyActivationCallbackFun callback) override;
 };

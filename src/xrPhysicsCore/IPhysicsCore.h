@@ -166,6 +166,7 @@ public:
     virtual void SetBodyIgnoreStatic(BodyHandle body) = 0;
 
     virtual void SetBodyCollideWithStatics(BodyHandle body_handle, bool collide) = 0;
+    virtual void SetBodyObjectLayer(BodyHandle body_handle, u32 layer) = 0;
     
     virtual void GetBodyPosition(BodyHandle body, Fvector& position) const = 0;
     virtual void SetBodyPosition(BodyHandle body, const Fvector& position) = 0;
@@ -266,6 +267,9 @@ public:
     virtual u32 GetRagdollPartCount(RagdollHandle handle) const = 0;
     
     virtual void SetRagdollCollisionGroup(RagdollHandle handle, u32 group_id) = 0;
+
+    typedef void (*BodyActivationCallbackFun)(BodyHandle body, void* user_data, bool activated);
+    virtual void SetBodyActivationCallback(BodyActivationCallbackFun callback) = 0;
 };
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore();

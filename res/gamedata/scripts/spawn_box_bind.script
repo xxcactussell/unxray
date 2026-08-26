@@ -1,5 +1,9 @@
 -- gamedata/scripts/spawn_box_bind.script
 
+local function get_step_offset(min_steps, max_steps)
+    return math.random(min_steps, max_steps) * 0.5
+end
+
 function spawn()
     local actor = db.actor
     if not actor then return end
@@ -7,16 +11,28 @@ function spawn()
     local start_pos = actor:bone_position("bip01_head")
     local dir = device().cam_dir
 
-    local target_pos = vector():set(
+    local base_target_pos = vector():set(
         start_pos.x + dir.x * 5.0,
         start_pos.y + dir.y * 5.0,
         start_pos.z + dir.z * 5.0
     )
 
-    alife():create(
-        "box_wood_01",
-        target_pos,
-        actor:level_vertex_id(),
-        actor:game_vertex_id()
-    )
+    local lvid = actor:level_vertex_id()
+    local gvid = actor:game_vertex_id()
+
+    local count = 500
+
+    for index = 1, count do
+        local offset_x = get_step_offset(-6, 6)
+        local offset_y = get_step_offset(0, 4)
+        local offset_z = get_step_offset(-6, 6)
+
+        local target_pos = vector():set(
+            base_target_pos.x + offset_x,
+            base_target_pos.y + offset_y,
+            base_target_pos.z + offset_z
+        )
+
+        alife():create("box_wood_01", target_pos, lvid, gvid)
+    end
 end

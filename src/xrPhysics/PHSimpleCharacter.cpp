@@ -19,6 +19,7 @@
 #include "PHCollideValidator.h"
 
 #include "Geometry.h"
+#include "PHElement.h"
 
 #include "xrCore/Animation/Bone.hpp"
 #include "xrEngine/xr_object.h"
@@ -880,18 +881,14 @@ void CPHSimpleCharacter::JoltCharacterContactCallback(void* char_user_data,
     // 3. Dynamic object collision (Poltergeist props, flying items)
     if (other_body_handle != INVALID_BODY_HANDLE && other_body_user_data)
     {
-        IPhysicsShellHolder* other_obj = reinterpret_cast<IPhysicsShellHolder*>(other_body_user_data);
-        if (other_obj && !other_obj->ObjectGetDestroy())
+        CPHElement* elem = reinterpret_cast<CPHElement*>(other_body_user_data);
+        IPhysicsShellHolder* other_obj = elem->PhysicsRefObject();
+        if (other_obj && !other_obj->ObjectGetDestroy() && !other_obj->IsActor() && !other_obj->IsStalker())
         {
             u16 dyn_mat_idx = GAMEMTL_NONE_IDX;
-            CPhysicsShell* shell = other_obj->ObjectPPhysicsShell();
-            if (shell && shell->isActive() && shell->Elements().size() > 0)
+            if (elem->has_geoms() && elem->last_geom())
             {
-                CPhysicsElement* elem = shell->get_ElementByStoreOrder(0);
-                if (elem && elem->has_geoms() && elem->last_geom())
-                {
-                    dyn_mat_idx = elem->last_geom()->material;
-                }
+                dyn_mat_idx = elem->last_geom()->material;
             }
 
             if (dyn_mat_idx == GAMEMTL_NONE_IDX || dyn_mat_idx >= GMLib.CountMaterial())

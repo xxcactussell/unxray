@@ -20,8 +20,44 @@
 #include "xrEngine/device.h"
 #include "xrEngine/GameFont.h"
 #include "xrEngine/PerformanceAlert.hpp"
+#include "IPhysicsShellHolder.h"
+#include "PhysicsShell.h"
+#include "PHShell.h"
+#include "PHElement.h"
 
 CPHWorld* ph_world = 0;
+
+static void OnJoltBodyActivation(BodyHandle body, void* user_data, bool activated)
+{
+    if (!user_data) return;
+    CPHElement* element = static_cast<CPHElement*>(user_data);
+    CPHShell* shell = element->ph_shell();
+    if (!shell) return;
+
+    IPhysicsShellHolder* holder = element->PhysicsRefObject();
+    if (!holder || holder->ObjectGetDestroy() || holder->has_parent_object())
+        return;
+
+    if (holder->IsActor() || holder->IsStalker())
+        return;
+
+    if (activated)
+    {
+        if (!shell->isActive())
+        {
+            shell->EnableObject(nullptr);
+        }
+    }
+    else
+    {
+        if (shell->isActive())
+        {
+            shell->InterpolateGlobalTransform(&holder->ObjectXFORM());
+            shell->DisableObject();
+            holder->ObjectSpatialMove();
+        }
+    }
+}
 
 IPHWorld* physics_world() { return ph_world; }
 void create_physics_world(bool mt, CObjectSpace* os, CObjectList* lo)
@@ -96,6 +132,7 @@ void CPHWorld::Create(bool mt, CObjectSpace* os, CObjectList* lo)
 {
     ZoneScoped;
     GetPhysicsCore()->Initialize();
+    GetPhysicsCore()->SetBodyActivationCallback(OnJoltBodyActivation);
     LoadParams();
     m_object_space = os;
     m_level_objects = lo;
@@ -116,6 +153,7 @@ void CPHWorld::Create(bool mt, CObjectSpace* os, CObjectList* lo)
 void CPHWorld::Destroy()
 {
     ZoneScoped;
+    GetPhysicsCore()->SetBodyActivationCallback(nullptr);
     r_spatial.clear();
     xr_delete(m_commander);
     Mesh.Destroy();
@@ -179,20 +217,15 @@ void CPHWorld::Step()
     ++m_steps_short_num;
     stats.Collision.Begin();
 
-    // Jolt берет на себя коллизии, поэтому здесь просто базовая логика
     for (i_object = m_objects.begin(); m_objects.end() != i_object;)
     {
-        (*i_object)->Collide();
+        CPHObject* obj = (*i_object);
         ++i_object;
+        obj->Collide();
+        obj->PhTune(fixed_step);
     }
 
     stats.Collision.End();
-
-    for (i_object = m_objects.begin(); m_objects.end() != i_object;)
-    {
-        (*i_object)->PhTune(fixed_step);
-        ++i_object;
-    }
 
     for (i_update_object = m_update_objects.begin(); m_update_objects.end() != i_update_object;)
     {

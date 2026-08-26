@@ -1,4 +1,5 @@
 #pragma once
+#include "PHElement.h"
 
 void CPHSimpleCharacter::UpdateStaticDamage(const Fvector& normal, const Fvector& pos, SGameMtl* tri_material, bool bo1)
 {
@@ -38,8 +39,13 @@ void CPHSimpleCharacter::UpdateDynamicDamage(const Fvector& normal, const Fvecto
     if (b2 == INVALID_BODY_HANDLE)
         return;
 
-    IPhysicsShellHolder* obj = bo1 ? (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(b2) 
-                                   : (IPhysicsShellHolder*)GetPhysicsCore()->GetBodyUserData(m_char_handle);
+    CPHElement* elem = bo1 ? (CPHElement*)GetPhysicsCore()->GetBodyUserData(b2) 
+                           : (CPHElement*)GetPhysicsCore()->GetBodyUserData(m_char_handle);
+
+    if (!elem)
+        return;
+
+    IPhysicsShellHolder* obj = elem->PhysicsRefObject();
 
     if (!obj || obj->ObjectGetDestroy())
         return;

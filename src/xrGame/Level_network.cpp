@@ -23,7 +23,7 @@
 #include "xrPhysics/PHCommander.h"
 
 const int max_objects_size = 2 * 1024;
-const int max_objects_size_in_save = 8 * 1024;
+const int max_objects_size_in_save = 32 * 1024;
 
 extern bool g_b_ClearGameCaptions;
 
@@ -242,6 +242,9 @@ u32 CLevel::Objects_net_Save(NET_Packet* _Packet, u32 start, u32 max_object_size
         //		Msg			("save:iterating:%d:%s, size[%d]",P->ID(),*P->cName(), Packet.w_tell() );
         if (P && !P->getDestroy() && P->net_SaveRelevant())
         {
+            if (Packet.w_tell() > 2 && (max_object_size >= (NET_PacketSizeLimit - Packet.w_tell())))
+                break;
+
             Packet.w_u16(u16(P->ID()));
             Packet.w_chunk_open16(position);
             //			Msg						("save:saving:%d:%s",P->ID(),*P->cName());
@@ -259,10 +262,13 @@ u32 CLevel::Objects_net_Save(NET_Packet* _Packet, u32 start, u32 max_object_size
             //			if (0==(--count))
             //				break;
             if (max_object_size >= (NET_PacketSizeLimit - Packet.w_tell()))
+            {
+                start++;
                 break;
+            }
         }
     }
-    return ++start;
+    return start;
 }
 
 void CLevel::ClientSave()

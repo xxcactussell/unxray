@@ -98,16 +98,16 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
         const SBoneShape& shape = bone_data.get_shape();
         Fvector bone_direction = Fvector().set(0.f, 1.f, 0.f);
         
-        if (shape.type == SBoneShape::stBox) {
-            Fvector box_size = shape.box.m_halfsize;
-            LPCSTR bone_name = kinematics->LL_BoneName_dbg(bone_id);
-            bool is_pelvis = (bone_name && strstr(bone_name, "pelvis") != nullptr);
-            if (is_pelvis) {
-                box_size.x = std::max(box_size.x, 0.3f);
-                box_size.y = std::max(box_size.y, 0.3f);
-                box_size.z = std::max(box_size.z, 0.3f);
-            }
-            PhysicsShapeHandle base_box = GetPhysicsCore()->CreateBoxShape(box_size);
+        LPCSTR bone_name = kinematics->LL_BoneName_dbg(bone_id);
+        bool is_pelvis = (bone_name && strstr(bone_name, "pelvis") != nullptr);
+
+        if (is_pelvis) {
+            PhysicsShapeHandle base_sphere = GetPhysicsCore()->CreateSphereShape(0.18f);
+            Fvector sphere_pos = (shape.type == SBoneShape::stBox) ? shape.box.m_translate : ((shape.type == SBoneShape::stSphere) ? shape.sphere.P : Fvector().set(0, 0, 0));
+            part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_sphere, sphere_pos, Fquaternion().identity());
+            part_desc.mass = std::max(bone_data.get_mass(), 50.0f);
+        } else if (shape.type == SBoneShape::stBox) {
+            PhysicsShapeHandle base_box = GetPhysicsCore()->CreateBoxShape(Fvector().set(shape.box.m_halfsize));
             Fmatrix box_mat;
             box_mat.i = shape.box.m_rotate.i;
             box_mat.j = shape.box.m_rotate.j;
@@ -117,7 +117,7 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
             box_rot.set(box_mat);
             part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_box, shape.box.m_translate, box_rot);
             bone_direction = Fvector().set(shape.box.m_rotate.k).normalize();
-            part_desc.mass = std::max(bone_data.get_mass(), is_pelvis ? 50.0f : 1.0f);
+            part_desc.mass = std::max(bone_data.get_mass(), 1.0f);
         } else if (shape.type == SBoneShape::stSphere) {
             PhysicsShapeHandle base_sphere = GetPhysicsCore()->CreateSphereShape(shape.sphere.R);
             part_desc.shape = GetPhysicsCore()->CreateRotatedTranslatedShape(base_sphere, shape.sphere.P, Fquaternion().identity());

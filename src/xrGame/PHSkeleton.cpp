@@ -101,7 +101,7 @@ bool CPHSkeleton::Spawn(CSE_Abstract* D)
 
         CPHDestroyableNotificate::spawn_notificate(D);
 
-        if (K)
+        if (K && obj->PPhysicsShell())
         {
             CInifile* ini = K->LL_UserData();
             if (ini && ini->section_exist("collide"))
@@ -185,8 +185,11 @@ void CPHSkeleton::SaveNetState(NET_Packet& P)
     for (u16 i = 0; i < bones_number; i++)
     {
         SPHNetState state;
-        obj->PHGetSyncItem(i)->get_State(state);
+        if (auto* sync_item = obj->PHGetSyncItem(i))
+            sync_item->get_State(state);
         Fvector& p = state.position;
+        if (!_valid(p))
+            continue;
         if (p.x < min.x)
             min.x = p.x;
         if (p.y < min.y)
@@ -202,18 +205,25 @@ void CPHSkeleton::SaveNetState(NET_Packet& P)
             max.z = p.z;
     }
 
-    min.sub(2.f * EPS_L);
-    max.add(2.f * EPS_L);
+    if (bones_number == 0 || !_valid(min) || !_valid(max) || min.x > max.x || min.y > max.y || min.z > max.z)
+    {
+        min.set(obj->Position()).sub(2.f);
+        max.set(obj->Position()).add(2.f);
+    }
+    else
+    {
+        min.sub(2.f * EPS_L);
+        max.add(2.f * EPS_L);
+    }
 
     P.w_vec3(min);
     P.w_vec3(max);
-
     P.w_u16(bones_number);
-
     for (u16 i = 0; i < bones_number; i++)
     {
         SPHNetState state;
-        obj->PHGetSyncItem(i)->get_State(state);
+        if (auto* sync_item = obj->PHGetSyncItem(i))
+            sync_item->get_State(state);
         state.net_Save(P, min, max);
     }
 }
@@ -234,7 +244,8 @@ void CPHSkeleton::LoadNetState(NET_Packet& P)
     {
         SPHNetState state;
         state.net_Load(P);
-        obj->PHGetSyncItem(i)->set_State(state);
+        if (auto* sync_item = obj->PHGetSyncItem(i))
+            sync_item->set_State(state);
     }
 }
 void CPHSkeleton::RestoreNetState(CSE_PHSkeleton* po)
@@ -256,7 +267,8 @@ void CPHSkeleton::RestoreNetState(CSE_PHSkeleton* po)
         for (u16 bone = 0; e != i; ++i, bone++)
         {
             R_ASSERT(bone < obj->PHGetSyncItemsNumber());
-            obj->PHGetSyncItem(bone)->set_State(*i);
+            if (auto* sync_item = obj->PHGetSyncItem(bone))
+                sync_item->set_State(*i);
         }
     saved_bones.clear();
     po->_flags.set(CSE_PHSkeleton::flSavedData, FALSE);

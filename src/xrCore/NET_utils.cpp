@@ -12,10 +12,9 @@ void NET_Packet::w(const void* p, u32 count)
 {
     R_ASSERT(inistream == NULL || w_allow);
     VERIFY(p && count);
-    VERIFY(B.count + count < NET_PacketSizeLimit);
+    R_ASSERT2(B.count + count <= NET_PacketSizeLimit, "NET_Packet buffer overflow!");
     CopyMemory(&B.data[B.count], p, count);
     B.count += count;
-    VERIFY(B.count < NET_PacketSizeLimit);
 }
 
 void NET_Packet::w_float_q16(float a, float min, float max)

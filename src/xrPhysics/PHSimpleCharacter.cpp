@@ -519,6 +519,8 @@ void CPHSimpleCharacter::IPosition(Fvector& pos)
 
 void CPHSimpleCharacter::SetPosition(const Fvector& pos)
 {
+    if (!_valid(pos))
+        return;
     VERIFY_BOUNDARIES(pos, phBoundaries, PhysicsRefObject());
     if (!b_exist)
         return;

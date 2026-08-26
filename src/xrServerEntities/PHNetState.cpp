@@ -113,7 +113,14 @@ void SPHNetState::net_Save(NET_Packet& P, const Fvector& min, const Fvector& max
 template <typename src>
 void SPHNetState::read(src& P, const Fvector& min, const Fvector& max)
 {
-    VERIFY(!(fsimilar(min.x, max.x) && fsimilar(min.y, max.y) && fsimilar(min.z, max.z)));
+    Fvector real_min = min;
+    Fvector real_max = max;
+    if (real_min.x >= real_max.x || real_min.y >= real_max.y || real_min.z >= real_max.z ||
+        !_valid(real_min) || !_valid(real_max))
+    {
+        real_min.set(-100.f, -100.f, -100.f);
+        real_max.set(100.f, 100.f, 100.f);
+    }
     
     linear_vel = P.r_vec3();
     angular_vel = P.r_vec3();
@@ -121,7 +128,7 @@ void SPHNetState::read(src& P, const Fvector& min, const Fvector& max)
     force.set(0.f, 0.f, 0.f);
     torque.set(0.f, 0.f, 0.f);
     
-    r_vec_q8(P, position, min, max);
+    r_vec_q8(P, position, real_min, real_max);
     previous_position.set(position);
     
     r_qt_q8(P, quaternion);
@@ -132,13 +139,11 @@ void SPHNetState::read(src& P, const Fvector& min, const Fvector& max)
 
 void SPHNetState::net_Load(NET_Packet& P, const Fvector& min, const Fvector& max)
 {
-    VERIFY(!(fsimilar(min.x, max.x) && fsimilar(min.y, max.y) && fsimilar(min.z, max.z)));
     read(P, min, max);
 }
 
 void SPHNetState::net_Load(IReader& P, const Fvector& min, const Fvector& max)
 {
-    VERIFY(!(fsimilar(min.x, max.x) && fsimilar(min.y, max.y) && fsimilar(min.z, max.z)));
     read(P, min, max);
 }
 
@@ -191,7 +196,15 @@ void SPHBonesData::net_Load(NET_Packet& P)
 
 void SPHBonesData::set_min_max(const Fvector& _min, const Fvector& _max)
 {
-    VERIFY(!_min.similar(_max));
-    m_min = _min;
-    m_max = _max;
+    if (_min.x >= _max.x || _min.y >= _max.y || _min.z >= _max.z ||
+        !_valid(_min) || !_valid(_max))
+    {
+        m_min.set(-100.f, -100.f, -100.f);
+        m_max.set(100.f, 100.f, 100.f);
+    }
+    else
+    {
+        m_min = _min;
+        m_max = _max;
+    }
 }

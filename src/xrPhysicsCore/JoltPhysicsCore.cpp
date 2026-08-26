@@ -1708,11 +1708,14 @@ public:
         : m_system(system), m_actor_user_data(user_data) {}
         
     virtual bool ShouldCollide(const JPH::BodyID &inBodyID) const override {
-        if (m_actor_user_data == 0) return true;
-        
         JPH::BodyLockRead lock(m_system->GetBodyLockInterface(), inBodyID);
         if (lock.Succeeded()) {
-            if (lock.GetBody().GetUserData() == m_actor_user_data) {
+            const JPH::Body& body = lock.GetBody();
+            if (m_actor_user_data != 0 && body.GetUserData() == m_actor_user_data) {
+                return false;
+            }
+            // Ignore kinematic active ragdoll parts of alive characters - their CharacterVirtual handles collision
+            if (body.GetObjectLayer() == Layers::RAGDOLL && body.IsKinematic()) {
                 return false;
             }
         }
@@ -1865,30 +1868,7 @@ void JoltPhysicsCore::MyCharacterContactListener::OnCharacterContactSolve(
     JPH::Vec3Arg inCharacterVelocity, 
     JPH::Vec3& ioNewCharacterVelocity)
 {
-    if (!inCharacter || !inOtherCharacter) return;
-
-    // Calculate separation vector between character centers
-    JPH::RVec3 posA = inCharacter->GetPosition();
-    JPH::RVec3 posB = inOtherCharacter->GetPosition();
-    JPH::Vec3 diff = JPH::Vec3(posA - posB);
-    diff.SetY(0.0f); // only separate in horizontal plane
-
-    float dist_sq = diff.LengthSq();
-    if (dist_sq < 0.0001f)
-    {
-        // Degenerate case: characters are spawned in exact same position!
-        // Generate deterministic opposing separation normal based on memory addresses
-        uintptr_t addrA = reinterpret_cast<uintptr_t>(inCharacter);
-        uintptr_t addrB = reinterpret_cast<uintptr_t>(inOtherCharacter);
-        float angle = (addrA > addrB ? 0.0f : float(M_PI)) + float((addrA ^ addrB) % 360) * (float(M_PI) / 180.0f);
-        diff = JPH::Vec3(std::cos(angle), 0.0f, std::sin(angle));
-        dist_sq = 1.0f;
-    }
-
-    JPH::Vec3 sep_dir = diff.Normalized();
-    // Add soft separation push velocity away from the other character
-    float push_speed = 1.5f;
-    ioNewCharacterVelocity += sep_dir * push_speed;
+    // Natural collision sliding and penetration resolution are handled by Jolt's solver
 }
 
 void JoltPhysicsCore::MyCharacterContactListener::ProcessContact(const JPH::CharacterVirtual* inCharacter, const JPH::CharacterContact& inContact) {
@@ -1978,7 +1958,8 @@ CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandl
     JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
     settings->mShape = jolt_shape;
     settings->mMass = mass;
-    settings->mMaxSlopeAngle = JPH::DegreesToRadians(45.0f);
+    settings->mMaxSlopeAngle = JPH::DegreesToRadians(50.0f);
+    settings->mEnhancedInternalEdgeRemoval = true;
     settings->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -0.1f);
     
     JPH::RVec3 pos(initial_pos.x, initial_pos.y, initial_pos.z);
@@ -2214,7 +2195,11 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
         } else {
             update_settings.mStickToFloorStepDown = -character->GetUp() * 0.6f;
         }
-        update_settings.mWalkStairsStepUp = character->GetUp() * 0.4f;
+        update_settings.mWalkStairsStepUp = character->GetUp() * 0.45f;
+        update_settings.mWalkStairsMinStepForward = 0.02f;
+        update_settings.mWalkStairsStepForwardTest = 0.20f;
+        update_settings.mWalkStairsCosAngleForwardContact = JPH::Cos(JPH::DegreesToRadians(75.0f));
+        update_settings.mWalkStairsStepDownExtra = -character->GetUp() * 0.1f;
 
         JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
 

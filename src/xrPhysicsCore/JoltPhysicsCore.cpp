@@ -390,30 +390,8 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
     if (actual_t_cnt == 0)
         return nullptr;
 
-    struct TriangleKey {
-        u32 i0, i1, i2;
-        bool operator==(const TriangleKey& other) const noexcept {
-            return i0 == other.i0 && i1 == other.i1 && i2 == other.i2;
-        }
-    };
-
-    struct TriangleKeyHasher {
-        std::size_t operator()(const TriangleKey& k) const noexcept {
-            std::size_t h = k.i0;
-            h = h * 31 + k.i1;
-            h = h * 31 + k.i2;
-            return h;
-        }
-    };
-
-    // Key to index in jolt_triangles
-    std::unordered_map<TriangleKey, size_t, TriangleKeyHasher> unique_tri_map;
-    unique_tri_map.reserve(actual_t_cnt);
-
     JPH::IndexedTriangleList jolt_triangles;
-    jolt_triangles.reserve(actual_t_cnt * 2);
-
-    const float min_area_sq = 1e-8f;
+    jolt_triangles.reserve(actual_t_cnt);
 
     for (u32 i = 0; i < actual_t_cnt; ++i) {
         u32 original_index = tri_indices ? tri_indices[i] : i;
@@ -452,25 +430,10 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
         float cz = e1x * e2y - e1y * e2x;
 
         float cross_sq_mag = cx * cx + cy * cy + cz * cz;
-        if (cross_sq_mag < min_area_sq)
+        if (cross_sq_mag < 1e-12f)
             continue;
 
         u16 mtl = tri.material & 0x3FFF;
-        SGameMtl* gmtl = GMLib.GetMaterialByIdx(mtl);
-        bool is_solid = !IsPassableMaterial(gmtl);
-
-        TriangleKey key = {idx0, idx1, idx2};
-        auto it = unique_tri_map.find(key);
-        if (it != unique_tri_map.end()) {
-            if (is_solid) {
-                size_t tri_idx = it->second;
-                jolt_triangles[tri_idx].mUserData = PackTriangleUserData(original_index, mtl);
-            }
-            continue;
-        }
-
-        size_t tri_pos = jolt_triangles.size();
-        unique_tri_map[key] = tri_pos;
 
         jolt_triangles.push_back(JPH::IndexedTriangle(
             idx0, 
@@ -492,12 +455,10 @@ PhysicsShapeHandle JoltPhysicsCore::BuildCDBModel(const Fvector* verts, u32 v_cn
 
     JPH::MeshShapeSettings settings(std::move(jolt_vertices), std::move(jolt_triangles));
     settings.mPerTriangleUserData = true;
-    settings.mActiveEdgeCosThresholdAngle = 0.707106f; // ~45 deg
-
-    settings.Sanitize();
 
     JPH::ShapeSettings::ShapeResult result = settings.Create();
     if (result.HasError()) {
+        Msg("! [JoltPhysicsCore] BuildCDBModel error: %s", result.GetError().c_str());
         return nullptr;
     }
 
@@ -1958,7 +1919,7 @@ CharacterVirtualHandle JoltPhysicsCore::CreateCharacterVirtual(PhysicsShapeHandl
     JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
     settings->mShape = jolt_shape;
     settings->mMass = mass;
-    settings->mMaxSlopeAngle = JPH::DegreesToRadians(50.0f);
+    settings->mMaxSlopeAngle = JPH::DegreesToRadians(60.0f);
     settings->mEnhancedInternalEdgeRemoval = true;
     settings->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -0.1f);
     
@@ -2195,11 +2156,11 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
         } else {
             update_settings.mStickToFloorStepDown = -character->GetUp() * 0.6f;
         }
-        update_settings.mWalkStairsStepUp = character->GetUp() * 0.45f;
+        update_settings.mWalkStairsStepUp = character->GetUp() * 0.50f;
         update_settings.mWalkStairsMinStepForward = 0.02f;
-        update_settings.mWalkStairsStepForwardTest = 0.20f;
-        update_settings.mWalkStairsCosAngleForwardContact = JPH::Cos(JPH::DegreesToRadians(75.0f));
-        update_settings.mWalkStairsStepDownExtra = -character->GetUp() * 0.1f;
+        update_settings.mWalkStairsStepForwardTest = 0.35f;
+        update_settings.mWalkStairsCosAngleForwardContact = JPH::Cos(JPH::DegreesToRadians(80.0f));
+        update_settings.mWalkStairsStepDownExtra = -character->GetUp() * 0.20f;
 
         JoltIgnoreActorBodyFilter body_filter(m_physics_system, character->GetUserData());
 

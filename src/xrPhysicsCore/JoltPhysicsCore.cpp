@@ -2301,11 +2301,15 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
     for (size_t i = 0; i < settings.parts.size(); ++i) {
         const auto& part = settings.parts[i];
         
-        std::string joint_name = "joint_" + std::to_string(part.bone_id);
-        jph_settings->mSkeleton->AddJoint(
-            joint_name.c_str(), 
-            part.parent_index
-        );
+        string64 joint_name;
+        xr_sprintf(joint_name, "joint_%zu", i);
+        if (part.parent_index != -1 && part.parent_index >= 0) {
+            string64 parent_name;
+            xr_sprintf(parent_name, "joint_%d", part.parent_index);
+            jph_settings->mSkeleton->AddJoint(joint_name, parent_name);
+        } else {
+            jph_settings->mSkeleton->AddJoint(joint_name);
+        }
         
         auto& jph_part = jph_settings->mParts[i];
         jph_part.SetShape(static_cast<JPH::Shape*>(part.shape));
@@ -2324,6 +2328,11 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         float mass = std::max(part.mass, 0.05f);
         jph_part.mMassPropertiesOverride.mMass = mass;
         jph_part.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+        
+        // Mass-proportional body damping (heavy bones damp oscillations heavily, light limbs stay nimble)
+        float mass_factor = std::clamp(mass / 30.0f, 0.0f, 1.0f);
+        jph_part.mLinearDamping = 0.05f + mass_factor * 0.20f;
+        jph_part.mAngularDamping = 0.15f + mass_factor * 0.45f;
         
         // Root is kinematic, others are dynamic
         if (part.parent_index == -1) {
@@ -2389,28 +2398,28 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
         if (constraint->mTwistMaxAngle < constraint->mTwistMinAngle) {
             std::swap(constraint->mTwistMinAngle, constraint->mTwistMaxAngle);
         }
-        constraint->mMaxFrictionTorque = c_desc.max_friction_torque;
         
-        // Motor settings with bounded torque limits to prevent explosive constraint forces
-        constraint->mSwingMotorSettings = JPH::MotorSettings(JPH::ESpringMode::StiffnessAndDamping, settings.default_motor.stiffness, settings.default_motor.damping, 200.0f, 100.0f);
-        constraint->mTwistMotorSettings = JPH::MotorSettings(JPH::ESpringMode::StiffnessAndDamping, settings.default_motor.stiffness, settings.default_motor.damping, 200.0f, 100.0f);
+        // Mass-proportional joint friction
+        float joint_friction = std::max(c_desc.max_friction_torque, part_child.mass * 0.4f);
+        constraint->mMaxFrictionTorque = std::clamp(joint_friction, 1.0f, 80.0f);
+        
+        // Overdamped frequency mode (damping ratio 1.2) to prevent pendulum swing oscillations
+        float max_torque = std::clamp(part_child.mass * 15.0f, 50.0f, 500.0f);
+        constraint->mSwingMotorSettings = JPH::MotorSettings(JPH::ESpringMode::FrequencyAndDamping, 6.0f, 1.2f, max_torque, max_torque);
+        constraint->mTwistMotorSettings = JPH::MotorSettings(JPH::ESpringMode::FrequencyAndDamping, 6.0f, 1.2f, max_torque, max_torque);
         
         // Attach to part
         jph_settings->mParts[c_desc.child_index].mToParent = constraint;
     }
     
-    // X-Ray shapes overlap massively. Disable ALL internal collisions within the same ragdoll,
-    // not just parent-child (DisableParentChildCollisions() alone is not enough).
-    JPH::Ref<JPH::GroupFilterTable> group_filter = new JPH::GroupFilterTable((uint32_t)settings.parts.size());
-    for (int i = 0; i < (int)settings.parts.size(); ++i)
-        for (int j = 0; j < (int)settings.parts.size(); ++j)
-            if (i != j)
-                group_filter->DisableCollision(i, j);
+    std::vector<JPH::Mat44> bind_joint_matrices(settings.parts.size());
+    for (size_t i = 0; i < settings.parts.size(); ++i) {
+        bind_joint_matrices[i] = JPH::Mat44::sRotationTranslation(jph_settings->mParts[i].mRotation, jph_settings->mParts[i].mPosition);
+    }
+    jph_settings->DisableParentChildCollisions(bind_joint_matrices.data(), 0.0f);
 
     RagdollHandle handle = m_next_ragdoll_handle++;
     for (int i = 0; i < (int)settings.parts.size(); ++i) {
-        jph_settings->mParts[i].mCollisionGroup.SetGroupFilter(group_filter);
-        jph_settings->mParts[i].mCollisionGroup.SetSubGroupID(i);
         jph_settings->mParts[i].mCollisionGroup.SetGroupID(handle);
     }
 

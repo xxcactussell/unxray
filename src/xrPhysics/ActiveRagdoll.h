@@ -169,6 +169,7 @@ public:
     void UnregisterRagdoll(CActiveRagdollController* controller);
     
     void UpdateAll(float dt);
+    const xr_vector<CActiveRagdollController*>& GetControllers() const { return m_controllers; }
     
     static CActiveRagdollManager& GetInstance();
 };

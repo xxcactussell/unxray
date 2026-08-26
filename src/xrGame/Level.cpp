@@ -51,6 +51,9 @@
 #include "xrNetServer/NET_Messages.h"
 #include "xrEngine/GameFont.h"
 #include "xrPhysicsCore/IPhysicsCore.h"
+#include "xrPhysics/ActiveRagdoll.h"
+#include "xrUICore/ui_base.h"
+#include "Include/xrRender/Kinematics.h"
 
 #ifdef DEBUG
 #include "level_debug.h"
@@ -654,6 +657,60 @@ void CLevel::OnRender()
             core->SetDebugDrawFlags(g_jolt_debug_mode);
             core->SetDebugDrawDistance(g_jolt_debug_distance);
             core->DebugDraw(Device.vCameraPosition);
+        }
+
+        if ((g_jolt_debug_mode & 1) != 0)
+        {
+            CGameFont* font = UI().Font().pFontStat;
+            if (!font) font = UI().Font().pFontMedium;
+            if (font)
+            {
+                font->SetColor(color_rgba(255, 255, 0, 230));
+
+                const auto& controllers = CActiveRagdollManager::GetInstance().GetControllers();
+                for (CActiveRagdollController* controller : controllers)
+                {
+                    if (!controller) continue;
+                    IKinematics* K = controller->GetKinematics();
+                    IPhysicsShellHolder* holder = controller->GetHolder();
+                    if (!K || !holder) continue;
+
+                    const Fmatrix& holder_xform = holder->ObjectXFORM();
+                    const auto& mapper = controller->GetMapper();
+
+                    for (size_t part_idx = 0; part_idx < mapper.m_part_to_bone.size(); ++part_idx)
+                    {
+                        u16 bone_id = mapper.m_part_to_bone[part_idx];
+                        if (bone_id >= K->LL_BoneCount()) continue;
+
+                        LPCSTR bone_name = K->LL_BoneName_dbg(bone_id);
+                        const Fmatrix& bone_mat = K->LL_GetTransform(bone_id);
+
+                        Fmatrix world_mat;
+                        world_mat.mul_43(holder_xform, bone_mat);
+                        Fvector world_pos = world_mat.c;
+
+                        if (world_pos.distance_to(Device.vCameraPosition) > g_jolt_debug_distance)
+                            continue;
+
+                        Fvector4 pt;
+                        Device.mFullTransform.transform(pt, Fvector4().set(world_pos.x, world_pos.y, world_pos.z, 1.0f));
+                        if (pt.w > 0.001f && pt.z > 0.0f)
+                        {
+                            float inv_w = 1.0f / pt.w;
+                            float screen_x = (pt.x * inv_w + 1.0f) * 0.5f * (float)Device.dwWidth;
+                            float screen_y = (1.0f - pt.y * inv_w) * 0.5f * (float)Device.dwHeight;
+
+                            if (screen_x >= 0.f && screen_x <= (float)Device.dwWidth &&
+                                screen_y >= 0.f && screen_y <= (float)Device.dwHeight)
+                            {
+                                font->OutSet(screen_x, screen_y);
+                                font->OutNext("%s", bone_name);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

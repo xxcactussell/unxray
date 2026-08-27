@@ -3,6 +3,8 @@
 #include "telekinetic_object.h"
 #include "xrPhysics/PhysicsShell.h"
 #include "xrPhysics/MathUtils.h"
+#include "CharacterPhysicsSupport.h"
+#include "xrPhysics/ActiveRagdoll.h"
 #include "Level.h"
 #include "GameObject.h"
 
@@ -100,7 +102,7 @@ void CTelekineticObject::switch_state(ETelekineticState new_state)
 }
 void CTelekineticObject::raise(float step)
 {
-    if (!object || !object->m_pPhysicsShell || !object->m_pPhysicsShell->isActive())
+    if (!object)
         return;
 
     step *= strength;
@@ -108,11 +110,21 @@ void CTelekineticObject::raise(float step)
     Fvector dir;
     dir.set(0.f, 1.0f, 0.f);
 
-    float elem_size = float(object->m_pPhysicsShell->Elements().size());
-    dir.mul(elem_size * elem_size * strength);
+    if (object->m_pPhysicsShell && object->m_pPhysicsShell->isActive())
+    {
+        float elem_size = float(object->m_pPhysicsShell->Elements().size());
+        dir.mul(elem_size * elem_size * strength);
 
-    if (OnServer())
-        (object->m_pPhysicsShell->get_ElementByStoreOrder(0))->applyGravityAccel(dir);
+        if (OnServer())
+            (object->m_pPhysicsShell->get_ElementByStoreOrder(0))->applyGravityAccel(dir);
+    }
+    else if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
+    {
+        float lift_imp = strength * 30.0f + 15.0f;
+        dir.mul(lift_imp);
+        if (OnServer())
+            object->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(dir, lift_imp);
+    }
 
     update_hold_sound();
 }
@@ -144,7 +156,7 @@ void CTelekineticObject::keep()
     // проверить время последнего обновления
     // if (time_keep_updated + KEEP_IMPULSE_UPDATE > Device.dwTimeGlobal) return;
 
-    if (!object || !object->m_pPhysicsShell || !object->m_pPhysicsShell->isActive())
+    if (!object)
         return;
 
     // проверить высоту
@@ -162,11 +174,18 @@ void CTelekineticObject::keep()
         dir.normalize_safe();
     }
 
-    // float elem_size = float(object->m_pPhysicsShell->Elements().size());
     dir.mul(5.0f);
 
-    if (OnServer())
-        (object->m_pPhysicsShell->get_ElementByStoreOrder(0))->applyGravityAccel(dir);
+    if (object->m_pPhysicsShell && object->m_pPhysicsShell->isActive())
+    {
+        if (OnServer())
+            (object->m_pPhysicsShell->get_ElementByStoreOrder(0))->applyGravityAccel(dir);
+    }
+    else if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
+    {
+        if (OnServer())
+            object->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(dir, 8.0f);
+    }
 
     // установить время последнего обновления
     time_keep_updated = Device.dwTimeGlobal;
@@ -176,19 +195,30 @@ void CTelekineticObject::keep()
 
 void CTelekineticObject::release()
 {
-    if (!object || !object->m_pPhysicsShell || !object->m_pPhysicsShell->isActive())
+    if (!object)
         return;
 
     Fvector dir_inv;
     dir_inv.set(0.f, -1.0f, 0.f);
 
-    // включить гравитацию
-    object->m_pPhysicsShell->set_ApplyByGravity(TRUE);
-    if (OnServer())
+    if (object->m_pPhysicsShell && object->m_pPhysicsShell->isActive())
     {
-        // приложить небольшую силу для того, чтобы объект начал падать
-        object->m_pPhysicsShell->applyImpulse(dir_inv, 0.5f * object->m_pPhysicsShell->getMass());
+        // включить гравитацию
+        object->m_pPhysicsShell->set_ApplyByGravity(TRUE);
+        if (OnServer())
+        {
+            // приложить небольшую силу для того, чтобы объект начал падать
+            object->m_pPhysicsShell->applyImpulse(dir_inv, 0.5f * object->m_pPhysicsShell->getMass());
+        }
     }
+    else if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
+    {
+        if (OnServer())
+        {
+            object->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(dir_inv, 15.0f);
+        }
+    }
+
     // state = TS_None;
     switch_state(TS_None);
 }
@@ -198,16 +228,27 @@ void CTelekineticObject::fire_t(const Fvector& target, float time)
     switch_state(TS_Fire);
     // time_fire_started	= Device.dwTimeGlobal;
 
-    if (!object || !object->m_pPhysicsShell || !object->m_pPhysicsShell->isActive())
+    if (!object)
         return;
 
-    // включить гравитацию
-    object->m_pPhysicsShell->set_ApplyByGravity(TRUE);
+    if (object->m_pPhysicsShell && object->m_pPhysicsShell->isActive())
+    {
+        // включить гравитацию
+        object->m_pPhysicsShell->set_ApplyByGravity(TRUE);
 
-    Fvector transference;
-    transference.sub(target, object->Position());
-    TransferenceToThrowVel(transference, time, object->EffectiveGravity());
-    object->m_pPhysicsShell->set_LinearVel(transference);
+        Fvector transference;
+        transference.sub(target, object->Position());
+        TransferenceToThrowVel(transference, time, object->EffectiveGravity());
+        object->m_pPhysicsShell->set_LinearVel(transference);
+    }
+    else if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
+    {
+        Fvector dir;
+        dir.sub(target, object->Position());
+        dir.normalize_safe();
+        if (OnServer())
+            object->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(dir, 150.0f);
+    }
 
     if (sound_throw._handle())
         sound_throw.play_at_pos(object, object->Position());
@@ -220,22 +261,33 @@ void CTelekineticObject::fire(const Fvector& target, float power)
 {
     switch_state(TS_Fire);
 
-    if (!object || !object->m_pPhysicsShell || !object->m_pPhysicsShell->isActive())
+    if (!object)
         return;
 
     Fvector dir;
     dir.sub(target, object->Position());
-    dir.normalize();
+    dir.normalize_safe();
 
-    object->m_pPhysicsShell->set_ApplyByGravity(TRUE);
-
-    if (OnServer())
+    if (object->m_pPhysicsShell && object->m_pPhysicsShell->isActive())
     {
-        float total_impulse = power * 15.0f * object->m_pPhysicsShell->getMass();
-        float per_element_impulse = total_impulse / object->m_pPhysicsShell->Elements().size();
+        object->m_pPhysicsShell->set_ApplyByGravity(TRUE);
 
-        for (u32 i = 0; i < object->m_pPhysicsShell->get_ElementsNumber(); i++)
-            object->m_pPhysicsShell->get_ElementByStoreOrder(u16(i))->applyImpulse(dir, per_element_impulse);
+        if (OnServer())
+        {
+            float total_impulse = power * 15.0f * object->m_pPhysicsShell->getMass();
+            float per_element_impulse = total_impulse / object->m_pPhysicsShell->Elements().size();
+
+            for (u32 i = 0; i < object->m_pPhysicsShell->get_ElementsNumber(); i++)
+                object->m_pPhysicsShell->get_ElementByStoreOrder(u16(i))->applyImpulse(dir, per_element_impulse);
+        }
+    }
+    else if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
+    {
+        if (OnServer())
+        {
+            float total_impulse = power * 180.0f;
+            object->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(dir, total_impulse);
+        }
     }
 }
 
@@ -256,25 +308,37 @@ bool CTelekineticObject::check_raise_time_out()
 
 void CTelekineticObject::enable()
 {
-    if (object->m_pPhysicsShell)
+    if (object && object->m_pPhysicsShell)
         object->m_pPhysicsShell->Enable();
 }
 
 void CTelekineticObject::rotate()
 {
-    if (!object || !object->m_pPhysicsShell || !object->m_pPhysicsShell->isActive())
+    if (!object)
         return;
 
     // вычислить направление
     Fvector dir;
     dir.random_dir();
-    dir.normalize();
+    dir.normalize_safe();
 
-    if (OnServer())
-        object->m_pPhysicsShell->applyImpulse(dir, 2.5f * object->m_pPhysicsShell->getMass());
+    if (object->m_pPhysicsShell && object->m_pPhysicsShell->isActive())
+    {
+        if (OnServer())
+            object->m_pPhysicsShell->applyImpulse(dir, 2.5f * object->m_pPhysicsShell->getMass());
+    }
+    else if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
+    {
+        if (OnServer())
+            object->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(dir, 35.0f);
+    }
 }
 
-bool CTelekineticObject::can_activate(CPhysicsShellHolder* obj) { return (obj && obj->m_pPhysicsShell); }
+bool CTelekineticObject::can_activate(CPhysicsShellHolder* obj)
+{
+    return (obj && (obj->m_pPhysicsShell || (obj->character_physics_support() && obj->character_physics_support()->active_ragdoll())));
+}
+
 void CTelekineticObject::update_hold_sound()
 {
     if (!sound_hold._handle())

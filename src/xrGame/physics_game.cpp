@@ -157,7 +157,6 @@ static void play_object(IPhysicsShellHolder* holder, SGameMtlPair* mtl_pair, con
         return;
 
     CPHSoundPlayer* sp = phShell->ph_sound_player();
-    Msg("[Bush-Debug] play_object: holder=%p, sp=%p", holder, sp);
     if (sp)
         sp->Play(mtl_pair, contact_pos);
 }
@@ -232,7 +231,7 @@ void TContactShotMark(
         if (speed > 0.05f)
             vel_cret = speed * _sqrt(mass);
         else
-            vel_cret = 15.0f;
+            vel_cret = 35.0f;
     }
 
     bool b_invert_normal = !bo1;
@@ -245,42 +244,34 @@ void TContactShotMark(
     u16 dyn_mat_id = GMLib.GetMaterialIdx(dyn_mat->m_Name.c_str());
     
     SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(static_mat_id, dyn_mat_id);
-    if (static_mat->Flags.test(SGameMtl::flPassable))
-    {
-        Msg("[Bush-Debug] TContactShotMark: static='%s' (id=%u), dyn='%s' (id=%u), pair=%p, dist=%.2f",
-            static_mat->m_Name.c_str(), static_mat_id, dyn_mat->m_Name.c_str(), dyn_mat_id, mtl_pair, square_cam_dist);
-    }
     if (mtl_pair)
     {
-
-            if (square_cam_dist < SQUARE_SOUND_EFFECT_DIST)
+        if (square_cam_dist < SQUARE_SOUND_EFFECT_DIST)
+        {
+            if (!static_mat->Flags.test(SGameMtl::flPassable))
             {
-                if (!static_mat->Flags.test(SGameMtl::flPassable))
+                if (vel_cret > Pars::vel_cret_sound)
                 {
-                    if (vel_cret > Pars::vel_cret_sound)
-                    {
-                        if (!mtl_pair->CollideSounds.empty())
-                        {
-                            float volume = collide_volume_min +
-                                vel_cret * (collide_volume_max - collide_volume_min) /
-                                    (_sqrt(mass_limit) * default_l_limit - Pars::vel_cret_sound);
-                            ref_sound& randSound =
-                                mtl_pair->CollideSounds[Random.randI(mtl_pair->CollideSounds.size())];
-                            Fvector pos = contact_pos;
-                            randSound.play_no_feedback(0, 0, 0, &pos, &volume);
-                        }
-                    }
-                }
-                else
-                {
-                    Msg("[Bush-Debug] TContactShotMark passable: static_mat='%s', dyn_mat='%s', sounds_cnt=%u, dyn_holder=%p, cam_dist=%.2f",
-                        static_mat->m_Name.c_str(), dyn_mat->m_Name.c_str(), (u32)mtl_pair->CollideSounds.size(), dyn_holder, square_cam_dist);
                     if (!mtl_pair->CollideSounds.empty())
                     {
-                        play_object(dyn_holder, mtl_pair, contact_pos);
+                        float volume = collide_volume_min +
+                            vel_cret * (collide_volume_max - collide_volume_min) /
+                                (_sqrt(mass_limit) * default_l_limit - Pars::vel_cret_sound);
+                        ref_sound& randSound =
+                            mtl_pair->CollideSounds[Random.randI(mtl_pair->CollideSounds.size())];
+                        Fvector pos = contact_pos;
+                        randSound.play_no_feedback(0, 0, 0, &pos, &volume);
                     }
                 }
             }
+            else
+            {
+                if (!mtl_pair->CollideSounds.empty())
+                {
+                    play_object(dyn_holder, mtl_pair, contact_pos);
+                }
+            }
+        }
         if (square_cam_dist < SQUARE_PARTICLE_EFFECT_DIST && !mtl_pair->CollideParticles.empty())
         {
             LPCSTR ps_name = mtl_pair->CollideParticles[::Random.randI(0, mtl_pair->CollideParticles.size())].c_str();

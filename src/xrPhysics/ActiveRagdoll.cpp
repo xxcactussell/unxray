@@ -428,14 +428,14 @@ void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float 
     
     Fvector impulse_vec = dir;
     // Scale X-Ray impulse realistically into Jolt N*s (realistic fall without flying away)
-    float clamped_impulse = std::clamp(impulse * 0.4f, 4.0f, 60.0f);
+    float clamped_impulse = std::clamp(impulse * 0.22f, 2.0f, 35.0f);
     impulse_vec.mul(clamped_impulse);
     GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, impulse_vec, hit_pos);
 
     // Also impart moderate momentum to root so the character momentum isn't stationary
     if (part_idx != 0) {
         Fvector root_impulse = dir;
-        root_impulse.mul(clamped_impulse * 0.35f);
+        root_impulse.mul(clamped_impulse * 0.25f);
         GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, root_impulse);
     }
 }
@@ -460,24 +460,47 @@ void CActiveRagdollController::ApplyHit(u16 bone_id, const Fvector& dir, float i
     
     // Calculate physical impulse vector
     Fvector impulse_vec = dir;
-    float factor_scale = (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) ? 0.6f : 0.25f;
-    float max_limit = (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) ? 140.0f : 25.0f;
+    float factor_scale = (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) ? 0.65f : 0.16f;
+    float max_limit = (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) ? 3000.0f : 18.0f;
     float clamped_impulse = std::clamp(impulse * factor_scale, 2.0f, max_limit);
     impulse_vec.mul(clamped_impulse);
     
-    // Apply impulse to Jolt physics body at hit position
-    GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, impulse_vec, hit_pos);
+    if (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) {
+        u32 part_count = (u32)m_simulated_matrices.size();
+        if (part_count > 0) {
+            // Apply gentle upward lift factor to escape ground friction
+            Fvector blast_dir = dir;
+            if (blast_dir.y < 0.15f) {
+                blast_dir.y += 0.20f;
+                blast_dir.normalize_safe();
+            }
 
-    // On death / dead ragdoll, transfer proportional momentum to root (Pelvis) so center-of-mass realistically flies back
-    if ((m_state == ERagdollState::Dead || m_state == ERagdollState::Dying) && part_idx != 0) {
-        Fvector pelvis_impulse = dir;
-        pelvis_impulse.mul(clamped_impulse * 0.45f);
-        GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, pelvis_impulse);
+            // Pelvis (root) gets moderate momentum
+            Fvector root_imp = blast_dir;
+            root_imp.mul(clamped_impulse * 0.55f);
+            GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, root_imp);
+
+            // Each limb/body part gets proportional impulse
+            float per_part_mag = clamped_impulse * 0.25f;
+            Fvector part_imp = blast_dir;
+            part_imp.mul(per_part_mag);
+            for (u32 i = 0; i < part_count; ++i) {
+                GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, i, part_imp);
+            }
+
+            if (part_idx != 0 && part_idx < part_count) {
+                Fvector local_hit = dir;
+                local_hit.mul(clamped_impulse * 0.30f);
+                GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, local_hit, hit_pos);
+            }
+        }
+    } else {
+        GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, impulse_vec, hit_pos);
     }
     
     // Apply hit flinch to motors for living character
     if (m_state == ERagdollState::Active && part_idx < m_part_reactions.size()) {
-        float flinch = std::clamp(0.35f + impulse / 80.0f, 0.35f, 1.0f);
+        float flinch = std::clamp(0.25f + impulse / 120.0f, 0.25f, 0.85f);
         
         Fvector local_dir = dir;
         if (m_holder) {
@@ -512,9 +535,24 @@ void CActiveRagdollController::ApplyHit(u16 bone_id, const Fvector& dir, float i
 
 void CActiveRagdollController::ApplyLinearImpulse(const Fvector& dir, float impulse) {
     if (m_ragdoll_handle == INVALID_RAGDOLL_HANDLE) return;
-    Fvector imp = dir;
-    imp.mul(impulse);
-    GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, imp);
+    u32 part_count = (u32)m_simulated_matrices.size();
+    if (part_count == 0) return;
+
+    Fvector blast_dir = dir;
+    if (blast_dir.y < 0.15f) {
+        blast_dir.y += 0.20f;
+        blast_dir.normalize_safe();
+    }
+
+    Fvector root_imp = blast_dir;
+    root_imp.mul(impulse * 0.55f);
+    GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, root_imp);
+
+    Fvector part_imp = blast_dir;
+    part_imp.mul(impulse * 0.25f);
+    for (u32 i = 0; i < part_count; ++i) {
+        GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, i, part_imp);
+    }
 }
 
 void CActiveRagdollController::ApplyRadialImpulse(const Fvector& center, float radius, float max_impulse) {

@@ -74,7 +74,7 @@ bool CBaseGraviZone::IdleState()
             {
                 CPhysicsShellHolder* GO = smart_cast<CPhysicsShellHolder*>((*it).object);
 
-                if (GO && GO->PPhysicsShell() && Telekinesis().is_active_object(GO))
+                if (GO && (GO->PPhysicsShell() || (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())) && Telekinesis().is_active_object(GO))
                 {
                     Telekinesis().deactivate(GO);
                     StopTeleParticles(GO);
@@ -89,7 +89,7 @@ bool CBaseGraviZone::IdleState()
             {
                 CPhysicsShellHolder* GO = smart_cast<CPhysicsShellHolder*>((*it).object);
 
-                if (GO && GO->PPhysicsShell() && !Telekinesis().is_active_object(GO))
+                if (GO && (GO->PPhysicsShell() || (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())) && !Telekinesis().is_active_object(GO))
                 {
                     Telekinesis().activate(GO, 0.1f, m_fTeleHeight, m_dwTimeToTele);
                     PlayTeleParticles(GO);
@@ -186,7 +186,9 @@ void CBaseGraviZone::AffectPullDead(CPhysicsShellHolder* GO, const Fvector& thro
     }
     else if (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())
     {
-        GO->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(throw_in_dir, dist * m_fThrowInImpulse * GO->GetMass() / 100.f);
+        float mass = GO->GetMass() > 1.0f ? GO->GetMass() : 75.0f;
+        float pull_imp = std::clamp(dist * m_fThrowInImpulse * mass / 100.f, 25.0f, 1200.0f);
+        GO->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(throw_in_dir, pull_imp);
     }
 }
 

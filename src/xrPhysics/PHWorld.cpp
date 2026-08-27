@@ -21,6 +21,8 @@
 #include "xrEngine/GameFont.h"
 #include "xrEngine/PerformanceAlert.hpp"
 #include "IPhysicsShellHolder.h"
+#include "Include/xrRender/Kinematics.h"
+#include "xrCore/Animation/Bone.hpp"
 #include "PhysicsShell.h"
 #include "PHShell.h"
 #include "PHElement.h"
@@ -64,13 +66,15 @@ static u16 GetDefaultCreatureMaterial()
     static u16 s_creature_mtl = GAMEMTL_NONE_IDX;
     if (s_creature_mtl == GAMEMTL_NONE_IDX)
     {
-        s_creature_mtl = GMLib.GetMaterialIdx("creatures\\human");
+        s_creature_mtl = GMLib.GetMaterialIdx("objects\\dead_body");
         if (s_creature_mtl == GAMEMTL_NONE_IDX)
-            s_creature_mtl = GMLib.GetMaterialIdx("creatures\\actor");
+            s_creature_mtl = GMLib.GetMaterialIdx("objects\\monster_body");
         if (s_creature_mtl == GAMEMTL_NONE_IDX)
-            s_creature_mtl = GMLib.GetMaterialIdx("creature");
+            s_creature_mtl = GMLib.GetMaterialIdx("objects\\clothes");
         if (s_creature_mtl == GAMEMTL_NONE_IDX)
-            s_creature_mtl = GMLib.GetMaterialIdx("materials/skel1");
+            s_creature_mtl = GMLib.GetMaterialIdx("creatures\\human");
+        if (s_creature_mtl == GAMEMTL_NONE_IDX)
+            s_creature_mtl = GMLib.GetMaterialIdx("materials\\cloth");
         if (s_creature_mtl == GAMEMTL_NONE_IDX)
             s_creature_mtl = GMLib.GetMaterialIdx("default");
     }
@@ -105,8 +109,7 @@ static void OnJoltRBContact(
         else if (layer_1 == 2) // 2 = Layers::RAGDOLL (Stalkers / Monsters)
         {
             holder_1 = reinterpret_cast<IPhysicsShellHolder*>(user_data_1);
-            if (mtl_1 == GAMEMTL_NONE_IDX)
-                mtl_1 = GetDefaultCreatureMaterial();
+            mtl_1 = GetDefaultCreatureMaterial();
         }
     }
 
@@ -125,8 +128,7 @@ static void OnJoltRBContact(
         else if (layer_2 == 2) // 2 = Layers::RAGDOLL (Stalkers / Monsters)
         {
             holder_2 = reinterpret_cast<IPhysicsShellHolder*>(user_data_2);
-            if (mtl_2 == GAMEMTL_NONE_IDX)
-                mtl_2 = GetDefaultCreatureMaterial();
+            mtl_2 = GetDefaultCreatureMaterial();
         }
     }
 

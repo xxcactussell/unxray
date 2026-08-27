@@ -871,10 +871,6 @@ void CPHSimpleCharacter::JoltCharacterContactCallback(void* char_user_data,
             }
             SGameMtl* self_game_mat = (self_mat != GAMEMTL_NONE_IDX) ? GMLib.GetMaterialByIdx(self_mat) : nullptr;
 
-            Msg("[Bush-Debug] JoltCharacterContactCallback: tri_mat='%s', self_mat='%s', pos=(%.2f, %.2f, %.2f), cb=%p",
-                tri_mat->m_Name.c_str(), self_game_mat ? self_game_mat->m_Name.c_str() : "null",
-                contact_pos.x, contact_pos.y, contact_pos.z, self->m_static_contact_callback);
-
             if (self->m_static_contact_callback && self_game_mat)
             {
                 bool do_collide = false;

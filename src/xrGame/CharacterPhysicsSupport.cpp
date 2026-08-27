@@ -779,7 +779,7 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
     m_hit_valide_time = Device.dwTimeGlobal + hit_valide_time;
     if (esRemoved == m_eState)
         return;
-    if (m_flags.test(fl_block_hit))
+    if (m_flags.test(fl_block_hit) && !m_active_ragdoll)
     {
         VERIFY2(!m_EntityAlife.g_Alive(),
             make_string("entity [%s][%d] is dead", m_EntityAlife.Name(), m_EntityAlife.ID()).c_str());
@@ -807,9 +807,10 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
 
     if (m_active_ragdoll)
     {
-        Fvector hit_pos = H.bone_space_position();
+        Fvector hit_pos;
         IKinematics* k = smart_cast<IKinematics*>(m_EntityAlife.Visual());
-        if (k && H.bone() < k->LL_BoneCount())
+        if (k && H.bone() < k->LL_BoneCount() && H.bone() != BI_NONE &&
+            (H.type() == ALife::eHitTypeFireWound || H.type() == ALife::eHitTypeWound || H.type() == ALife::eHitTypeWound_2))
         {
             const CBoneInstance& bi = k->LL_GetBoneInstance(H.bone());
             Fmatrix bone_world;

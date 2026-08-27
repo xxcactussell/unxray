@@ -1815,7 +1815,7 @@ void JoltPhysicsCore::MyContactListener::OnContactAdded(
         JPH::Vec3 v2 = inBody2.IsDynamic() ? inBody2.GetLinearVelocity() : JPH::Vec3::sZero();
         float rel_vel = (v1 - v2).Length();
 
-        if (rel_vel > 0.4f)
+        if (rel_vel > 0.25f)
         {
             u16 mtl_1 = GAMEMTL_NONE_IDX;
             u16 mtl_2 = GAMEMTL_NONE_IDX;
@@ -1935,8 +1935,6 @@ bool JoltPhysicsCore::MyCharacterContactListener::OnContactValidate(
                 SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
                 if (mtl && (mtl->Flags.test(SGameMtl::flPassable) || IsPassableMaterial(mtl)))
                 {
-                    Msg("[Bush-Debug] OnContactValidate: mtl='%s' (passable=%d, obstacle=%d), calling ProcessContact", 
-                        mtl->m_Name.c_str(), mtl->Flags.test(SGameMtl::flPassable), mtl->Flags.test(SGameMtl::flActorObstacle));
                     ProcessContact(inCharacter, inContact); // Enqueue sound/particle effect before skipping collision
                     return false; // Skip collision so character glides freely through foliage
                 }
@@ -2323,9 +2321,6 @@ public:
             Fvector contact_pos = { (float)hit_pos.GetX(), (float)hit_pos.GetY(), (float)hit_pos.GetZ() };
             Fvector contact_norm = { hit_norm.GetX(), hit_norm.GetY(), hit_norm.GetZ() };
             u32 tri_idx = UnpackTriangleIndex(GetTriangleUserDataForSubShape(shape, inResult.mSubShapeID2));
-
-            Msg("[Bush-Debug] CollideShape::AddHit: mtl='%s', hit_pos=(%.2f, %.2f, %.2f)", 
-                mtl ? mtl->m_Name.c_str() : "none", contact_pos.x, contact_pos.y, contact_pos.z);
 
             int t_idx = GetJoltThreadIndex();
             g_deferred_contacts[t_idx].push_back({
@@ -3024,6 +3019,7 @@ void JoltPhysicsCore::ApplyRagdollImpulse(RagdollHandle handle, u32 part_index, 
         JPH::BodyID body_id = it->second->GetBodyID(part_index);
         if (!body_id.IsInvalid() &&
             m_physics_system->GetBodyInterface().GetMotionType(body_id) == JPH::EMotionType::Dynamic) {
+            m_physics_system->GetBodyInterface().ActivateBody(body_id);
             m_physics_system->GetBodyInterface().AddImpulse(
                 body_id, 
                 JPH::Vec3(impulse.x, impulse.y, impulse.z), 
@@ -3039,6 +3035,7 @@ void JoltPhysicsCore::ApplyRagdollLinearImpulse(RagdollHandle handle, u32 part_i
         JPH::BodyID body_id = it->second->GetBodyID(part_index);
         if (!body_id.IsInvalid() &&
             m_physics_system->GetBodyInterface().GetMotionType(body_id) == JPH::EMotionType::Dynamic) {
+            m_physics_system->GetBodyInterface().ActivateBody(body_id);
             m_physics_system->GetBodyInterface().AddImpulse(
                 body_id, 
                 JPH::Vec3(impulse.x, impulse.y, impulse.z)

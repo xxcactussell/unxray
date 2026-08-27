@@ -57,6 +57,7 @@ public:
 #endif
     void SetMaterial(u16 m);
     void SetMaterial(LPCSTR m) { SetMaterial(GMLib.GetMaterialIdx(m)); } 
+    IC u16 Material() const { return ul_material; } 
     IC CPhysicsGeom* Geom(u16 num)
     {
         R_ASSERT2(num < m_geoms.size(), "out of range");

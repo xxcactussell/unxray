@@ -68,11 +68,24 @@ struct SDeferredBodyActivation {
     bool activated;
 };
 
+struct SDeferredRBContact {
+    void* user_data_1;
+    void* user_data_2;
+    u16 layer_1;
+    u16 layer_2;
+    Fvector contact_pos;
+    Fvector contact_norm;
+    float relative_vel;
+    u16 mtl_idx_1;
+    u16 mtl_idx_2;
+};
+
 static const int JOLT_MAX_THREADS = 64;
 static std::atomic<int> g_jolt_thread_counter{0};
 static thread_local int g_jolt_thread_idx = -1;
 static std::vector<SDeferredCharacterContact> g_deferred_contacts[JOLT_MAX_THREADS];
 static std::vector<SDeferredBodyActivation> g_deferred_activations[JOLT_MAX_THREADS];
+static std::vector<SDeferredRBContact> g_deferred_rb_contacts[JOLT_MAX_THREADS];
 
 static int GetJoltThreadIndex() {
     if (g_jolt_thread_idx == -1) {
@@ -92,6 +105,20 @@ static void FlushDeferredContacts() {
                 ev.callback(ev.char_user_data, ev.contact_pos, ev.contact_norm, ev.contact_vel, 
                             ev.tri_user_data, ev.other_body_handle, ev.other_body_user_data, ev.is_sensor);
             }
+        }
+        buffer.clear();
+    }
+}
+
+static void FlushDeferredRBContacts(IPhysicsCore::RigidBodyContactCallbackFun callback) {
+    if (!callback) return;
+    int max_threads = g_jolt_thread_counter.load();
+    if (max_threads > JOLT_MAX_THREADS) max_threads = JOLT_MAX_THREADS;
+    
+    for (int i = 0; i < max_threads; ++i) {
+        auto& buffer = g_deferred_rb_contacts[i];
+        for (const auto& ev : buffer) {
+            callback(ev.user_data_1, ev.user_data_2, ev.layer_1, ev.layer_2, ev.contact_pos, ev.contact_norm, ev.relative_vel, ev.mtl_idx_1, ev.mtl_idx_2);
         }
         buffer.clear();
     }
@@ -234,7 +261,13 @@ void JoltPhysicsCore::Step(float delta_time)
     m_physics_system->Update(delta_time, collision_steps, m_temp_allocator, m_job_system);
     
     FlushDeferredContacts();
+    FlushDeferredRBContacts(m_rb_contact_callback);
     FlushDeferredActivations(m_body_activation_callback);
+}
+
+void JoltPhysicsCore::SetRigidBodyContactCallback(RigidBodyContactCallbackFun callback)
+{
+    m_rb_contact_callback = callback;
 }
 
 void JoltPhysicsCore::Destroy() 
@@ -1766,13 +1799,51 @@ void JoltPhysicsCore::MyContactListener::OnContactAdded(
                 const auto& mtl = GetMaterialPhysicsProperties(mtl_idx);
                 ioSettings.mCombinedFriction = std::sqrt(dynamic_body->GetFriction() * mtl.friction);
                 ioSettings.mCombinedRestitution = std::max(dynamic_body->GetRestitution(), mtl.restitution);
-                return;
             }
         }
     }
+    else
+    {
+        ioSettings.mCombinedFriction = std::sqrt(inBody1.GetFriction() * inBody2.GetFriction());
+        ioSettings.mCombinedRestitution = std::max(inBody1.GetRestitution(), inBody2.GetRestitution());
+    }
 
-    ioSettings.mCombinedFriction = std::sqrt(inBody1.GetFriction() * inBody2.GetFriction());
-    ioSettings.mCombinedRestitution = std::max(inBody1.GetRestitution(), inBody2.GetRestitution());
+    // Sound & Particle Impact detection for dynamic bodies / ragdolls
+    if (m_core->m_rb_contact_callback && (inBody1.IsDynamic() || inBody2.IsDynamic()))
+    {
+        JPH::Vec3 v1 = inBody1.IsDynamic() ? inBody1.GetLinearVelocity() : JPH::Vec3::sZero();
+        JPH::Vec3 v2 = inBody2.IsDynamic() ? inBody2.GetLinearVelocity() : JPH::Vec3::sZero();
+        float rel_vel = (v1 - v2).Length();
+
+        if (rel_vel > 0.4f)
+        {
+            u16 mtl_1 = GAMEMTL_NONE_IDX;
+            u16 mtl_2 = GAMEMTL_NONE_IDX;
+
+            if (inBody1.IsStatic() && inBody1.GetShape()) {
+                mtl_1 = GetMaterialIndexForSubShape(inBody1.GetShape(), inManifold.mSubShapeID1);
+            }
+            if (inBody2.IsStatic() && inBody2.GetShape()) {
+                mtl_2 = GetMaterialIndexForSubShape(inBody2.GetShape(), inManifold.mSubShapeID2);
+            }
+
+            JPH::RVec3 hit_pos = inManifold.mBaseOffset;
+            JPH::Vec3 hit_norm = inManifold.mWorldSpaceNormal;
+
+            Fvector contact_pos = { (float)hit_pos.GetX(), (float)hit_pos.GetY(), (float)hit_pos.GetZ() };
+            Fvector contact_norm = { hit_norm.GetX(), hit_norm.GetY(), hit_norm.GetZ() };
+
+            int t_idx = GetJoltThreadIndex();
+            g_deferred_rb_contacts[t_idx].push_back({
+                reinterpret_cast<void*>(inBody1.GetUserData()),
+                reinterpret_cast<void*>(inBody2.GetUserData()),
+                static_cast<u16>(inBody1.GetObjectLayer()),
+                static_cast<u16>(inBody2.GetObjectLayer()),
+                contact_pos, contact_norm, rel_vel,
+                mtl_1, mtl_2
+            });
+        }
+    }
 }
 
 void JoltPhysicsCore::MyContactListener::OnContactPersisted(
@@ -1781,8 +1852,29 @@ void JoltPhysicsCore::MyContactListener::OnContactPersisted(
     const JPH::ContactManifold& inManifold, 
     JPH::ContactSettings& ioSettings)
 {
-    // В Jolt коэффициенты трения и упругости сохраняются на протяжении жизни контакта после OnContactAdded.
-    // Оставление пустым устраняет пересчет квадратных корней и поиск по библиотеке материалов для десятков тысяч контактов каждый шаг.
+    const JPH::Body* static_body = inBody1.IsStatic() ? &inBody1 : (inBody2.IsStatic() ? &inBody2 : nullptr);
+    const JPH::Body* dynamic_body = inBody1.IsDynamic() ? &inBody1 : (inBody2.IsDynamic() ? &inBody2 : nullptr);
+
+    if (static_body && dynamic_body)
+    {
+        JPH::SubShapeID sub_shape = inBody1.IsStatic() ? inManifold.mSubShapeID1 : inManifold.mSubShapeID2;
+        const JPH::Shape* shape = static_body->GetShape();
+        
+        if (shape)
+        {
+            u16 mtl_idx = GetMaterialIndexForSubShape(shape, sub_shape);
+            if (mtl_idx != GAMEMTL_NONE_IDX)
+            {
+                const auto& mtl = GetMaterialPhysicsProperties(mtl_idx);
+                ioSettings.mCombinedFriction = std::sqrt(dynamic_body->GetFriction() * mtl.friction);
+                ioSettings.mCombinedRestitution = std::max(dynamic_body->GetRestitution(), mtl.restitution);
+                return;
+            }
+        }
+    }
+
+    ioSettings.mCombinedFriction = std::sqrt(inBody1.GetFriction() * inBody2.GetFriction());
+    ioSettings.mCombinedRestitution = std::max(inBody1.GetRestitution(), inBody2.GetRestitution());
 }
 
 void JoltPhysicsCore::MyBodyActivationListener::OnBodyActivated(const JPH::BodyID& inBodyID, JPH::uint64 inBodyUserData)
@@ -1836,15 +1928,17 @@ bool JoltPhysicsCore::MyCharacterContactListener::OnContactValidate(
         if (shape)
         {
             u32 tri_user_data = GetTriangleUserDataForSubShape(shape, inContact.mSubShapeIDB);
-            u32 tri_idx = UnpackTriangleIndex(tri_user_data);
             u16 mtl_idx = UnpackMaterialIndex(tri_user_data);
 
-            if (mtl_idx != GAMEMTL_NONE_IDX)
+            if (mtl_idx != GAMEMTL_NONE_IDX && mtl_idx < GMLib.CountMaterial())
             {
-                SGameMtl* mtl = (mtl_idx < GMLib.CountMaterial()) ? GMLib.GetMaterialByIdx(mtl_idx) : nullptr;
-                if (mtl && IsPassableMaterial(mtl))
+                SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+                if (mtl && (mtl->Flags.test(SGameMtl::flPassable) || IsPassableMaterial(mtl)))
                 {
-                    return false;
+                    Msg("[Bush-Debug] OnContactValidate: mtl='%s' (passable=%d, obstacle=%d), calling ProcessContact", 
+                        mtl->m_Name.c_str(), mtl->Flags.test(SGameMtl::flPassable), mtl->Flags.test(SGameMtl::flActorObstacle));
+                    ProcessContact(inCharacter, inContact); // Enqueue sound/particle effect before skipping collision
+                    return false; // Skip collision so character glides freely through foliage
                 }
             }
         }
@@ -1864,6 +1958,21 @@ void JoltPhysicsCore::MyCharacterContactListener::OnContactAdded(
         {
             JPH::Body& body = lock.GetBody();
             
+            if (body.IsStatic() && body.GetShape())
+            {
+                u32 tri_user_data = GetTriangleUserDataForSubShape(body.GetShape(), inContact.mSubShapeIDB);
+                u16 mtl_idx = UnpackMaterialIndex(tri_user_data);
+                if (mtl_idx != GAMEMTL_NONE_IDX && mtl_idx < GMLib.CountMaterial())
+                {
+                    SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+                    if (mtl && IsPassableMaterial(mtl))
+                    {
+                        ioSettings.mCanPushCharacter = false;
+                        ioSettings.mCanReceiveImpulses = false;
+                    }
+                }
+            }
+
             if (body.IsDynamic())
             {
                 JPH::Vec3 char_vel = inCharacter->GetLinearVelocity();
@@ -1886,6 +1995,28 @@ void JoltPhysicsCore::MyCharacterContactListener::OnContactPersisted(
     const JPH::CharacterContact& inContact, 
     JPH::CharacterContactSettings& ioSettings) 
 {
+    if (!inContact.mBodyB.IsInvalid() && m_core->m_physics_system) 
+    {
+        JPH::BodyLockRead lock(m_core->m_physics_system->GetBodyLockInterface(), inContact.mBodyB);
+        if (lock.Succeeded()) 
+        {
+            const JPH::Body& body = lock.GetBody();
+            if (body.IsStatic() && body.GetShape())
+            {
+                u32 tri_user_data = GetTriangleUserDataForSubShape(body.GetShape(), inContact.mSubShapeIDB);
+                u16 mtl_idx = UnpackMaterialIndex(tri_user_data);
+                if (mtl_idx != GAMEMTL_NONE_IDX && mtl_idx < GMLib.CountMaterial())
+                {
+                    SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
+                    if (mtl && IsPassableMaterial(mtl))
+                    {
+                        ioSettings.mCanPushCharacter = false;
+                        ioSettings.mCanReceiveImpulses = false;
+                    }
+                }
+            }
+        }
+    }
     ProcessContact(inCharacter, inContact);
 }
 
@@ -2185,13 +2316,16 @@ public:
 
         SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
         
-        if (IsPassableMaterial(mtl)) {
+        if (IsPassableMaterial(mtl) || (mtl && mtl->Flags.test(SGameMtl::flPassable))) {
             JPH::RVec3 hit_pos = inResult.mContactPointOn2;
             JPH::Vec3 hit_norm = -inResult.mPenetrationAxis.Normalized();
 
             Fvector contact_pos = { (float)hit_pos.GetX(), (float)hit_pos.GetY(), (float)hit_pos.GetZ() };
             Fvector contact_norm = { hit_norm.GetX(), hit_norm.GetY(), hit_norm.GetZ() };
             u32 tri_idx = UnpackTriangleIndex(GetTriangleUserDataForSubShape(shape, inResult.mSubShapeID2));
+
+            Msg("[Bush-Debug] CollideShape::AddHit: mtl='%s', hit_pos=(%.2f, %.2f, %.2f)", 
+                mtl ? mtl->m_Name.c_str() : "none", contact_pos.x, contact_pos.y, contact_pos.z);
 
             int t_idx = GetJoltThreadIndex();
             g_deferred_contacts[t_idx].push_back({
@@ -2283,7 +2417,7 @@ void JoltPhysicsCore::UpdateCharacterVirtual(CharacterVirtualHandle handle, floa
                 JPH::Vec3::sReplicate(1.0f),
                 character->GetCenterOfMassTransform(),
                 collide_settings,
-                character->GetPosition(),
+                JPH::RVec3::sZero(),
                 passable_collector,
                 m_physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING),
                 m_physics_system->GetDefaultLayerFilter(Layers::MOVING),

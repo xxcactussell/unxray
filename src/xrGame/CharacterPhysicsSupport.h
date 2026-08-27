@@ -106,6 +106,7 @@ public:
     IC const CPHMovementControl* movement() const { return m_PhysicMovementControl; }
     IC CPHSoundPlayer* ph_sound_player() { return &m_ph_sound_player; }
     IC CIKLimbsController* ik_controller() { return m_ik_controller; }
+    IC CActiveRagdollController* active_ragdoll() { return m_active_ragdoll; }
     bool is_interactive_motion();
     bool can_drop_active_weapon();
     void SetRemoved();

@@ -854,9 +854,12 @@ bool CCustomMonster::feel_touch_on_contact(IGameObject* O)
     if (!custom_zone)
         return (true);
 
+    if (!g_Alive())
+        return (true);
+
     Fsphere sphere;
     sphere.P = Position();
-    sphere.R = EPS_L;
+    sphere.R = Radius();
     if (custom_zone->inside(sphere))
         return (true);
 

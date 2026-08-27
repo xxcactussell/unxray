@@ -99,7 +99,9 @@ public:
     virtual void SetHitType(ALife::EHitType type) = 0;
     virtual bool TouchRestrictor(ERestrictionType rttype) = 0;
     virtual void SetElevator(IClimableObject* climable) {};
-    virtual void SetMaterial(u16 material) = 0;
+    u16 m_material{ GAMEMTL_NONE_IDX };
+    virtual void SetMaterial(u16 material) { m_material = material; }
+    virtual u16 GetMaterial() const { return m_material; }
     virtual void SetMaximumVelocity(float /*vel*/) {} 
     virtual float GetMaximumVelocity() { return 0.f; }
     virtual void SetJupmUpVelocity(float /*velocity*/) {} 

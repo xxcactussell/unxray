@@ -121,6 +121,7 @@ public:
     void OnDeath();
     void KnockDown(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos);
     void ApplyHit(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos);
+    void ApplyLinearImpulse(const Fvector& dir, float impulse);
     void ApplyRadialImpulse(const Fvector& center, float radius, float max_impulse);
     void SetMotorDefaults(float stiffness, float damping);
     

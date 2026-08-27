@@ -69,6 +69,7 @@ private:
 
     MyBodyActivationListener m_body_activation_listener{this};
     BodyActivationCallbackFun m_body_activation_callback = nullptr;
+    RigidBodyContactCallbackFun m_rb_contact_callback = nullptr;
 
     class MyCharacterContactListener : public JPH::CharacterContactListener {
         JoltPhysicsCore* m_core;
@@ -267,6 +268,7 @@ public:
     void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) override;
     void SetCharacterVirtualStickToFloor(CharacterVirtualHandle handle, bool stick_to_floor) override;
     void SetCharacterVirtualContactCallback(CharacterVirtualHandle handle, CharacterContactCallbackFun callback, void* char_user_data) override;
+    void SetRigidBodyContactCallback(RigidBodyContactCallbackFun callback) override;
     bool CheckShapePlacement(PhysicsShapeHandle shape, const Fvector& pos, const Fquaternion& rot, bool check_characters = true, void* ignore_user_data = nullptr) const override;
     bool FindFreeShapePlacement(PhysicsShapeHandle shape, const Fvector& start_pos, const Fquaternion& rot, Fvector& out_pos, float search_radius = 2.5f, int samples = 16, bool check_characters = true, void* ignore_user_data = nullptr) const override;
 

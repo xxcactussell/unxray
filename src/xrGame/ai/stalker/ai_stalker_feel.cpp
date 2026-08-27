@@ -14,6 +14,7 @@
 #include "sight_manager.h"
 #include "stalker_movement_manager_smart_cover.h"
 #include "stalker_animation_manager.h"
+#include "CustomZone.h"
 
 #ifdef DEBUG
 #include "ai_debug.h"
@@ -73,6 +74,9 @@ bool CAI_Stalker::feel_touch_contact(IGameObject* O)
 bool CAI_Stalker::feel_touch_on_contact(IGameObject* O)
 {
     VERIFY(O != this);
+
+    if (smart_cast<CCustomZone*>(O) || !g_Alive())
+        return (true);
 
     if ((O->GetSpatialData().type | STYPE_VISIBLEFORAI) != O->GetSpatialData().type)
         return (false);

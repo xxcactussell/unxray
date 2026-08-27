@@ -156,7 +156,9 @@ static void play_object(IPhysicsShellHolder* holder, SGameMtlPair* mtl_pair, con
     if (!phShell->m_pPhysicsShell && !phShell->character_physics_support() || phShell->getDestroy())
         return;
 
-    if (CPHSoundPlayer* sp = phShell->ph_sound_player())
+    CPHSoundPlayer* sp = phShell->ph_sound_player();
+    Msg("[Bush-Debug] play_object: holder=%p, sp=%p", holder, sp);
+    if (sp)
         sp->Play(mtl_pair, contact_pos);
 }
 
@@ -209,15 +211,28 @@ void TContactShotMark(
 
     if (!static_mat || !dyn_mat) return;
 
-    float vel_cret = 1.0f;
+    float vel_cret = 15.0f;
     
     CPhysicsShellHolder* dyn_obj = dyn_holder ? smart_cast<CPhysicsShellHolder*>(dyn_holder) : nullptr;
     
-    if (dyn_obj && dyn_obj->PPhysicsShell())
+    if (dyn_obj)
     {
-        Fvector v;
-        dyn_obj->PPhysicsShell()->get_LinearVel(v);
-        vel_cret = v.magnitude();
+        float mass = dyn_obj->GetMass();
+        if (mass < 1.0f) mass = 20.0f;
+        Fvector v(0, 0, 0);
+        if (dyn_obj->PPhysicsShell())
+        {
+            dyn_obj->PPhysicsShell()->get_LinearVel(v);
+        }
+        else if (dyn_obj->character_physics_support() && dyn_obj->character_physics_support()->movement())
+        {
+            v = dyn_obj->character_physics_support()->movement()->GetVelocity();
+        }
+        float speed = v.magnitude();
+        if (speed > 0.05f)
+            vel_cret = speed * _sqrt(mass);
+        else
+            vel_cret = 15.0f;
     }
 
     bool b_invert_normal = !bo1;
@@ -230,6 +245,11 @@ void TContactShotMark(
     u16 dyn_mat_id = GMLib.GetMaterialIdx(dyn_mat->m_Name.c_str());
     
     SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(static_mat_id, dyn_mat_id);
+    if (static_mat->Flags.test(SGameMtl::flPassable))
+    {
+        Msg("[Bush-Debug] TContactShotMark: static='%s' (id=%u), dyn='%s' (id=%u), pair=%p, dist=%.2f",
+            static_mat->m_Name.c_str(), static_mat_id, dyn_mat->m_Name.c_str(), dyn_mat_id, mtl_pair, square_cam_dist);
+    }
     if (mtl_pair)
     {
 
@@ -253,6 +273,8 @@ void TContactShotMark(
                 }
                 else
                 {
+                    Msg("[Bush-Debug] TContactShotMark passable: static_mat='%s', dyn_mat='%s', sounds_cnt=%u, dyn_holder=%p, cam_dist=%.2f",
+                        static_mat->m_Name.c_str(), dyn_mat->m_Name.c_str(), (u32)mtl_pair->CollideSounds.size(), dyn_holder, square_cam_dist);
                     if (!mtl_pair->CollideSounds.empty())
                     {
                         play_object(dyn_holder, mtl_pair, contact_pos);

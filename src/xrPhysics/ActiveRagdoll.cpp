@@ -510,6 +510,13 @@ void CActiveRagdollController::ApplyHit(u16 bone_id, const Fvector& dir, float i
     }
 }
 
+void CActiveRagdollController::ApplyLinearImpulse(const Fvector& dir, float impulse) {
+    if (m_ragdoll_handle == INVALID_RAGDOLL_HANDLE) return;
+    Fvector imp = dir;
+    imp.mul(impulse);
+    GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, imp);
+}
+
 void CActiveRagdollController::ApplyRadialImpulse(const Fvector& center, float radius, float max_impulse) {
     if (m_state == ERagdollState::Inactive || m_ragdoll_handle == INVALID_RAGDOLL_HANDLE) return;
     
@@ -731,6 +738,15 @@ void CActiveRagdollController::SyncFromPhysics() {
     if (m_state == ERagdollState::Inactive) return;
     
     GetPhysicsCore()->GetRagdollAllTransforms(m_ragdoll_handle, m_simulated_matrices.data(), (u32)m_simulated_matrices.size());
+
+    if (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying || m_state == ERagdollState::KnockedDown || m_state == ERagdollState::KnockdownResting) {
+        if (m_holder && !m_simulated_matrices.empty()) {
+            Fmatrix cur_xform = m_holder->ObjectXFORM();
+            cur_xform.c.set(m_simulated_matrices[0].c);
+            m_holder->ObjectXFORM().set(cur_xform);
+            m_holder->ObjectSpatialMove();
+        }
+    }
 }
 
 static void BlendMatrix(Fmatrix& out, const Fmatrix& a, const Fmatrix& b, float t) {

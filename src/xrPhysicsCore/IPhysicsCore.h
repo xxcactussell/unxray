@@ -221,7 +221,15 @@ public:
                                                void* other_body_user_data, 
                                                bool is_sensor);
 
+    typedef void (*RigidBodyContactCallbackFun)(void* user_data_1, void* user_data_2, 
+                                               u16 layer_1, u16 layer_2,
+                                               const Fvector& contact_pos, 
+                                               const Fvector& contact_normal, 
+                                               float relative_vel, 
+                                               u16 mtl_idx_1, u16 mtl_idx_2);
+
     virtual void SetCharacterVirtualContactCallback(CharacterVirtualHandle handle, CharacterContactCallbackFun callback, void* char_user_data) = 0;
+    virtual void SetRigidBodyContactCallback(RigidBodyContactCallbackFun callback) = 0;
 
     virtual bool IsCharacterVirtualOnGround(CharacterVirtualHandle handle) const = 0;
     virtual void UpdateCharacterVirtual(CharacterVirtualHandle handle, float delta_time, const Fvector& gravity) = 0;

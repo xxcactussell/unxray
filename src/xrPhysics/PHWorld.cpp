@@ -59,6 +59,113 @@ static void OnJoltBodyActivation(BodyHandle body, void* user_data, bool activate
     }
 }
 
+static u16 GetDefaultCreatureMaterial()
+{
+    static u16 s_creature_mtl = GAMEMTL_NONE_IDX;
+    if (s_creature_mtl == GAMEMTL_NONE_IDX)
+    {
+        s_creature_mtl = GMLib.GetMaterialIdx("creatures\\human");
+        if (s_creature_mtl == GAMEMTL_NONE_IDX)
+            s_creature_mtl = GMLib.GetMaterialIdx("creatures\\actor");
+        if (s_creature_mtl == GAMEMTL_NONE_IDX)
+            s_creature_mtl = GMLib.GetMaterialIdx("creature");
+        if (s_creature_mtl == GAMEMTL_NONE_IDX)
+            s_creature_mtl = GMLib.GetMaterialIdx("materials/skel1");
+        if (s_creature_mtl == GAMEMTL_NONE_IDX)
+            s_creature_mtl = GMLib.GetMaterialIdx("default");
+    }
+    return s_creature_mtl;
+}
+
+static void OnJoltRBContact(
+    void* user_data_1, void* user_data_2, 
+    u16 layer_1, u16 layer_2, 
+    const Fvector& pos, const Fvector& norm, 
+    float rel_vel, u16 mtl_1, u16 mtl_2)
+{
+    if (!ph_world || !ph_world->default_contact_shotmark()) return;
+
+    IPhysicsShellHolder* holder_1 = nullptr;
+    IPhysicsShellHolder* holder_2 = nullptr;
+    CPhysicsGeom* geom_1 = nullptr;
+    CPhysicsGeom* geom_2 = nullptr;
+
+    if (user_data_1)
+    {
+        if (layer_1 == 1) // 1 = Layers::MOVING (Props / Boxes / Barrels)
+        {
+            CPHElement* elem1 = reinterpret_cast<CPHElement*>(user_data_1);
+            holder_1 = elem1->PhysicsRefObject();
+            if (elem1->numberOfGeoms() > 0) geom_1 = elem1->geometry(0);
+            if (mtl_1 == GAMEMTL_NONE_IDX) {
+                if (geom_1 && geom_1->material != GAMEMTL_NONE_IDX) mtl_1 = geom_1->material;
+                else if (elem1->Material() != GAMEMTL_NONE_IDX) mtl_1 = elem1->Material();
+            }
+        }
+        else if (layer_1 == 2) // 2 = Layers::RAGDOLL (Stalkers / Monsters)
+        {
+            holder_1 = reinterpret_cast<IPhysicsShellHolder*>(user_data_1);
+            if (mtl_1 == GAMEMTL_NONE_IDX)
+                mtl_1 = GetDefaultCreatureMaterial();
+        }
+    }
+
+    if (user_data_2)
+    {
+        if (layer_2 == 1) // 1 = Layers::MOVING (Props / Boxes / Barrels)
+        {
+            CPHElement* elem2 = reinterpret_cast<CPHElement*>(user_data_2);
+            holder_2 = elem2->PhysicsRefObject();
+            if (elem2->numberOfGeoms() > 0) geom_2 = elem2->geometry(0);
+            if (mtl_2 == GAMEMTL_NONE_IDX) {
+                if (geom_2 && geom_2->material != GAMEMTL_NONE_IDX) mtl_2 = geom_2->material;
+                else if (elem2->Material() != GAMEMTL_NONE_IDX) mtl_2 = elem2->Material();
+            }
+        }
+        else if (layer_2 == 2) // 2 = Layers::RAGDOLL (Stalkers / Monsters)
+        {
+            holder_2 = reinterpret_cast<IPhysicsShellHolder*>(user_data_2);
+            if (mtl_2 == GAMEMTL_NONE_IDX)
+                mtl_2 = GetDefaultCreatureMaterial();
+        }
+    }
+
+    if (holder_1 && holder_1->ObjectGetDestroy()) return;
+    if (holder_2 && holder_2->ObjectGetDestroy()) return;
+
+    Fsphere sph1, sph2;
+    sph1.set(pos, 0.2f);
+    sph2.set(pos, 0.2f);
+    CSphereGeom dummy_g1(sph1);
+    CSphereGeom dummy_g2(sph2);
+
+    if (holder_1 && !geom_1) {
+        dummy_g1.ph_ref_object = holder_1;
+        geom_1 = &dummy_g1;
+    }
+    if (holder_2 && !geom_2) {
+        dummy_g2.ph_ref_object = holder_2;
+        geom_2 = &dummy_g2;
+    }
+
+    if (!geom_1 && !geom_2) return;
+
+    if (mtl_1 == GAMEMTL_NONE_IDX || mtl_1 >= GMLib.CountMaterial())
+        mtl_1 = GMLib.GetMaterialIdx("default_object");
+    if (mtl_2 == GAMEMTL_NONE_IDX || mtl_2 >= GMLib.CountMaterial())
+        mtl_2 = GMLib.GetMaterialIdx("default");
+
+    SGameMtl* g_mtl1 = GMLib.GetMaterialByIdx(mtl_1);
+    SGameMtl* g_mtl2 = GMLib.GetMaterialByIdx(mtl_2);
+
+    if (!g_mtl1 || !g_mtl2) return;
+
+    bool bo1 = (layer_1 == 1 || layer_1 == 2 || (holder_1 != nullptr && holder_2 == nullptr));
+
+    bool do_collide = true;
+    ph_world->default_contact_shotmark()(do_collide, bo1, geom_1, geom_2, norm, pos, g_mtl1, g_mtl2);
+}
+
 IPHWorld* physics_world() { return ph_world; }
 void create_physics_world(bool mt, CObjectSpace* os, CObjectList* lo)
 {
@@ -133,6 +240,7 @@ void CPHWorld::Create(bool mt, CObjectSpace* os, CObjectList* lo)
     ZoneScoped;
     GetPhysicsCore()->Initialize();
     GetPhysicsCore()->SetBodyActivationCallback(OnJoltBodyActivation);
+    GetPhysicsCore()->SetRigidBodyContactCallback(OnJoltRBContact);
     LoadParams();
     m_object_space = os;
     m_level_objects = lo;

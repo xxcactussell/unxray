@@ -860,11 +860,24 @@ void CPHSimpleCharacter::JoltCharacterContactCallback(void* char_user_data,
         // 2. Passable / Liquid material sound and particle effects (bushes, water)
         if (tri_mat->Flags.test(SGameMtl::flPassable) || tri_mat->Flags.test(SGameMtl::flLiquid))
         {
-            if (self->m_static_contact_callback)
+            u16 self_mat = self->GetMaterial();
+            if (self_mat == GAMEMTL_NONE_IDX || self_mat >= GMLib.CountMaterial())
+            {
+                self_mat = GMLib.GetMaterialIdx("creatures\\actor");
+                if (self_mat == GAMEMTL_NONE_IDX)
+                    self_mat = GMLib.GetMaterialIdx("creatures\\human");
+                if (self_mat == GAMEMTL_NONE_IDX)
+                    self_mat = GMLib.GetMaterialIdx("creature");
+            }
+            SGameMtl* self_game_mat = (self_mat != GAMEMTL_NONE_IDX) ? GMLib.GetMaterialByIdx(self_mat) : nullptr;
+
+            Msg("[Bush-Debug] JoltCharacterContactCallback: tri_mat='%s', self_mat='%s', pos=(%.2f, %.2f, %.2f), cb=%p",
+                tri_mat->m_Name.c_str(), self_game_mat ? self_game_mat->m_Name.c_str() : "null",
+                contact_pos.x, contact_pos.y, contact_pos.z, self->m_static_contact_callback);
+
+            if (self->m_static_contact_callback && self_game_mat)
             {
                 bool do_collide = false;
-                u16 self_mat = (self->p_lastMaterialIDX && *self->p_lastMaterialIDX != GAMEMTL_NONE_IDX) ? *self->p_lastMaterialIDX : GAMEMTL_NONE_IDX;
-                SGameMtl* self_game_mat = (self_mat != GAMEMTL_NONE_IDX) ? GMLib.GetMaterialByIdx(self_mat) : tri_mat;
                 
                 // Use CSphereGeom representing this character so get_callback_data() returns m_phys_ref_object
                 Fsphere sph;
@@ -913,8 +926,7 @@ u16 CPHSimpleCharacter::ContactBone() { return RetriveContactBone(); }
 
 void CPHSimpleCharacter::SetMaterial(u16 material)
 {
-    if (!b_exist)
-        return;
+    m_material = material;
 }
 
 void CPHSimpleCharacter::get_State(SPHNetState& state)

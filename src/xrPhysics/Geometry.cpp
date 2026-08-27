@@ -115,7 +115,7 @@ void CPhysicsGeom::clear_cashed_tries()
     // ручная очистка со стороны геометрии больше не требуется.
 }
 
-void CPhysicsGeom::set_material(u16 ul_material) {}
+void CPhysicsGeom::set_material(u16 ul_material) { material = ul_material; }
 void CPhysicsGeom::set_contact_cb(ObjectContactCallbackFun* ccb) {}
 void CPhysicsGeom::set_obj_contact_cb(ObjectContactCallbackFun* occb) {}
 void CPhysicsGeom::add_obj_contact_cb(ObjectContactCallbackFun* occb) {}

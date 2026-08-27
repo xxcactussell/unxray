@@ -9,6 +9,7 @@
 #include "PhysicsShellHolder.h"
 #include "Level.h"
 #include "CharacterPhysicsSupport.h"
+#include "xrPhysics/ActiveRagdoll.h"
 
 CBaseGraviZone::CBaseGraviZone() {}
 
@@ -160,7 +161,7 @@ void CBaseGraviZone::AffectPull(CPhysicsShellHolder* GO, const Fvector& throw_in
     {
         AffectPullAlife(EA, throw_in_dir, dist);
     }
-    else if (GO && GO->PPhysicsShell())
+    else if (GO && (GO->PPhysicsShell() || (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())))
     {
         AffectPullDead(GO, throw_in_dir, dist);
     }
@@ -179,7 +180,14 @@ void CBaseGraviZone::AffectPullAlife(CEntityAlive* EA, const Fvector& throw_in_d
 
 void CBaseGraviZone::AffectPullDead(CPhysicsShellHolder* GO, const Fvector& throw_in_dir, float dist)
 {
-    GO->PPhysicsShell()->applyImpulse(throw_in_dir, dist * m_fThrowInImpulse * GO->GetMass() / 100.f);
+    if (GO->PPhysicsShell())
+    {
+        GO->PPhysicsShell()->applyImpulse(throw_in_dir, dist * m_fThrowInImpulse * GO->GetMass() / 100.f);
+    }
+    else if (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())
+    {
+        GO->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(throw_in_dir, dist * m_fThrowInImpulse * GO->GetMass() / 100.f);
+    }
 }
 
 void CBaseGraviZone::AffectThrow(SZoneObjectInfo* O, CPhysicsShellHolder* GO, const Fvector& throw_in_dir, float dist)

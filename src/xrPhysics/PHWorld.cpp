@@ -135,6 +135,22 @@ static void OnJoltRBContact(
     if (holder_1 && holder_1->ObjectGetDestroy()) return;
     if (holder_2 && holder_2->ObjectGetDestroy()) return;
 
+    void* primary_holder = holder_1 ? (void*)holder_1 : (void*)holder_2;
+    if (primary_holder)
+    {
+        static xr_map<void*, u32> s_last_impact_time;
+        u32 cur_time = Device.dwTimeGlobal;
+        auto it = s_last_impact_time.find(primary_holder);
+        if (it != s_last_impact_time.end())
+        {
+            if (cur_time - it->second < 80) // 80 ms cooldown per object
+                return;
+        }
+        s_last_impact_time[primary_holder] = cur_time;
+        if (s_last_impact_time.size() > 512)
+            s_last_impact_time.clear();
+    }
+
     Fsphere sph1, sph2;
     sph1.set(pos, 0.2f);
     sph2.set(pos, 0.2f);

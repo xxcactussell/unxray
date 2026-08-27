@@ -210,7 +210,7 @@ void TContactShotMark(
 
     if (!static_mat || !dyn_mat) return;
 
-    float vel_cret = 15.0f;
+    float vel_cret = 0.0f;
     
     CPhysicsShellHolder* dyn_obj = dyn_holder ? smart_cast<CPhysicsShellHolder*>(dyn_holder) : nullptr;
     
@@ -231,7 +231,11 @@ void TContactShotMark(
         if (speed > 0.05f)
             vel_cret = speed * _sqrt(mass);
         else
-            vel_cret = 35.0f;
+            vel_cret = 1.5f * _sqrt(mass);
+    }
+    else
+    {
+        vel_cret = 12.0f;
     }
 
     bool b_invert_normal = !bo1;
@@ -257,6 +261,7 @@ void TContactShotMark(
                         float volume = collide_volume_min +
                             vel_cret * (collide_volume_max - collide_volume_min) /
                                 (_sqrt(mass_limit) * default_l_limit - Pars::vel_cret_sound);
+                        volume = std::clamp(volume, collide_volume_min, 0.9f);
                         ref_sound& randSound =
                             mtl_pair->CollideSounds[Random.randI(mtl_pair->CollideSounds.size())];
                         Fvector pos = contact_pos;
@@ -272,7 +277,7 @@ void TContactShotMark(
                 }
             }
         }
-        if (square_cam_dist < SQUARE_PARTICLE_EFFECT_DIST && !mtl_pair->CollideParticles.empty())
+        if (square_cam_dist < SQUARE_PARTICLE_EFFECT_DIST && !mtl_pair->CollideParticles.empty() && vel_cret > Pars::vel_cret_particles)
         {
             LPCSTR ps_name = mtl_pair->CollideParticles[::Random.randI(0, mtl_pair->CollideParticles.size())].c_str();
             play_particles<Pars>(vel_cret, dyn_holder, contact_pos, contact_normal, b_invert_normal, static_mat, ps_name);

@@ -115,12 +115,49 @@ static void FlushDeferredRBContacts(IPhysicsCore::RigidBodyContactCallbackFun ca
     int max_threads = g_jolt_thread_counter.load();
     if (max_threads > JOLT_MAX_THREADS) max_threads = JOLT_MAX_THREADS;
     
+    static std::vector<SDeferredRBContact> s_all_contacts;
+    s_all_contacts.clear();
+
     for (int i = 0; i < max_threads; ++i) {
         auto& buffer = g_deferred_rb_contacts[i];
         for (const auto& ev : buffer) {
-            callback(ev.user_data_1, ev.user_data_2, ev.layer_1, ev.layer_2, ev.contact_pos, ev.contact_norm, ev.relative_vel, ev.mtl_idx_1, ev.mtl_idx_2);
+            s_all_contacts.push_back(ev);
         }
         buffer.clear();
+    }
+
+    if (s_all_contacts.empty()) return;
+
+    // Sort by relative velocity descending (process highest energy impacts first)
+    std::sort(s_all_contacts.begin(), s_all_contacts.end(), [](const SDeferredRBContact& a, const SDeferredRBContact& b) {
+        return a.relative_vel > b.relative_vel;
+    });
+
+    // Deduplicate pair & limit to max 8 contact events per physics step
+    static std::vector<std::pair<void*, void*>> s_seen_pairs;
+    s_seen_pairs.clear();
+
+    int dispatched = 0;
+    const int max_dispatched_per_step = 8;
+
+    for (const auto& ev : s_all_contacts) {
+        void* ud1 = ev.user_data_1;
+        void* ud2 = ev.user_data_2;
+        if (ud1 > ud2) std::swap(ud1, ud2);
+
+        bool already_seen = false;
+        for (const auto& p : s_seen_pairs) {
+            if (p.first == ud1 && p.second == ud2) {
+                already_seen = true;
+                break;
+            }
+        }
+        if (already_seen) continue;
+
+        s_seen_pairs.push_back({ ud1, ud2 });
+        callback(ev.user_data_1, ev.user_data_2, ev.layer_1, ev.layer_2, ev.contact_pos, ev.contact_norm, ev.relative_vel, ev.mtl_idx_1, ev.mtl_idx_2);
+        dispatched++;
+        if (dispatched >= max_dispatched_per_step) break;
     }
 }
 
@@ -1815,7 +1852,7 @@ void JoltPhysicsCore::MyContactListener::OnContactAdded(
         JPH::Vec3 v2 = inBody2.IsDynamic() ? inBody2.GetLinearVelocity() : JPH::Vec3::sZero();
         float rel_vel = (v1 - v2).Length();
 
-        if (rel_vel > 0.25f)
+        if (rel_vel > 0.70f)
         {
             u16 mtl_1 = GAMEMTL_NONE_IDX;
             u16 mtl_2 = GAMEMTL_NONE_IDX;

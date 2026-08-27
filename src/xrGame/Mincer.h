@@ -33,7 +33,7 @@ public:
     virtual void feel_touch_new(IGameObject* O);
     virtual void Load(LPCSTR section);
     virtual bool BlowoutState();
-    virtual void AffectPullDead(CPhysicsShellHolder* GO, const Fvector& throw_in_dir, float dist) {}
+    virtual void AffectPullDead(CPhysicsShellHolder* GO, const Fvector& throw_in_dir, float dist);
     virtual void AffectPullAlife(CEntityAlive* EA, const Fvector& throw_in_dir, float dist);
     virtual void AffectThrow(SZoneObjectInfo* O, CPhysicsShellHolder* GO, const Fvector& throw_in_dir, float dist);
     virtual void ThrowInCenter(Fvector& C);

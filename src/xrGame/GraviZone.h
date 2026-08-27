@@ -36,6 +36,8 @@ public:
     virtual void shedule_Update(u32 dt);
     virtual bool BlowoutState();
     virtual bool IdleState();
+    virtual void feel_touch_new(IGameObject* O);
+    virtual bool feel_touch_contact(IGameObject* O);
 
     virtual float BlowoutRadiusPercent(CPhysicsShellHolder* /*GO*/) { return m_fBlowoutRadiusPercent; }
 protected:

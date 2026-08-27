@@ -16,6 +16,7 @@ protected:
     virtual void StopIdleParticles(bool bIdleLight = true);
     virtual bool AlwaysTheCrow();
     virtual void UpdateWorkload(u32 dt);
+    virtual void Affect(SZoneObjectInfo* O) override;
 
 public:
     CZoneCampfire();

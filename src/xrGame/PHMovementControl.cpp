@@ -120,11 +120,7 @@ void CPHMovementControl::ApplyImpulse(const Fvector& dir, const float P)
     VERIFY(m_character);
     if (fis_zero(P))
         return;
-    Fvector force;
-    force.set(dir);
-    force.mul(P / fixed_step);
 
-    AddControlVel(force);
     m_character->ApplyImpulse(dir, P);
 }
 void CPHMovementControl::SetVelocityLimit(float val)
@@ -1283,7 +1279,8 @@ void CPHMovementControl::ApplyHit(const Fvector& dir, const float P, ALife::EHit
         case ALife::eHitTypeShock:; // stop
         case ALife::eHitTypeStrike:; // stop
         case ALife::eHitTypeWound:
-            SetVelocity(Fvector().set(0, 0, 0));
+            if (fis_zero(P))
+                SetVelocity(Fvector().set(0, 0, 0));
             break; // stop							;
         case ALife::eHitTypeLightBurn:; // not stop
         case ALife::eHitTypeRadiation:; // not stop
@@ -1299,8 +1296,14 @@ void CPHMovementControl::ApplyHit(const Fvector& dir, const float P, ALife::EHit
         }
     }
     // hit
-    if (hit_type == ALife::eHitTypeExplosion || hit_type == ALife::eHitTypeWound)
+    if (hit_type == ALife::eHitTypeExplosion || 
+        hit_type == ALife::eHitTypeWound || 
+        hit_type == ALife::eHitTypeStrike || 
+        hit_type == ALife::eHitTypePhysicStrike ||
+        hit_type == ALife::eHitTypeShock)
+    {
         ApplyImpulse(dir, P);
+    }
 }
 
 void CPHMovementControl::SetFrictionFactor(float f) { m_character->FrictionFactor() = f; }

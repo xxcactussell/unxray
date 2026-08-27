@@ -148,6 +148,15 @@ public:
     void SyncToPhysics();
     void SyncFromPhysics();
     
+    void GetVelocity(Fvector& out_linear_vel, Fvector& out_angular_vel) const {
+        if (m_ragdoll_handle != INVALID_RAGDOLL_HANDLE) {
+            GetPhysicsCore()->GetRagdollPartVelocity(m_ragdoll_handle, 0, out_linear_vel, out_angular_vel);
+        } else {
+            out_linear_vel.set(0, 0, 0);
+            out_angular_vel.set(0, 0, 0);
+        }
+    }
+    
     static void BonesCallback(CBoneInstance* B);
     static void NonPhysicalBonesCallback(CBoneInstance* B);
     

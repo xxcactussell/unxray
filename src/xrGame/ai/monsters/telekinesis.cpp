@@ -2,6 +2,8 @@
 #include "telekinesis.h"
 #include "entity_alive.h"
 #include "xrPhysics/PhysicsShell.h"
+#include "CharacterPhysicsSupport.h"
+#include "xrPhysics/ActiveRagdoll.h"
 
 CTelekinesis::CTelekinesis() { active = false; }
 CTelekinesis::~CTelekinesis()
@@ -190,11 +192,15 @@ void CTelekinesis::PhDataUpdate(float step)
 
 void CTelekinesis::clear_notrelevant()
 {
-    //убрать все объеты со старыми параметрами
+    //убрать все объекты со старыми параметрами
     const auto it = std::remove_if(objects.begin(), objects.end(), [](CTelekineticObject* tele_object)
     {
-        return (!tele_object->get_object() || tele_object->get_object()->getDestroy() ||
-            !tele_object->get_object()->PPhysicsShell() || !tele_object->get_object()->PPhysicsShell()->isActive());
+        if (!tele_object->get_object() || tele_object->get_object()->getDestroy())
+            return true;
+        CPhysicsShellHolder* obj = tele_object->get_object();
+        bool has_shell = obj->PPhysicsShell() && obj->PPhysicsShell()->isActive();
+        bool has_ragdoll = obj->character_physics_support() && obj->character_physics_support()->active_ragdoll();
+        return !has_shell && !has_ragdoll;
     });
     objects.erase(it, objects.end());
 }

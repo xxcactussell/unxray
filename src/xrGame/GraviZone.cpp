@@ -91,8 +91,12 @@ bool CBaseGraviZone::IdleState()
 
                 if (GO && (GO->PPhysicsShell() || (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())) && !Telekinesis().is_active_object(GO))
                 {
-                    Telekinesis().activate(GO, 0.1f, m_fTeleHeight, m_dwTimeToTele);
-                    PlayTeleParticles(GO);
+                    CEntityAlive* EA = smart_cast<CEntityAlive*>(GO);
+                    if (!EA || !EA->g_Alive())
+                    {
+                        Telekinesis().activate(GO, 0.1f, m_fTeleHeight, m_dwTimeToTele);
+                        PlayTeleParticles(GO);
+                    }
                 }
             }
         }
@@ -101,6 +105,29 @@ bool CBaseGraviZone::IdleState()
         Telekinesis().deactivate();
 
     return result;
+}
+
+void CBaseGraviZone::feel_touch_new(IGameObject* O)
+{
+    inherited::feel_touch_new(O);
+    CPhysicsShellHolder* GO = smart_cast<CPhysicsShellHolder*>(O);
+    if (GO && (GO->PPhysicsShell() || (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())))
+    {
+        CEntityAlive* EA = smart_cast<CEntityAlive*>(GO);
+        if (!EA || !EA->g_Alive())
+        {
+            if (!Telekinesis().is_active_object(GO))
+            {
+                Telekinesis().activate(GO, 0.1f, m_fTeleHeight, m_dwTimeToTele);
+                PlayTeleParticles(GO);
+            }
+        }
+    }
+}
+
+bool CBaseGraviZone::feel_touch_contact(IGameObject* O)
+{
+    return inherited::feel_touch_contact(O) && smart_cast<CPhysicsShellHolder*>(O);
 }
 
 bool CBaseGraviZone::CheckAffectField(CPhysicsShellHolder* GO, float dist_to_radius)
@@ -153,7 +180,12 @@ void CBaseGraviZone::Affect(SZoneObjectInfo* O)
     }
 }
 
-void CBaseGraviZone::ThrowInCenter(Fvector& C) { Center(C); }
+void CBaseGraviZone::ThrowInCenter(Fvector& C)
+{
+    Center(C);
+    C.y += m_fTeleHeight * 0.4f;
+}
+
 void CBaseGraviZone::AffectPull(CPhysicsShellHolder* GO, const Fvector& throw_in_dir, float dist)
 {
     CEntityAlive* EA = smart_cast<CEntityAlive*>(GO);
@@ -163,7 +195,8 @@ void CBaseGraviZone::AffectPull(CPhysicsShellHolder* GO, const Fvector& throw_in
     }
     else if (GO && (GO->PPhysicsShell() || (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())))
     {
-        AffectPullDead(GO, throw_in_dir, dist);
+        if (!Telekinesis().is_active_object(GO))
+            AffectPullDead(GO, throw_in_dir, dist);
     }
 }
 
@@ -186,9 +219,15 @@ void CBaseGraviZone::AffectPullDead(CPhysicsShellHolder* GO, const Fvector& thro
     }
     else if (GO->character_physics_support() && GO->character_physics_support()->active_ragdoll())
     {
-        float mass = GO->GetMass() > 1.0f ? GO->GetMass() : 75.0f;
-        float pull_imp = std::clamp(dist * m_fThrowInImpulse * mass / 100.f, 25.0f, 1200.0f);
-        GO->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(throw_in_dir, pull_imp);
+        Fvector pull_dir = throw_in_dir;
+        pull_dir.y = 0.0f;
+        float dir_mag = pull_dir.magnitude();
+        if (dir_mag > 0.01f)
+        {
+            pull_dir.mul(1.0f / dir_mag);
+            float pull_imp = std::clamp(dist * m_fThrowInImpulse * 0.25f, 0.2f, 2.5f);
+            GO->character_physics_support()->active_ragdoll()->ApplyLinearImpulse(pull_dir, pull_imp);
+        }
     }
 }
 
@@ -196,8 +235,8 @@ void CBaseGraviZone::AffectThrow(SZoneObjectInfo* O, CPhysicsShellHolder* GO, co
 {
     Fvector position_in_bone_space;
 
-    float power = Power(dist, Radius()); // Power(GO->Position().distance_to(zone_center));
-    float impulse = m_fHitImpulseScale * power * GO->GetMass();
+    float power = Power(dist, Radius());
+    float impulse = std::clamp(m_fHitImpulseScale * power * 25.0f, 2.0f, 60.0f);
 
     if (power > 0.01f)
     {

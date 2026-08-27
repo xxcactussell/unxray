@@ -34,7 +34,7 @@ IC void CALifeLevelRegistry::remove(CSE_ALifeDynamicObject* object, bool no_asse
         Msg("[LSS] removing object [%s][%d] from current level", object->name_replace(), object->ID);
     }
 #endif
-    inherited::remove(object->ID, no_assert);
+    inherited::remove(object->ID, true);
 }
 
 template <typename _update_predicate>

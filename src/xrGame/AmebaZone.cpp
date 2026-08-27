@@ -41,14 +41,14 @@ void CAmebaZone::Affect(SZoneObjectInfo* O)
 
     Fvector hit_dir;
     hit_dir.set(Random.randF(-.5f, .5f),
-                Random.randF(.0f, 1.f),
+                Random.randF(-.1f, .1f),
                 Random.randF(-.5f, .5f));
     hit_dir.normalize();
 
     Fvector position_in_bone_space;
 
     float power = Power(distance_to_center(O->object), m_fEffectiveRadius);
-    float impulse = m_fHitImpulseScale * power * pGameObject->GetMass();
+    float impulse = std::clamp(m_fHitImpulseScale * power * 15.0f, 0.0f, 30.0f);
 
     if (power > 0.01f)
     {

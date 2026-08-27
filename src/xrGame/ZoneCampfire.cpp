@@ -3,6 +3,7 @@
 #include "ParticlesObject.h"
 #include "GamePersistent.h"
 #include "xrEngine/LightAnimLibrary.h"
+#include "xrEngine/xr_collide_form.h"
 /*
 CZoneCampfire* g_zone = NULL;
 void turn_zone()
@@ -172,5 +173,26 @@ void CZoneCampfire::UpdateWorkload(u32 dt)
         {
             StopIdleParticles(true);
         }
+    }
+}
+
+void CZoneCampfire::Affect(SZoneObjectInfo* O)
+{
+    CPhysicsShellHolder* pGameObject = smart_cast<CPhysicsShellHolder*>(O->object);
+    if (!pGameObject || O->zone_ignore || !m_turned_on)
+        return;
+
+    Fvector P;
+    XFORM().transform_tiny(P, GetCForm()->getSphere().P);
+
+    float dist = pGameObject->Position().distance_to(P) - pGameObject->Radius();
+    float power = Power(dist > 0.f ? dist : 0.f, Radius());
+
+    if (power > 0.01f)
+    {
+        Fvector position_in_bone_space = Fvector().set(0.f, 0.f, 0.f);
+        Fvector hit_dir = Fvector().set(0.f, 0.f, 0.f);
+        CreateHit(pGameObject->ID(), ID(), hit_dir, power, 0, position_in_bone_space, 0.0f, m_eHitTypeBlowout);
+        PlayHitParticles(pGameObject);
     }
 }

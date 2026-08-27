@@ -215,29 +215,28 @@ void CPHSimpleCharacter::ApplyImpulse(const Fvector& dir, const float P)
         Fvector v;
         GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
 
-        // Scale impulse into softer realistic velocity delta (reduced impulse impact on player)
-        float speed_delta = std::clamp(P / 350.0f, 0.0f, 4.0f);
+        // Standard realistic velocity delta from impulse (P = m * delta_v)
+        float effective_mass = m_mass > 1.0f ? m_mass : 80.0f;
+        float speed_delta = std::clamp(P / effective_mass, 0.0f, 25.0f);
 
         Fvector impulse_dir = dir;
-        float sq_mag = impulse_dir.square_magnitude();
-        if (sq_mag > 0.001f) {
-            impulse_dir.mul(1.0f / sqrtf(sq_mag));
-        } else {
-            impulse_dir.set(0.f, 0.f, 0.f);
-        }
+        impulse_dir.normalize_safe();
 
-        // Strongly limit vertical launch component (+1.5 m/s max hop)
-        float horiz_comp = speed_delta;
-        float vert_comp = std::clamp(impulse_dir.y * speed_delta, -2.0f, 1.5f);
+        v.x += impulse_dir.x * speed_delta;
+        v.y += impulse_dir.y * speed_delta;
+        v.z += impulse_dir.z * speed_delta;
 
-        v.x += impulse_dir.x * horiz_comp;
-        v.y += vert_comp;
-        v.z += impulse_dir.z * horiz_comp;
-
-        // Ensure vertical velocity stays within sensible bounds
-        v.y = std::clamp(v.y, -20.0f, 4.0f);
+        // Sensible vertical speed limit (-30 to +30 m/s)
+        v.y = std::clamp(v.y, -30.0f, 30.0f);
 
         GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, v);
+
+        if (v.y > 0.5f)
+        {
+            b_jumping = true;
+            b_on_ground = false;
+            m_air_frames = 10;
+        }
     }
 }
 
@@ -247,10 +246,10 @@ void CPHSimpleCharacter::ApplyForce(const Fvector& force)
     {
         Fvector v;
         GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, v);
-        v.x += std::clamp(force.x / 350.0f, -3.0f, 3.0f);
-        v.y += std::clamp(force.y / 350.0f, -2.0f, 1.5f);
-        v.z += std::clamp(force.z / 350.0f, -3.0f, 3.0f);
-        v.y = std::clamp(v.y, -20.0f, 4.0f);
+        v.x += std::clamp(force.x / 350.0f, -5.0f, 5.0f);
+        v.y += std::clamp(force.y / 350.0f, -5.0f, 5.0f);
+        v.z += std::clamp(force.z / 350.0f, -5.0f, 5.0f);
+        v.y = std::clamp(v.y, -30.0f, 30.0f);
         GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, v);
     }
 }
@@ -300,8 +299,8 @@ void CPHSimpleCharacter::PhTune(float step)
     GetPhysicsCore()->GetCharacterVirtualVelocity(m_char_handle, current_vel);
 
     if (ground_state.on_ground) {
-        if (b_jumping && current_vel.y > 0.1f) {
-            // We are "on the ground" but moving UP fast (just jumped).
+        if ((b_jumping || current_vel.y > 0.5f) && current_vel.y > 0.1f) {
+            // We are "on the ground" but moving UP fast (just jumped or launched by impulse).
             // Jolt's ground state is stale because it hasn't updated yet.
             m_air_frames++; 
         } else {
@@ -320,7 +319,7 @@ void CPHSimpleCharacter::PhTune(float step)
     // 4 frames of "coyote time" to hide micro-bounces from the game logic
     b_on_ground = (m_air_frames < 4);
 
-    bool stick_to_floor = !(b_jump || b_jumping);
+    bool stick_to_floor = !(b_jump || b_jumping) && (current_vel.y <= 0.1f);
     GetPhysicsCore()->SetCharacterVirtualStickToFloor(m_char_handle, stick_to_floor);
 
     if (b_on_ground) {
@@ -668,9 +667,9 @@ void CPHSimpleCharacter::SafeAndLimitVelocity()
         }
     }
 
-    if (linear_velocity.y > 8.0f || linear_velocity.y < -30.0f)
+    if (linear_velocity.y > 35.0f || linear_velocity.y < -35.0f)
     {
-        linear_velocity.y = std::clamp(linear_velocity.y, -30.0f, 8.0f);
+        linear_velocity.y = std::clamp(linear_velocity.y, -35.0f, 35.0f);
         GetPhysicsCore()->SetCharacterVirtualVelocity(m_char_handle, linear_velocity);
     }
 

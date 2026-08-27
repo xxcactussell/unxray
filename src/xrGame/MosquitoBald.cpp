@@ -50,21 +50,42 @@ void CMosquitoBald::Affect(SZoneObjectInfo* O)
     Fvector P;
     XFORM().transform_tiny(P, GetCForm()->getSphere().P);
 
-    Fvector hit_dir;
-    hit_dir.set(::Random.randF(-.5f, .5f), ::Random.randF(.0f, 1.f), ::Random.randF(-.5f, .5f));
-    hit_dir.normalize();
-
     Fvector position_in_bone_space;
 
     VERIFY(!pGameObject->getDestroy());
 
     float dist = pGameObject->Position().distance_to(P) - pGameObject->Radius();
     float power = Power(dist > 0.f ? dist : 0.f, Radius());
-    float impulse = m_fHitImpulseScale * power * pGameObject->GetMass();
 
     if (power > 0.01f)
     {
         position_in_bone_space.set(0.f, 0.f, 0.f);
+
+        // Check if this is an actual kinetic/strike launch anomaly (Springboard) or a non-kinetic zone (Campfire, Torrid, Acid fog)
+        bool is_kinetic_launch = (m_fHitImpulseScale > 0.01f) && 
+                                 (m_eHitTypeBlowout == ALife::eHitTypeStrike || 
+                                  m_eHitTypeBlowout == ALife::eHitTypePhysicStrike || 
+                                  m_eHitTypeBlowout == ALife::eHitTypeExplosion);
+
+        Fvector hit_dir;
+        float impulse = 0.0f;
+
+        if (is_kinetic_launch)
+        {
+            // Predominantly vertical launch direction for Springboard
+            hit_dir.set(::Random.randF(-.10f, .10f), ::Random.randF(.94f, 1.0f), ::Random.randF(-.10f, .10f));
+            hit_dir.normalize();
+
+            float mass = pGameObject->GetMass() > 1.0f ? pGameObject->GetMass() : 80.0f;
+            impulse = mass * 50.0f * m_fHitImpulseScale; // Vertical launch for Springboard
+        }
+        else
+        {
+            // Non-kinetic zone (Campfire, Torrid, Chemical): no launch impulse
+            hit_dir.set(0.0f, 0.0f, 0.0f);
+            impulse = 0.0f;
+        }
+
         CreateHit(pGameObject->ID(), ID(), hit_dir, power, 0, position_in_bone_space, impulse, m_eHitTypeBlowout);
         PlayHitParticles(pGameObject);
     }
@@ -85,15 +106,22 @@ void CMosquitoBald::UpdateSecondaryHit()
         {
             CPhysicsShellHolder* pGameObject = smart_cast<CPhysicsShellHolder*>((&(*it))->object);
             if (!pGameObject)
-                return;
+                continue;
 
             if ((&(*it))->zone_ignore)
-                return;
+                continue;
             Fvector P;
             XFORM().transform_tiny(P, GetCForm()->getSphere().P);
 
+            bool is_kinetic_launch = (m_fHitImpulseScale > 0.01f) && 
+                                     (m_eHitTypeBlowout == ALife::eHitTypeStrike || 
+                                      m_eHitTypeBlowout == ALife::eHitTypePhysicStrike || 
+                                      m_eHitTypeBlowout == ALife::eHitTypeExplosion);
+            if (!is_kinetic_launch)
+                continue;
+
             Fvector hit_dir;
-            hit_dir.set(::Random.randF(-.5f, .5f), ::Random.randF(.0f, 1.f), ::Random.randF(-.5f, .5f));
+            hit_dir.set(::Random.randF(-.12f, .12f), ::Random.randF(.90f, 1.0f), ::Random.randF(-.12f, .12f));
             hit_dir.normalize();
 
             Fvector position_in_bone_space;
@@ -102,10 +130,11 @@ void CMosquitoBald::UpdateSecondaryHit()
 
             float dist = pGameObject->Position().distance_to(P) - pGameObject->Radius();
             float power = m_fSecondaryHitPower * RelativePower(dist > 0.f ? dist : 0.f, Radius());
-            if (power < 0.0f)
-                return;
+            if (power <= 0.0f)
+                continue;
 
-            float impulse = m_fHitImpulseScale * power * pGameObject->GetMass();
+            float mass = pGameObject->GetMass() > 1.0f ? pGameObject->GetMass() : 80.0f;
+            float impulse = mass * 15.0f * m_fHitImpulseScale;
             position_in_bone_space.set(0.f, 0.f, 0.f);
             CreateHit(pGameObject->ID(), ID(), hit_dir, power, 0, position_in_bone_space, impulse, m_eHitTypeBlowout);
         }

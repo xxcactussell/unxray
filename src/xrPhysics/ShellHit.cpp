@@ -13,6 +13,13 @@ void CPHShell::applyHit(const Fvector& pos, const Fvector& dir, float val, const
 {
     if (id == u16(-1))
         return; 
+    if (fis_zero(val) || val <= 0.001f)
+        return;
+    if (hit_type == ALife::eHitTypeBurn || hit_type == ALife::eHitTypeLightBurn ||
+        hit_type == ALife::eHitTypeShock || hit_type == ALife::eHitTypeRadiation ||
+        hit_type == ALife::eHitTypeTelepatic || hit_type == ALife::eHitTypeChemicalBurn)
+        return;
+
 #pragma todo("Kosya to kosya:this code shold treat all hit types")
     if (!m_pKinematics)
     {

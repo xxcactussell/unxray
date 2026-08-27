@@ -65,7 +65,12 @@ void CMincer::feel_touch_new(IGameObject* O)
     if (m_eZoneState == eZoneStateBlowout && (m_dwBlowoutExplosionTime > (u32)m_iStateTime))
     {
         CPhysicsShellHolder* GO = smart_cast<CPhysicsShellHolder*>(O);
-        Telekinesis().activate(GO, m_fThrowInImpulse, m_fTeleHeight, 100000);
+        if (GO && !smart_cast<CPHDestroyableNotificate*>(GO))
+        {
+            CEntityAlive* ea = smart_cast<CEntityAlive*>(GO);
+            if (!ea || !ea->g_Alive())
+                Telekinesis().activate(GO, m_fThrowInImpulse, m_fTeleHeight, 100000);
+        }
     }
 }
 bool CMincer::feel_touch_contact(IGameObject* O)
@@ -88,7 +93,7 @@ bool CMincer::BlowoutState()
     //	if(!EA)continue;
     //	CPhysicsShellHolder * GO = smart_cast<CPhysicsShellHolder *>(*it);
     //	Telekinesis().activate(GO,m_fThrowInImpulse, m_fTeleHeight, 100000);
-
+    //
     //}
 
     if (m_dwBlowoutExplosionTime < (u32)m_iPreviousStateTime || m_dwBlowoutExplosionTime >= (u32)m_iStateTime)
@@ -120,10 +125,31 @@ void CMincer::NotificateDestroy(CPHDestroyableNotificate* dn)
     }
     m_tearing_sound.play_at_pos(0, m_telekinetics.Center());
 
-    Fvector position_in_bone_space, throw_in_dir;
+    // Explode bone pieces outward radially and upward
+    Fvector throw_in_dir;
+    throw_in_dir.sub(obj->Position(), m_telekinetics.Center());
+    if (throw_in_dir.magnitude() < 0.01f)
+        throw_in_dir.random_dir();
+    else
+        throw_in_dir.normalize_safe();
+    throw_in_dir.y += ::Random.randF(0.3f, 0.7f);
+    throw_in_dir.normalize_safe();
+
+    if (obj->PPhysicsShell())
+    {
+        obj->PPhysicsShell()->set_ApplyByGravity(TRUE);
+        obj->PPhysicsShell()->SetAirResistance(0.01f, 0.01f);
+        obj->PPhysicsShell()->applyImpulse(throw_in_dir, std::clamp(impulse, 100.0f, 400.0f));
+    }
+
+    Fvector position_in_bone_space;
     position_in_bone_space.set(0.0f, 0.0f, 0.0f);
-    throw_in_dir.set(1.0f, 0.0f, 1.0f);
     CreateHit(obj->ID(), ID(), throw_in_dir, power, 0, position_in_bone_space, impulse, ALife::eHitTypeExplosion);
+}
+
+void CMincer::AffectPullDead(CPhysicsShellHolder* GO, const Fvector& throw_in_dir, float dist)
+{
+    inherited::AffectPullDead(GO, throw_in_dir, dist);
 }
 
 void CMincer::AffectPullAlife(CEntityAlive* EA, const Fvector& throw_in_dir, float dist)

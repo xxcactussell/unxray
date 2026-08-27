@@ -23,4 +23,5 @@ public:
     // Lain: added
     virtual bool light_in_slow_mode();
     virtual bool AlwaysTheCrow();
+    virtual void Affect(SZoneObjectInfo* O) override;
 };

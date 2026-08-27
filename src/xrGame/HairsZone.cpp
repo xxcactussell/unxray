@@ -55,7 +55,7 @@ void CHairsZone::Affect(SZoneObjectInfo* O)
     XFORM().transform_tiny(P, GetCForm()->getSphere().P);
 
     Fvector hit_dir;
-    hit_dir.set(::Random.randF(-.5f, .5f), ::Random.randF(.0f, 1.f), ::Random.randF(-.5f, .5f));
+    hit_dir.set(::Random.randF(-.5f, .5f), ::Random.randF(-.3f, 0.0f), ::Random.randF(-.5f, .5f));
     hit_dir.normalize();
 
     Fvector position_in_bone_space;
@@ -63,7 +63,7 @@ void CHairsZone::Affect(SZoneObjectInfo* O)
     P.y = pGameObject->Position().y;
 
     float power = Power(pGameObject->Position().distance_to(P), Radius());
-    float impulse = m_fHitImpulseScale * power * pGameObject->GetMass();
+    float impulse = std::clamp(m_fHitImpulseScale * power * 15.0f, 0.0f, 30.0f);
 
     if (power > 0.01f)
     {

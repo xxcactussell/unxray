@@ -2,6 +2,7 @@
 #include "TorridZone.h"
 #include "xrEngine/ObjectAnimator.h"
 #include "xrServer_Objects_ALife_Monsters.h"
+#include "xrEngine/xr_collide_form.h"
 
 CTorridZone::CTorridZone() { m_animator = xr_new<CObjectAnimator>(); }
 CTorridZone::~CTorridZone() { xr_delete(m_animator); }
@@ -65,3 +66,24 @@ bool CTorridZone::Disable()
 // Lain: added
 bool CTorridZone::light_in_slow_mode() { return false; }
 bool CTorridZone::AlwaysTheCrow() { return true; }
+
+void CTorridZone::Affect(SZoneObjectInfo* O)
+{
+    CPhysicsShellHolder* pGameObject = smart_cast<CPhysicsShellHolder*>(O->object);
+    if (!pGameObject || O->zone_ignore)
+        return;
+
+    Fvector P;
+    XFORM().transform_tiny(P, GetCForm()->getSphere().P);
+
+    float dist = pGameObject->Position().distance_to(P) - pGameObject->Radius();
+    float power = Power(dist > 0.f ? dist : 0.f, Radius());
+
+    if (power > 0.01f)
+    {
+        Fvector position_in_bone_space = Fvector().set(0.f, 0.f, 0.f);
+        Fvector hit_dir = Fvector().set(0.f, 0.f, 0.f);
+        CreateHit(pGameObject->ID(), ID(), hit_dir, power, 0, position_in_bone_space, 0.0f, m_eHitTypeBlowout);
+        PlayHitParticles(pGameObject);
+    }
+}

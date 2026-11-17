@@ -181,6 +181,7 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
         // Constraint settings with parent
         if (part_desc.parent_index != -1) {
             const SJointIKData& ik_data = bone_data.get_IK_data();
+            LPCSTR b_name = kinematics->LL_BoneName_dbg(bone_id);
             
             SRagdollConstraintDesc c_desc;
             c_desc.child_index = (int)part_idx;
@@ -210,6 +211,50 @@ SRagdollSettings CActiveRagdollSettingsBuilder::BuildSettings(IKinematics* kinem
                 c_desc.twist_limit_min = std::clamp(t_min, -float(M_PI * 0.5f), float(M_PI * 0.5f));
                 c_desc.twist_limit_max = std::clamp(t_max, -float(M_PI * 0.5f), float(M_PI * 0.5f));
                 c_desc.max_friction_torque = std::clamp(ik_data.friction, 0.0f, 100.0f);
+
+                // Anatomical clamping for realistic ragdoll joint limits:
+                if (b_name) {
+                    // Thigh / Hip: clamp lateral swing (abduction) so legs cannot splay into a 180-degree split (шпагат)
+                    if (strstr(b_name, "thigh") != nullptr) {
+                        c_desc.swing_limit_y = std::clamp(c_desc.swing_limit_y, 0.08f, 0.45f);
+                        c_desc.swing_limit_z = std::clamp(c_desc.swing_limit_z, 0.08f, 0.85f);
+                        c_desc.twist_limit_min = std::clamp(c_desc.twist_limit_min, -0.25f, 0.25f);
+                        c_desc.twist_limit_max = std::clamp(c_desc.twist_limit_max, -0.25f, 0.25f);
+                        c_desc.max_friction_torque = std::max(c_desc.max_friction_torque, 40.0f);
+                    }
+                    // Knee / Calf: pure hinge joint - bend backwards, lock sideways swing and twist
+                    else if (strstr(b_name, "calf") != nullptr || strstr(b_name, "knee") != nullptr) {
+                        c_desc.swing_limit_y = 0.04f; // near zero lateral swing
+                        c_desc.swing_limit_z = std::clamp(lim_z, 0.15f, float(M_PI * 0.65f)); // flexion
+                        c_desc.twist_limit_min = -0.04f;
+                        c_desc.twist_limit_max = 0.04f;
+                        c_desc.max_friction_torque = std::max(c_desc.max_friction_torque, 35.0f);
+                    }
+                    // Foot / Ankle: stable contact with ground
+                    else if (strstr(b_name, "foot") != nullptr || strstr(b_name, "toe") != nullptr) {
+                        c_desc.swing_limit_y = std::clamp(c_desc.swing_limit_y, 0.05f, 0.35f);
+                        c_desc.swing_limit_z = std::clamp(c_desc.swing_limit_z, 0.05f, 0.45f);
+                        c_desc.twist_limit_min = std::clamp(c_desc.twist_limit_min, -0.2f, 0.2f);
+                        c_desc.twist_limit_max = std::clamp(c_desc.twist_limit_max, -0.2f, 0.2f);
+                        c_desc.max_friction_torque = std::max(c_desc.max_friction_torque, 25.0f);
+                    }
+                    // Spine / Torso: prevent unnatural twisting
+                    else if (strstr(b_name, "spine") != nullptr) {
+                        c_desc.swing_limit_y = std::clamp(c_desc.swing_limit_y, 0.05f, 0.35f);
+                        c_desc.swing_limit_z = std::clamp(c_desc.swing_limit_z, 0.05f, 0.35f);
+                        c_desc.twist_limit_min = std::clamp(c_desc.twist_limit_min, -0.25f, 0.25f);
+                        c_desc.twist_limit_max = std::clamp(c_desc.twist_limit_max, -0.25f, 0.25f);
+                        c_desc.max_friction_torque = std::max(c_desc.max_friction_torque, 40.0f);
+                    }
+                    // Neck / Head
+                    else if (strstr(b_name, "neck") != nullptr || strstr(b_name, "head") != nullptr) {
+                        c_desc.swing_limit_y = std::clamp(c_desc.swing_limit_y, 0.05f, 0.45f);
+                        c_desc.swing_limit_z = std::clamp(c_desc.swing_limit_z, 0.05f, 0.45f);
+                        c_desc.twist_limit_min = std::clamp(c_desc.twist_limit_min, -0.4f, 0.4f);
+                        c_desc.twist_limit_max = std::clamp(c_desc.twist_limit_max, -0.4f, 0.4f);
+                        c_desc.max_friction_torque = std::max(c_desc.max_friction_torque, 20.0f);
+                    }
+                }
             }
             settings.constraints.push_back(c_desc);
         }
@@ -333,44 +378,74 @@ void CActiveRagdollController::Deactivate() {
     m_part_reactions.clear();
 }
 
-void CActiveRagdollController::OnDeath() {
-    if (m_state == ERagdollState::Dead || m_state == ERagdollState::Inactive || m_ragdoll_handle == INVALID_RAGDOLL_HANDLE) return;
+void CActiveRagdollController::OnDeath(const Fvector& initial_velocity) {
+    if (m_state == ERagdollState::Dead || m_state == ERagdollState::Dying || m_state == ERagdollState::Inactive || m_ragdoll_handle == INVALID_RAGDOLL_HANDLE) return;
+
+    Fvector safe_velocity = initial_velocity;
+    if (!_valid(safe_velocity) || safe_velocity.magnitude() > 7.0f) {
+        if (_valid(safe_velocity)) {
+            safe_velocity.normalize();
+            safe_velocity.mul(7.0f);
+        } else {
+            safe_velocity.set(0.f, 0.f, 0.f);
+        }
+    }
+    if (safe_velocity.magnitude() < 0.2f) {
+        safe_velocity.set(0.f, 0.f, 0.f);
+    }
 
     if (m_state == ERagdollState::KnockedDown || m_state == ERagdollState::KnockdownResting) {
         // Already on the ground or falling: instantly become purely unmotorized dead ragdoll
         m_state = ERagdollState::Dead;
         GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
         GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
+        GetPhysicsCore()->SetRagdollVelocity(m_ragdoll_handle, safe_velocity, Fvector().set(0.f, 0.f, 0.f));
         return;
     }
 
     // 1. Snapshot the EXACT current animated pose into Jolt physics world BEFORE switching to dynamic ragdoll.
     // This completely eliminates any snap or transition to the bind pose (T-pose).
-    if (m_holder && m_kinematics && !m_anim_matrices.empty()) {
+    u32 part_count = (u32)m_anim_matrices.size();
+    if (m_holder && m_kinematics && part_count > 0) {
         const Fmatrix& obj_xform = m_holder->ObjectXFORM();
-        u32 part_count = (u32)m_anim_matrices.size();
         
-        xr_vector<Fmatrix> current_model_matrices(part_count);
+        m_death_start_matrices.resize(part_count);
+        xr_vector<Fmatrix> death_world_matrices(part_count);
         for (u32 i = 0; i < part_count; ++i) {
             u16 bone_id = m_mapper.PartToBone((u16)i);
             if (bone_id != u16(-1) && bone_id < m_kinematics->LL_BoneCount()) {
                 const CBoneInstance& bi = m_kinematics->LL_GetBoneInstance(bone_id);
-                current_model_matrices[i] = bi.mTransform;
+                if (_valid(bi.mTransform))
+                    m_death_start_matrices[i] = bi.mTransform;
+                else
+                    m_death_start_matrices[i] = m_anim_matrices[i];
             } else {
-                current_model_matrices[i] = m_anim_matrices[i];
+                m_death_start_matrices[i] = m_anim_matrices[i];
             }
+            death_world_matrices[i].mul_43(obj_xform, m_death_start_matrices[i]);
         }
-        GetPhysicsCore()->SetRagdollWorldPose(m_ragdoll_handle, obj_xform, current_model_matrices.data(), part_count);
+        GetPhysicsCore()->SetRagdollWorldPose(m_ragdoll_handle, obj_xform, m_death_start_matrices.data(), part_count);
         GetPhysicsCore()->GetRagdollAllTransforms(m_ragdoll_handle, m_simulated_matrices.data(), part_count);
+
+        // 2. Set motor target pose to the exact death pose so motors maintain pose without jerking
+        GetPhysicsCore()->SetRagdollTargetPose(m_ragdoll_handle, death_world_matrices.data(), part_count);
     }
 
-    // 2. Switch all bodies to unmotorized, free dynamic ragdoll immediately on death
-    m_state = ERagdollState::Dead;
+    // 3. Switch all bodies to dynamic ragdoll
+    GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
+
+    // 4. Preserve full character movement momentum/inertia across all body parts
+    GetPhysicsCore()->SetRagdollVelocity(m_ragdoll_handle, safe_velocity, Fvector().set(0.f, 0.f, 0.f));
+
+    // 5. Keep gentle motor stiffness in Dying state for smooth, natural muscle relaxation into ragdoll
+    m_state = ERagdollState::Dying;
     m_death_decay_timer = 0.f;
+    m_death_decay_duration = 0.35f;
     m_visual_blend_factor = 0.f;
     
-    GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
-    GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
+    GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, true);
+    GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, 12.0f);
+    GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, 4.0f);
 }
 
 void CActiveRagdollController::SetMotorDefaults(float stiffness, float damping) {
@@ -382,7 +457,7 @@ void CActiveRagdollController::SetMotorDefaults(float stiffness, float damping) 
     }
 }
 
-void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos) {
+void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos, const Fvector& initial_velocity) {
     if (m_state == ERagdollState::Inactive || m_state == ERagdollState::Dead || m_state == ERagdollState::Dying || m_ragdoll_handle == INVALID_RAGDOLL_HANDLE)
         return;
     
@@ -407,10 +482,25 @@ void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float 
     m_state = ERagdollState::KnockedDown;
     m_knockdown_timer = 0.0f;
     
+    Fvector safe_velocity = initial_velocity;
+    if (!_valid(safe_velocity) || safe_velocity.magnitude() > 7.0f) {
+        if (_valid(safe_velocity)) {
+            safe_velocity.normalize();
+            safe_velocity.mul(7.0f);
+        } else {
+            safe_velocity.set(0.f, 0.f, 0.f);
+        }
+    }
+    if (safe_velocity.magnitude() < 0.2f) {
+        safe_velocity.set(0.f, 0.f, 0.f);
+    }
+
     // Switch all parts to dynamic
     GetPhysicsCore()->SetRagdollAllPartsKinematic(m_ragdoll_handle, false);
     // Turn off motors for free-fall ragdoll
     GetPhysicsCore()->SetRagdollMotorState(m_ragdoll_handle, false);
+    // Preserve movement inertia
+    GetPhysicsCore()->SetRagdollVelocity(m_ragdoll_handle, safe_velocity, Fvector().set(0.f, 0.f, 0.f));
     
     // Apply physical impulse
     u16 part_idx = m_mapper.BoneToPart(bone_id);
@@ -431,21 +521,12 @@ void CActiveRagdollController::KnockDown(u16 bone_id, const Fvector& dir, float 
         float dir_mag = blast_dir.magnitude();
         if (dir_mag > 0.001f) {
             blast_dir.mul(1.0f / dir_mag);
-            float clamped_impulse = std::clamp(impulse * 0.65f, 0.0f, 2500.0f);
+            float clamped_impulse = std::clamp(impulse * 0.35f, 0.0f, 150.0f);
             u32 part_count = (u32)m_simulated_matrices.size();
-            if (part_count > 0) {
-                // Pelvis (root) gets primary momentum (90%)
-                Fvector root_imp = blast_dir;
-                root_imp.mul(clamped_impulse * 0.90f);
-                GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, root_imp);
-
-                // Limbs get cohesive impulse (15%)
-                float per_part_mag = clamped_impulse * 0.15f;
-                Fvector part_imp = blast_dir;
-                part_imp.mul(per_part_mag);
-                for (u32 i = 1; i < part_count; ++i) {
-                    GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, i, part_imp);
-                }
+            if (part_count > 0 && part_idx < part_count) {
+                Fvector hit_imp = blast_dir;
+                hit_imp.mul(clamped_impulse);
+                GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, hit_imp, hit_pos);
             }
         }
     }
@@ -474,28 +555,13 @@ void CActiveRagdollController::ApplyHit(u16 bone_id, const Fvector& dir, float i
         float dir_mag = blast_dir.magnitude();
         if (dir_mag > 0.001f) {
             blast_dir.mul(1.0f / dir_mag);
-            float clamped_impulse = std::clamp(impulse * 0.65f, 0.0f, 2500.0f);
+            float clamped_impulse = std::clamp(impulse * 0.35f, 0.0f, 150.0f);
             
             u32 part_count = (u32)m_simulated_matrices.size();
-            if (part_count > 0) {
-                // Pelvis (root) gets primary momentum (90%)
-                Fvector root_imp = blast_dir;
-                root_imp.mul(clamped_impulse * 0.90f);
-                GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, 0, root_imp);
-
-                // Limbs get cohesive impulse (15%)
-                float per_part_mag = clamped_impulse * 0.15f;
-                Fvector part_imp = blast_dir;
-                part_imp.mul(per_part_mag);
-                for (u32 i = 1; i < part_count; ++i) {
-                    GetPhysicsCore()->ApplyRagdollLinearImpulse(m_ragdoll_handle, i, part_imp);
-                }
-
-                if (part_idx != 0 && part_idx < part_count) {
-                    Fvector local_hit = blast_dir;
-                    local_hit.mul(clamped_impulse * 0.15f);
-                    GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, local_hit, hit_pos);
-                }
+            if (part_count > 0 && part_idx < part_count) {
+                Fvector hit_imp = blast_dir;
+                hit_imp.mul(clamped_impulse);
+                GetPhysicsCore()->ApplyRagdollImpulse(m_ragdoll_handle, (u32)part_idx, hit_imp, hit_pos);
             }
         }
     }
@@ -712,8 +778,8 @@ void CActiveRagdollController::Update(float dt) {
         // Smooth step decay
         float ease = t * t * (3.0f - 2.0f * t);
         
-        float current_stiffness = m_motor_stiffness * (1.0f - ease);
-        float current_damping = m_motor_damping * (1.0f - ease);
+        float current_stiffness = 12.0f * (1.0f - ease);
+        float current_damping = 4.0f * (1.0f - ease * 0.7f);
         
         GetPhysicsCore()->SetRagdollMotorStiffness(m_ragdoll_handle, current_stiffness);
         GetPhysicsCore()->SetRagdollMotorDamping(m_ragdoll_handle, current_damping);

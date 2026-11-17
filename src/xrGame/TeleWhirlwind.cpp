@@ -480,7 +480,6 @@ void CTeleWhirlwindObject::switch_state(ETelekineticState new_state)
 bool CTeleWhirlwindObject::can_activate(CPhysicsShellHolder* obj)
 {
     if (!obj) return false;
-    if (smart_cast<CPHDestroyableNotificate*>(obj)) return false;
     CEntityAlive* ea = smart_cast<CEntityAlive*>(obj);
     if (ea && ea->g_Alive()) return false;
     return (obj->m_pPhysicsShell || (obj->character_physics_support() && obj->character_physics_support()->active_ragdoll()));

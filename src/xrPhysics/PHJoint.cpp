@@ -11,7 +11,7 @@
 const float hinge2_spring = 20000.f;
 const float hinge2_damping = 1000.f;
 
-IC CharacterVirtualHandle body_for_joint(CPhysicsElement* ee)
+IC BodyHandle body_for_joint(CPhysicsElement* ee)
 {
     VERIFY(smart_cast<CPHElement*>(ee));
     CPHElement* e = static_cast<CPHElement*>(ee);
@@ -87,13 +87,13 @@ void CPHJoint::CreateHinge()
     float lo, hi;
     axis0.set(0, 0, 0);
 
-    CharacterVirtualHandle b1 = body_for_joint(first);
-    CharacterVirtualHandle b2 = body_for_joint(second);
+    BodyHandle b1 = body_for_joint(first);
+    BodyHandle b2 = body_for_joint(second);
 
     CalcAxis(0, axis0, lo, hi, first_matrix, second_matrix);
 
     Fvector ref_normal;
-    if (b1 != INVALID_CHARACTER_VIRTUAL_HANDLE)
+    if (b1 != INVALID_BODY_HANDLE)
         first_matrix.transform_dir(ref_normal, Fvector().set(1.f, 0.f, 0.f));
     else
         pShell->mXFORM.transform_dir(ref_normal, Fvector().set(1.f, 0.f, 0.f));
@@ -101,7 +101,7 @@ void CPHJoint::CreateHinge()
     ref_normal.sub(Fvector(axis0).mul(axis0.dotproduct(ref_normal)));
     if (ref_normal.square_magnitude() < 0.001f)
     {
-        if (b1 != INVALID_CHARACTER_VIRTUAL_HANDLE)
+        if (b1 != INVALID_BODY_HANDLE)
             first_matrix.transform_dir(ref_normal, Fvector().set(0.f, 0.f, 1.f));
         else
             pShell->mXFORM.transform_dir(ref_normal, Fvector().set(0.f, 0.f, 1.f));
@@ -141,8 +141,8 @@ void CPHJoint::CreateHinge2()
     default: NODEFAULT;
     }
 
-    CharacterVirtualHandle b1 = body_for_joint(first);
-    CharacterVirtualHandle b2 = body_for_joint(second);
+    BodyHandle b1 = body_for_joint(first);
+    BodyHandle b2 = body_for_joint(second);
 
     Fmatrix first_matrix_inv;
     first_matrix_inv.set(first_matrix);
@@ -155,7 +155,7 @@ void CPHJoint::CreateHinge2()
     axis1.set(0, 0, 0);
 
     CalcAxis(0, axis0, lo0, hi0, first_matrix, second_matrix);
-    if (b1 == INVALID_CHARACTER_VIRTUAL_HANDLE) axis0.invert();
+    if (b1 == INVALID_BODY_HANDLE) axis0.invert();
 
     CalcAxis(1, axis1, lo1, hi1, first_matrix, second_matrix);
 
@@ -181,8 +181,8 @@ void CPHJoint::CreateSlider()
     VERIFY(first && second);
     first->GetGlobalTransformDynamic(&first_matrix);
     second->GetGlobalTransformDynamic(&second_matrix);
-    CharacterVirtualHandle body1 = body_for_joint(first);
-    CharacterVirtualHandle body2 = body_for_joint(second);
+    BodyHandle body1 = body_for_joint(first);
+    BodyHandle body2 = body_for_joint(second);
 
     pos.set(0, 0, 0);
     switch (vs_anchor)
@@ -241,8 +241,8 @@ void CPHJoint::CreateFullControl()
     VERIFY(first && second);
     first->GetGlobalTransformDynamic(&first_matrix);
     second->GetGlobalTransformDynamic(&second_matrix);
-    CharacterVirtualHandle body1 = body_for_joint(first);
-    CharacterVirtualHandle body2 = body_for_joint(second);
+    BodyHandle body1 = body_for_joint(first);
+    BodyHandle body2 = body_for_joint(second);
 
     pos.set(0, 0, 0);
     switch (vs_anchor)

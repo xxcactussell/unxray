@@ -883,8 +883,36 @@ void JoltPhysicsCore::DestroyBody(BodyHandle body_handle) {
     }
 
     JPH::BodyID id(body_handle);
+
+    // Remove any constraints connected to this body before destruction to prevent dangling constraint handles
+    for (auto it = m_constraints.begin(); it != m_constraints.end(); ) {
+        JPH::Constraint* c = it->second.GetPtr();
+        if (c && c->GetType() == JPH::EConstraintType::TwoBodyConstraint) {
+            auto* tc = static_cast<JPH::TwoBodyConstraint*>(c);
+            const JPH::Body* b1 = tc->GetBody1();
+            const JPH::Body* b2 = tc->GetBody2();
+            if ((b1 && b1->GetID() == id) || (b2 && b2->GetID() == id)) {
+                m_physics_system->RemoveConstraint(it->second);
+                it = m_constraints.erase(it);
+                continue;
+            }
+        }
+        ++it;
+    }
+
+    auto conn_it = m_connected_bodies.find(id);
+    if (conn_it != m_connected_bodies.end()) {
+        for (const auto& other_id : conn_it->second) {
+            auto other_it = m_connected_bodies.find(other_id);
+            if (other_it != m_connected_bodies.end()) {
+                other_it->second.erase(std::remove(other_it->second.begin(), other_it->second.end(), id), other_it->second.end());
+            }
+        }
+        m_connected_bodies.erase(conn_it);
+    }
+    m_ignore_static_bodies.erase(id);
+
     JPH::BodyInterface& body_interface = m_physics_system->GetBodyInterface();
-    
     body_interface.RemoveBody(id);
     body_interface.DestroyBody(id);
 }
@@ -1147,6 +1175,14 @@ void JoltPhysicsCore::SetBodyMotionType(BodyHandle body_handle, int motion_type)
     body_interface.SetObjectLayer(id, j_layer);
 }
 
+void JoltPhysicsCore::SetBodyShape(BodyHandle body_handle, PhysicsShapeHandle shape, bool update_mass) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE || !shape) return;
+
+    JPH::BodyID id(body_handle);
+    const JPH::Shape* j_shape = reinterpret_cast<const JPH::Shape*>(shape);
+    m_physics_system->GetBodyInterface().SetShape(id, j_shape, update_mass, JPH::EActivation::Activate);
+}
+
 BodyHandle JoltPhysicsCore::CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) 
 {
     if (!m_physics_system || !shape_handle) return INVALID_BODY_HANDLE;
@@ -1283,10 +1319,6 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
 
             settings.mSwingType = JPH::ESwingType::Pyramid;
 
-            settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationX);
-            settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationY);
-            settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationZ);
-            
             // Лямбда для безопасного назначения лимитов SixDOF осей
             auto apply_limit = [&](JPH::SixDOFConstraintSettings::EAxis axis, float lo, float hi) {
                 if (lo <= -M_PI && hi >= M_PI) {
@@ -1299,13 +1331,31 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
                 }
             };
 
-            apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationX, limits_lo.x, limits_hi.x);
-            apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationY, limits_lo.y, limits_hi.y);
-            
-            if (type == 3) {
-                apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationZ, limits_lo.z, limits_hi.z);
-            } else {
+            if (type == 2) {
+                // Hinge2 (Wheel Joint):
+                // TranslationX is suspension axis with travel and soft spring
+                settings.SetLimitedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationX, -0.15f, 0.15f);
+                settings.mLimitsSpringSettings[JPH::SixDOFConstraintSettings::EAxis::TranslationX].mMode = JPH::ESpringMode::FrequencyAndDamping;
+                settings.mLimitsSpringSettings[JPH::SixDOFConstraintSettings::EAxis::TranslationX].mFrequency = 6.0f;
+                settings.mLimitsSpringSettings[JPH::SixDOFConstraintSettings::EAxis::TranslationX].mDamping = 0.8f;
+
+                settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationY);
+                settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationZ);
+
+                // RotationX is steering axis with limits
+                apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationX, limits_lo.x, limits_hi.x);
+                // RotationY is wheel drive axle: free to spin
+                settings.MakeFreeAxis(JPH::SixDOFConstraintSettings::EAxis::RotationY);
+                // RotationZ is fixed
                 settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::RotationZ);
+            } else {
+                settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationX);
+                settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationY);
+                settings.MakeFixedAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationZ);
+
+                apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationX, limits_lo.x, limits_hi.x);
+                apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationY, limits_lo.y, limits_hi.y);
+                apply_limit(JPH::SixDOFConstraintSettings::EAxis::RotationZ, limits_lo.z, limits_hi.z);
             }
 
             constraint = settings.Create(*const_cast<JPH::Body*>(b1), *const_cast<JPH::Body*>(b2));
@@ -1327,6 +1377,64 @@ JointHandle JoltPhysicsCore::CreateJoint(int type, BodyHandle body1, BodyHandle 
     }
 
     return INVALID_JOINT_HANDLE;
+}
+
+JointHandle JoltPhysicsCore::CreateCaptureJoint(BodyHandle body, const Fvector& anchor, float max_force)
+{
+    if (!m_physics_system || body == INVALID_BODY_HANDLE) return INVALID_JOINT_HANDLE;
+
+    JPH::BodyID id(body);
+    JPH::BodyLockWrite lock(m_physics_system->GetBodyLockInterface(), id);
+    if (!lock.Succeeded()) return INVALID_JOINT_HANDLE;
+
+    JPH::Body& b2 = lock.GetBody();
+    if (!b2.IsDynamic()) return INVALID_JOINT_HANDLE;
+
+    JPH::Body* b1 = &JPH::Body::sFixedToWorld;
+
+    JPH::SixDOFConstraintSettings settings;
+    settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+    settings.mPosition1 = settings.mPosition2 = JPH::Vec3(anchor.x, anchor.y, anchor.z);
+
+    // Free translation axes so position motors drive them smoothly
+    settings.MakeFreeAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationX);
+    settings.MakeFreeAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationY);
+    settings.MakeFreeAxis(JPH::SixDOFConstraintSettings::EAxis::TranslationZ);
+
+    // Free rotation so grabbed objects naturally dangle/pivot around the grab point
+    settings.MakeFreeAxis(JPH::SixDOFConstraintSettings::EAxis::RotationX);
+    settings.MakeFreeAxis(JPH::SixDOFConstraintSettings::EAxis::RotationY);
+    settings.MakeFreeAxis(JPH::SixDOFConstraintSettings::EAxis::RotationZ);
+
+    // Light angular friction to prevent infinite spinning
+    settings.mMaxFriction[JPH::SixDOFConstraintSettings::EAxis::RotationX] = 2.0f;
+    settings.mMaxFriction[JPH::SixDOFConstraintSettings::EAxis::RotationY] = 2.0f;
+    settings.mMaxFriction[JPH::SixDOFConstraintSettings::EAxis::RotationZ] = 2.0f;
+
+    // Translation motors in Position mode
+    float limit = (max_force > 0.0f) ? max_force : 25000.0f;
+    for (int ax = 0; ax < 3; ++ax) {
+        auto axis = static_cast<JPH::SixDOFConstraintSettings::EAxis>(ax);
+        settings.mMotorSettings[axis].mSpringSettings.mMode = JPH::ESpringMode::FrequencyAndDamping;
+        settings.mMotorSettings[axis].mSpringSettings.mFrequency = 10.0f;
+        settings.mMotorSettings[axis].mSpringSettings.mDamping = 1.0f;
+        settings.mMotorSettings[axis].SetForceLimit(limit);
+    }
+
+    JPH::Constraint* constraint = settings.Create(*b1, b2);
+    if (!constraint) return INVALID_JOINT_HANDLE;
+
+    auto* six = static_cast<JPH::SixDOFConstraint*>(constraint);
+    six->SetMotorState(JPH::SixDOFConstraint::EAxis::TranslationX, JPH::EMotorState::Position);
+    six->SetMotorState(JPH::SixDOFConstraint::EAxis::TranslationY, JPH::EMotorState::Position);
+    six->SetMotorState(JPH::SixDOFConstraint::EAxis::TranslationZ, JPH::EMotorState::Position);
+
+    m_physics_system->AddConstraint(constraint);
+    JointHandle handle = m_next_joint_handle++;
+    m_constraints[handle] = constraint;
+
+    m_physics_system->GetBodyInterfaceNoLock().ActivateBody(b2.GetID());
+    return handle;
 }
 
 void JoltPhysicsCore::DestroyJoint(JointHandle joint) 
@@ -1437,6 +1545,61 @@ void JoltPhysicsCore::SetJointMotor(JointHandle joint, int axis_num, float force
     }
 }
 
+void JoltPhysicsCore::SetJointTargetPosition(JointHandle joint, const Fvector& target_pos)
+{
+    auto it = m_constraints.find(joint);
+    if (it == m_constraints.end()) return;
+
+    JPH::Constraint* c = it->second.GetPtr();
+    if (c->GetSubType() == JPH::EConstraintSubType::SixDOF) {
+        auto* six = static_cast<JPH::SixDOFConstraint*>(c);
+        JPH::Vec3 initial_anchor = six->GetConstraintToBody1Matrix().GetTranslation();
+        JPH::Vec3 target(target_pos.x, target_pos.y, target_pos.z);
+        JPH::Vec3 offset = target - initial_anchor;
+        six->SetTargetPositionCS(offset);
+
+        if (m_physics_system) {
+            JPH::TwoBodyConstraint* two_body_c = static_cast<JPH::TwoBodyConstraint*>(c);
+            const JPH::Body* b2 = two_body_c->GetBody2();
+            if (b2 && b2->IsDynamic()) {
+                m_physics_system->GetBodyInterfaceNoLock().ActivateBody(b2->GetID());
+            }
+        }
+    }
+}
+
+void JoltPhysicsCore::SetJointTargetTransform(JointHandle joint, const Fmatrix& target_transform)
+{
+    auto it = m_constraints.find(joint);
+    if (it == m_constraints.end()) return;
+
+    JPH::Constraint* c = it->second.GetPtr();
+    if (c->GetSubType() == JPH::EConstraintSubType::SixDOF) {
+        auto* six = static_cast<JPH::SixDOFConstraint*>(c);
+        JPH::Vec3 initial_anchor = six->GetConstraintToBody1Matrix().GetTranslation();
+        JPH::Vec3 target(target_transform.c.x, target_transform.c.y, target_transform.c.z);
+        JPH::Vec3 offset = target - initial_anchor;
+        six->SetTargetPositionCS(offset);
+
+        JPH::Mat44 rot_mat(
+            JPH::Vec4(target_transform.i.x, target_transform.i.y, target_transform.i.z, 0.0f),
+            JPH::Vec4(target_transform.j.x, target_transform.j.y, target_transform.j.z, 0.0f),
+            JPH::Vec4(target_transform.k.x, target_transform.k.y, target_transform.k.z, 0.0f),
+            JPH::Vec4(0, 0, 0, 1)
+        );
+        JPH::Quat target_rot = rot_mat.GetQuaternion().Normalized();
+        six->SetTargetOrientationCS(target_rot);
+
+        if (m_physics_system) {
+            JPH::TwoBodyConstraint* two_body_c = static_cast<JPH::TwoBodyConstraint*>(c);
+            const JPH::Body* b2 = two_body_c->GetBody2();
+            if (b2 && b2->IsDynamic()) {
+                m_physics_system->GetBodyInterfaceNoLock().ActivateBody(b2->GetID());
+            }
+        }
+    }
+}
+
 void JoltPhysicsCore::SetJointSpringDamping(JointHandle joint, int axis_num, float erp, float cfm)
 {
     auto it = m_constraints.find(joint);
@@ -1465,7 +1628,10 @@ void JoltPhysicsCore::SetJointSpringDamping(JointHandle joint, int axis_num, flo
             static_cast<JPH::SliderConstraint*>(c)->SetLimitsSpringSettings(spring);
         break;
     case JPH::EConstraintSubType::SixDOF:
-        if (axis_num >= 0 && axis_num < 3) {
+        if (axis_num == -1) {
+            auto* six = static_cast<JPH::SixDOFConstraint*>(c);
+            six->SetLimitsSpringSettings(JPH::SixDOFConstraintSettings::EAxis::TranslationX, spring);
+        } else if (axis_num >= 0 && axis_num < 3) {
             auto ax = axis_num == 0 ? JPH::SixDOFConstraintSettings::EAxis::RotationX
                     : axis_num == 1 ? JPH::SixDOFConstraintSettings::EAxis::RotationY
                                     : JPH::SixDOFConstraintSettings::EAxis::RotationZ;
@@ -1492,6 +1658,12 @@ float JoltPhysicsCore::GetJointAxisAngle(JointHandle joint, int axis_num) const 
         return static_cast<JPH::HingeConstraint*>(c)->GetCurrentAngle();
     } else if (c->GetSubType() == JPH::EConstraintSubType::Slider) {
         return static_cast<JPH::SliderConstraint*>(c)->GetCurrentPosition();
+    } else if (c->GetSubType() == JPH::EConstraintSubType::SixDOF) {
+        auto* six = static_cast<JPH::SixDOFConstraint*>(c);
+        JPH::Vec3 euler = six->GetRotationInConstraintSpace().GetEulerAngles();
+        if (axis_num == 0) return euler.GetX();
+        if (axis_num == 1) return euler.GetY();
+        if (axis_num == 2) return euler.GetZ();
     }
     return 0.0f;
 }
@@ -1649,12 +1821,43 @@ void JoltPhysicsCore::SetBodyCollideWithStatics(BodyHandle body_handle, bool col
         m_physics_system->GetBodyInterface().SetObjectLayer(id, layer);
 }
 
+void JoltPhysicsCore::SetBodyCCD(BodyHandle body_handle, bool enable) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().SetMotionQuality(
+        id, enable ? JPH::EMotionQuality::LinearCast : JPH::EMotionQuality::Discrete);
+}
+
 void JoltPhysicsCore::SetBodyObjectLayer(BodyHandle body_handle, u32 layer) {
     if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
     JPH::BodyID id(body_handle);
     if (m_physics_system->GetBodyInterface().IsAdded(id)) {
         m_physics_system->GetBodyInterface().SetObjectLayer(id, static_cast<JPH::ObjectLayer>(layer));
     }
+}
+
+void JoltPhysicsCore::SetBodyFriction(BodyHandle body_handle, float friction) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().SetFriction(id, friction);
+}
+
+float JoltPhysicsCore::GetBodyFriction(BodyHandle body_handle) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return 0.7f;
+    JPH::BodyID id(body_handle);
+    return m_physics_system->GetBodyInterface().GetFriction(id);
+}
+
+void JoltPhysicsCore::SetBodyRestitution(BodyHandle body_handle, float restitution) {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return;
+    JPH::BodyID id(body_handle);
+    m_physics_system->GetBodyInterface().SetRestitution(id, restitution);
+}
+
+float JoltPhysicsCore::GetBodyRestitution(BodyHandle body_handle) const {
+    if (!m_physics_system || body_handle == INVALID_BODY_HANDLE) return 0.0f;
+    JPH::BodyID id(body_handle);
+    return m_physics_system->GetBodyInterface().GetRestitution(id);
 }
 
 
@@ -2543,7 +2746,8 @@ RagdollHandle JoltPhysicsCore::CreateRagdoll(const SRagdollSettings& settings) {
             jph_part.mMotionType = JPH::EMotionType::Dynamic;
         }
         
-        jph_part.mMotionQuality = JPH::EMotionQuality::LinearCast;
+        jph_part.mMotionQuality = JPH::EMotionQuality::Discrete;
+        jph_part.mAllowSleeping = true;
         
         jph_part.mObjectLayer = Layers::RAGDOLL;
     }
@@ -2767,15 +2971,8 @@ void JoltPhysicsCore::SetRagdollTargetPose(RagdollHandle handle, const Fmatrix* 
             u32 j_count = (u32)target_pose.GetJointMatrices().size();
             u32 it_count = (count < j_count) ? count : j_count;
             
-            const auto& ragdoll_settings = m_ragdoll_settings[handle];
             for (u32 i = 0; i < it_count; ++i) {
-                int parent_idx = ragdoll_settings->mSkeleton->GetJoint(i).mParentJointIndex;
-                if (parent_idx == -1 || parent_idx >= (int)count) {
-                    target_pose.GetJointMatrices()[i] = jph_matrices[i];
-                } else {
-                    JPH::Mat44 parent_inv = jph_matrices[parent_idx].InversedRotationTranslation();
-                    target_pose.GetJointMatrices()[i] = parent_inv * jph_matrices[i];
-                }
+                target_pose.GetJointMatrices()[i] = jph_matrices[i];
             }
             
             target_pose.CalculateJointStates();
@@ -3302,4 +3499,20 @@ bool JoltPhysicsCore::FindFreeShapePlacement(PhysicsShapeHandle shape, const Fve
     out_pos = start_pos;
     return false;
 }
+
+void JoltPhysicsCore::SetRagdollVelocity(RagdollHandle handle, const Fvector& linear_vel, const Fvector& angular_vel) {
+    auto it = m_ragdolls.find(handle);
+    if (it != m_ragdolls.end() && m_physics_system) {
+        JPH::Vec3 l_vel(linear_vel.x, linear_vel.y, linear_vel.z);
+        JPH::Vec3 a_vel(angular_vel.x, angular_vel.y, angular_vel.z);
+        it->second->SetLinearAndAngularVelocity(l_vel, a_vel);
+        for (u32 i = 0; i < it->second->GetBodyCount(); ++i) {
+            JPH::BodyID id = it->second->GetBodyID(i);
+            if (!id.IsInvalid()) {
+                m_physics_system->GetBodyInterface().ActivateBody(id);
+            }
+        }
+    }
+}
+
 

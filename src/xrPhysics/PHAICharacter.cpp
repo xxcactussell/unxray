@@ -13,7 +13,10 @@
 #include "debug_output.h"
 #endif
 
-CPHAICharacter::CPHAICharacter() { m_forced_physics_control = false; }
+CPHAICharacter::CPHAICharacter() { 
+    m_forced_physics_control = false; 
+    m_last_try_pos_frame = 0;
+}
 
 void CPHAICharacter::Create(Fvector sizes)
 {
@@ -101,6 +104,7 @@ bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
     SetPosition(pos_new);
     m_last_move.sub(pos_new, current_pos).mul(1.f / Device.fTimeDelta);
     m_safe_velocity.set(m_last_move);
+    m_last_try_pos_frame = Device.dwFrame;
     m_char_handle_interpolation.UpdatePositions();
     m_char_handle_interpolation.UpdatePositions();
     
@@ -113,7 +117,7 @@ bool CPHAICharacter::TryPosition(Fvector pos, bool exact_state)
 
 void CPHAICharacter::GetSavedVelocity(Fvector& vvel)
 {
-    if (m_last_move.square_magnitude() > EPS_L)
+    if (m_last_try_pos_frame == Device.dwFrame && m_last_move.square_magnitude() > EPS_L)
         vvel.set(m_last_move);
     else
         inherited::GetSavedVelocity(vvel);
@@ -121,7 +125,7 @@ void CPHAICharacter::GetSavedVelocity(Fvector& vvel)
 
 void CPHAICharacter::GetVelocity(Fvector& vvel) const
 {
-    if (m_last_move.square_magnitude() > EPS_L)
+    if (m_last_try_pos_frame == Device.dwFrame && m_last_move.square_magnitude() > EPS_L)
         vvel.set(m_last_move);
     else
         inherited::GetVelocity(vvel);

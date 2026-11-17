@@ -9,6 +9,7 @@
 #include "Car.h"
 #include "Include/xrRender/Kinematics.h"
 #include "xrPhysics/ExtendedGeom.h"
+#include "xrPhysicsCore/IPhysicsCore.h"
 
 CCar::SWheel::SWheelCollisionParams::SWheelCollisionParams()
 {
@@ -22,7 +23,17 @@ IC void CCar::SWheel::applywheelCollisionParams(
     const Fvector& contact_normal, const Fvector& contact_pos, 
     SGameMtl* material_1, SGameMtl* material_2)
 {
- 
+    if (!my_geom) return;
+    SWheelCollisionParams* cp = (SWheelCollisionParams*)my_geom->get_callback_data();
+    if (!cp) return;
+
+    BodyHandle b = my_geom->m_char_handle;
+    if (b != INVALID_BODY_HANDLE)
+    {
+        float surface_friction = material_2 ? material_2->fPHFriction : 1.0f;
+        float final_friction = std::clamp(surface_friction * cp->mu_factor * 1.5f, 0.2f, 3.5f);
+        GetPhysicsCore()->SetBodyFriction(b, final_friction);
+    }
 }
 
 void CCar::SWheel::WheellCollisionCallback(
@@ -31,11 +42,8 @@ void CCar::SWheel::WheellCollisionCallback(
     const Fvector& contact_normal, const Fvector& contact_pos, 
     SGameMtl* material_1, SGameMtl* material_2)
 {
-    IPhysicsShellHolder* ud1 = my_geom ? (IPhysicsShellHolder*)my_geom->get_callback_data() : nullptr;
-    IPhysicsShellHolder* ud2 = oposite_geom ? (IPhysicsShellHolder*)oposite_geom->get_callback_data() : nullptr;
-
-    applywheelCollisionParams(ud1, do_colide, my_geom, oposite_geom, contact_normal, contact_pos, material_1, material_2);
-    applywheelCollisionParams(ud2, do_colide, oposite_geom, my_geom, contact_normal, contact_pos, material_1, material_2);
+    applywheelCollisionParams(nullptr, do_colide, my_geom, oposite_geom, contact_normal, contact_pos, material_1, material_2);
+    applywheelCollisionParams(nullptr, do_colide, oposite_geom, my_geom, contact_normal, contact_pos, material_2, material_1);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -64,11 +72,13 @@ void CCar::SWheel::Init()
     joint = j;
     joint->SetBackRef(&joint);
 
-    // R_ASSERT2(dJointGetType(joint->GetDJoint())==dJointTypeHinge2,"No wheel join was set for a wheel, only
-    // wheel-joint valid!!!");
     R_ASSERT2(joint->IsWheelJoint(), "No wheel join was set for a wheel, only wheel-joint valid!!!");
 
     ApplyDriveAxisVelTorque(0.f, 0.f);
+    if (e && e->get_body() != INVALID_BODY_HANDLE)
+    {
+        GetPhysicsCore()->SetBodyFriction(e->get_body(), std::clamp(collision_params.mu_factor * 1.5f, 0.2f, 3.5f));
+    }
     e->add_ObjectContactCallback(WheellCollisionCallback);
     e->set_CallbackData((void*)&collision_params);
     e->SetAirResistance(0, 0);
@@ -99,14 +109,12 @@ void CCar::SWheel::ApplyDriveAxisTorque(float torque)
 {
     if (!joint)
         return;
-    // dJointSetHinge2Param(joint->GetDJoint(), dParamFMax2,torque);//car->m_axle_friction
     joint->SetForce(torque, 1);
 }
 void CCar::SWheel::ApplyDriveAxisVel(float vel)
 {
     if (!joint)
         return;
-    // dJointSetHinge2Param(joint->GetDJoint(), dParamVel2, vel);
     joint->SetVelocity(vel, 1);
 }
 
@@ -119,7 +127,6 @@ void CCar::SWheel::ApplySteerAxisVel(float vel)
 {
     if (!joint)
         return;
-    // dJointSetHinge2Param(joint->GetDJoint(), dParamVel, vel);
     joint->SetVelocity(vel, 0);
 }
 
@@ -127,7 +134,6 @@ void CCar::SWheel::ApplySteerAxisTorque(float torque)
 {
     if (!joint)
         return;
-    // dJointSetHinge2Param(joint->GetDJoint(), dParamFMax, torque);
     joint->SetForce(torque, 0);
 }
 
@@ -141,14 +147,12 @@ void CCar::SWheel::SetSteerHiLimit(float hi)
 {
     if (!joint)
         return;
-    // dJointSetHinge2Param(joint->GetDJoint(), dParamHiStop, hi);
     joint->SetHiLimitDynamic(0, hi);
 }
 void CCar::SWheel::SetSteerLoLimit(float lo)
 {
     if (!joint)
         return;
-    // dJointSetHinge2Param(joint->GetDJoint(), dParamLoStop, lo);
     joint->SetLoLimitDynamic(0, lo);
 }
 void CCar::SWheel::SetSteerLimits(float hi, float lo)
@@ -241,8 +245,7 @@ float CCar::SWheelDrive::ASpeed()
     CPhysicsJoint* J = pwheel->joint;
     if (!J)
         return 0.f;
-    // return (dJointGetHinge2Angle2Rate(J->GetDJoint()))*pos_fvd;//dFabs
-    return (J->GetAxisAngleRate(1)) * pos_fvd; // dFabs
+    return (J->GetAxisAngleRate(1)) * pos_fvd;
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void CCar::SWheelSteer::Init()
@@ -345,7 +348,6 @@ void CCar::SWheelSteer::Limit()
     // dJointID joint=J->GetDJoint();
     if (!limited)
     {
-        // dReal angle = dJointGetHinge2Angle1(joint);
         float angle = J->GetAxisAngle(0);
         if (_abs(angle) < M_PI / 180.f)
         {
@@ -361,7 +363,7 @@ float CCar::SWheelSteer::GetSteerAngle()
 {
     VERIFY(pwheel);
     VERIFY(pwheel->joint);
-    return -pos_right * pwheel->joint->GetAxisAngle(0); // dJointGetHinge2Angle1 (pwheel->joint->GetDJoint());
+    return -pos_right * pwheel->joint->GetAxisAngle(0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////

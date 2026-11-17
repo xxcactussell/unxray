@@ -99,6 +99,7 @@ public:
     virtual void SetIgnoreStatic();
     virtual void SetIgnoreDynamic();
     virtual void SetElementsCollideWithStatics(bool collide);
+    virtual void SetCCD(bool enable) override;
     virtual void SetRagDoll();
     virtual void SetIgnoreRagDoll();
 

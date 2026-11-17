@@ -49,17 +49,6 @@ extern BOOL death_anim_debug;
 #define USE_SMART_HITS
 #define USE_IK
 
-// void  NodynamicsCollide( bool& do_colide, bool bo1, dContact& c, SGameMtl * /*material_1*/, SGameMtl * /*material_2*/
-// )
-//{
-//	dBodyID body1=dGeomGetBody( c.geom.g1 );
-//	dBodyID body2=dGeomGetBody( c.geom.g2 );
-//	if( !body1 || !body2 || ( dGeomUserDataHasCallback( c.geom.g1,NodynamicsCollide )&& dGeomUserDataHasCallback(
-// c.geom.g2, NodynamicsCollide ) ) )
-//		return;
-//	do_colide = false;
-//}
-
 IC bool is_imotion(interactive_motion* im) { return im && im->is_enabled(); }
 
 CCharacterPhysicsSupport::~CCharacterPhysicsSupport()
@@ -443,6 +432,30 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
 
     if (m_active_ragdoll)
     {
+        Fvector char_vel = Fvector().set(0.f, 0.f, 0.f);
+        if (m_PhysicMovementControl)
+        {
+            m_PhysicMovementControl->GetCharacterVelocity(char_vel);
+        }
+
+        Fvector hit_pos;
+        IKinematics* k = smart_cast<IKinematics*>(m_EntityAlife.Visual());
+        if (k && H.bone() < k->LL_BoneCount() && H.bone() != BI_NONE)
+        {
+            const CBoneInstance& bi = k->LL_GetBoneInstance(H.bone());
+            Fmatrix bone_world;
+            bone_world.mul_43(m_EntityAlife.XFORM(), bi.mTransform);
+            bone_world.transform_tiny(hit_pos, H.bone_space_position());
+        }
+        else
+        {
+            hit_pos = m_EntityAlife.Position();
+        }
+
+        // 1. Snapshot visual pose and launch dynamic ragdoll with movement momentum BEFORE resetting animation
+        m_active_ragdoll->OnDeath(char_vel);
+        m_active_ragdoll->ApplyHit(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
+
         CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
         if (stalker)
         {
@@ -453,7 +466,6 @@ void CCharacterPhysicsSupport::KillHit(SHit& H)
         m_get_up_motion.invalidate();
 
         DestroyIKController();
-        m_active_ragdoll->OnDeath();
         m_eState = esDead;
         m_flags.set(fl_death_anim_on, FALSE);
         m_flags.set(fl_skeleton_in_shell, TRUE);
@@ -634,6 +646,17 @@ void CCharacterPhysicsSupport::OnActiveRagdollGetUp()
             m_PhysicMovementControl->SetPosition(pelvis_pos);
             m_PhysicMovementControl->SetVelocity(Fvector().set(0, 0, 0));
         }
+
+        if (ai().get_level_graph())
+        {
+            u32 v_id = ai().level_graph().vertex(m_EntityAlife.ai_location().level_vertex_id(), pelvis_pos);
+            if (ai().level_graph().valid_vertex_id(v_id))
+            {
+                m_EntityAlife.ai_location().level_vertex(v_id);
+                if (ai().get_cross_table())
+                    m_EntityAlife.ai_location().game_vertex(ai().cross_table().vertex(v_id).game_vertex_id());
+            }
+        }
     }
 
     CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
@@ -728,6 +751,17 @@ MotionID CCharacterPhysicsSupport::SelectGetUpAnimation(bool& animation_movement
 
 void CCharacterPhysicsSupport::OnGetUpAnimationEnd()
 {
+    if (ai().get_level_graph())
+    {
+        u32 v_id = ai().level_graph().vertex(m_EntityAlife.ai_location().level_vertex_id(), m_EntityAlife.Position());
+        if (ai().level_graph().valid_vertex_id(v_id))
+        {
+            m_EntityAlife.ai_location().level_vertex(v_id);
+            if (ai().get_cross_table())
+                m_EntityAlife.ai_location().game_vertex(ai().cross_table().vertex(v_id).game_vertex_id());
+        }
+    }
+
     CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
     if (stalker)
     {
@@ -736,7 +770,9 @@ void CCharacterPhysicsSupport::OnGetUpAnimationEnd()
         stalker->animation().global().reset();
         if (!stalker->wounded())
         {
+            stalker->movement().on_travel_point_change(0);
             stalker->movement().enable_movement(true);
+            stalker->movement().detail().make_inactual();
         }
     }
     else
@@ -744,7 +780,9 @@ void CCharacterPhysicsSupport::OnGetUpAnimationEnd()
         CCustomMonster* monster = smart_cast<CCustomMonster*>(&m_EntityAlife);
         if (monster)
         {
+            monster->movement().on_travel_point_change(0);
             monster->movement().enable_movement(true);
+            monster->movement().detail().make_inactual();
         }
     }
 
@@ -797,7 +835,10 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
         m_character_shell_control.set_kill_hit(H);
 
     if (!m_pPhysicsShell && is_killing)
+    {
         KillHit(H);
+        return;
+    }
 
     if (m_flags.test(fl_use_hit_anims) && Type() != etBitting &&
         !m_flags.test(fl_death_anim_on) && !is_killing && m_EntityAlife.g_Alive() && !IsKnockedDown() && !m_active_ragdoll) //&& Type() == etStalker
@@ -824,6 +865,16 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
 
         if (is_killing || !m_EntityAlife.g_Alive())
         {
+            Fvector char_vel = Fvector().set(0.f, 0.f, 0.f);
+            if (m_PhysicMovementControl)
+            {
+                m_PhysicMovementControl->GetCharacterVelocity(char_vel);
+            }
+
+            // 1. Snapshot visual pose and launch dynamic ragdoll with movement momentum BEFORE resetting animation
+            m_active_ragdoll->OnDeath(char_vel);
+            m_active_ragdoll->ApplyHit(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
+
             IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
             if (ka)
             {
@@ -840,8 +891,6 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
             m_get_up_motion.invalidate();
 
             DestroyIKController();
-            m_active_ragdoll->OnDeath();
-            m_active_ragdoll->ApplyHit(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
         }
         else
         {
@@ -883,31 +932,22 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
             bool can_knockdown = true;
             if (m_eType == etBitting)
             {
-                CLASS_ID cls = m_EntityAlife.CLS_ID;
-
-                if (cls == CLSID_AI_GIANT || 
-                    cls == CLSID_AI_POLTERGEIST || 
-                    cls == CLSID_AI_CONTROLLER || 
-                    cls == CLSID_AI_BURER)
-                {
-                    can_knockdown = false;
-                }
-                else
-                {
-                    LPCSTR sect = m_EntityAlife.cNameSect().c_str();
-                    if (strstr(sect, "gigant") || 
-                        strstr(sect, "polter") || 
-                        strstr(sect, "burer") || 
-                        strstr(sect, "controller"))
-                    {
-                        can_knockdown = false;
-                    }
-                }
+                // Mutants do not have stand-up animations in their models, so ragdoll knockdown is disabled for them
+                can_knockdown = false;
             }
 
             if (can_knockdown && (is_explosion || is_heavy_strike || is_heavy_firearm || is_leg_hit || 
                 (m_active_ragdoll && (m_active_ragdoll->GetState() == ERagdollState::GettingUp || m_active_ragdoll->GetState() == ERagdollState::MotorRampingUp))))
             {
+                Fvector char_vel = Fvector().set(0.f, 0.f, 0.f);
+                if (m_PhysicMovementControl)
+                {
+                    m_PhysicMovementControl->GetCharacterVelocity(char_vel);
+                }
+
+                // 1. Snapshot visual pose and initialize knockdown with movement momentum BEFORE resetting animation
+                m_active_ragdoll->KnockDown(H.bone(), H.direction(), H.phys_impulse(), hit_pos, char_vel);
+
                 CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&m_EntityAlife);
                 if (stalker)
                 {
@@ -919,7 +959,6 @@ void CCharacterPhysicsSupport::in_Hit(SHit& H, bool is_killing)
                 m_get_up_motion.invalidate();
 
                 DestroyIKController();
-                m_active_ragdoll->KnockDown(H.bone(), H.direction(), H.phys_impulse(), hit_pos);
             }
             else
             {
@@ -991,7 +1030,12 @@ void CCharacterPhysicsSupport::in_UpdateCL()
         if (!m_EntityAlife.g_Alive()) {
             auto state = m_active_ragdoll->GetState();
             if (state != ERagdollState::Dead && state != ERagdollState::Dying && state != ERagdollState::Inactive) {
-                m_active_ragdoll->OnDeath();
+                Fvector char_vel = Fvector().set(0.f, 0.f, 0.f);
+                if (m_PhysicMovementControl)
+                {
+                    m_PhysicMovementControl->GetCharacterVelocity(char_vel);
+                }
+                m_active_ragdoll->OnDeath(char_vel);
             }
         }
         m_active_ragdoll->Update(Device.fTimeDelta);
@@ -1840,14 +1884,20 @@ bool CCharacterPhysicsSupport::can_drop_active_weapon()
 
 void CCharacterPhysicsSupport::in_Die()
 {
+    Fvector char_vel = Fvector().set(0.f, 0.f, 0.f);
+    if (m_PhysicMovementControl)
+    {
+        m_PhysicMovementControl->GetCharacterVelocity(char_vel);
+    }
+
+    if (m_active_ragdoll) {
+        m_active_ragdoll->OnDeath(char_vel);
+    }
+
     IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_EntityAlife.Visual());
     if (ka)
     {
         ka->SetUpdateTracksCalback(&tracks_disable_update);
-    }
-
-    if (m_active_ragdoll) {
-        m_active_ragdoll->OnDeath();
     }
 
     if (m_hit_valide_time < Device.dwTimeGlobal || !m_sv_hit.is_valide())

@@ -32,7 +32,9 @@ bool CTelekineticObject::init(CTelekinesis* tele, CPhysicsShellHolder* obj, floa
     object = obj;
 
     float base_y = obj->Position().y;
-    if (obj->character_physics_support() && obj->character_physics_support()->active_ragdoll())
+    if (obj->m_pPhysicsShell && obj->m_pPhysicsShell->isActive() && obj->m_pPhysicsShell->get_ElementByStoreOrder(0))
+        base_y = obj->m_pPhysicsShell->get_ElementByStoreOrder(0)->mass_Center().y;
+    else if (obj->character_physics_support() && obj->character_physics_support()->active_ragdoll())
         base_y = obj->character_physics_support()->active_ragdoll()->GetSimulatedPosition(0).y;
 
     target_height = base_y + h;
@@ -49,7 +51,10 @@ bool CTelekineticObject::init(CTelekinesis* tele, CPhysicsShellHolder* obj, floa
     m_rotate = rot;
 
     if (object->m_pPhysicsShell)
+    {
         object->m_pPhysicsShell->set_ApplyByGravity(FALSE);
+        object->m_pPhysicsShell->Enable();
+    }
 
     return true;
 }
@@ -176,7 +181,9 @@ void CTelekineticObject::keep()
 
     // проверить высоту
     float cur_h = object->Position().y;
-    if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
+    if (object->m_pPhysicsShell && object->m_pPhysicsShell->isActive() && object->m_pPhysicsShell->get_ElementByStoreOrder(0))
+        cur_h = object->m_pPhysicsShell->get_ElementByStoreOrder(0)->mass_Center().y;
+    else if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
         cur_h = object->character_physics_support()->active_ragdoll()->GetSimulatedPosition(0).y;
 
     // установить dir в соответствие с текущей высотой
@@ -338,7 +345,9 @@ bool CTelekineticObject::check_height()
         return true;
 
     float cur_y = object->Position().y;
-    if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
+    if (object->m_pPhysicsShell && object->m_pPhysicsShell->isActive() && object->m_pPhysicsShell->get_ElementByStoreOrder(0))
+        cur_y = object->m_pPhysicsShell->get_ElementByStoreOrder(0)->mass_Center().y;
+    else if (object->character_physics_support() && object->character_physics_support()->active_ragdoll())
         cur_y = object->character_physics_support()->active_ragdoll()->GetSimulatedPosition(0).y;
 
     return (cur_y > target_height);
@@ -382,8 +391,6 @@ void CTelekineticObject::rotate()
 bool CTelekineticObject::can_activate(CPhysicsShellHolder* obj)
 {
     if (!obj)
-        return false;
-    if (smart_cast<CPHDestroyableNotificate*>(obj))
         return false;
     return (obj->m_pPhysicsShell || (obj->character_physics_support() && obj->character_physics_support()->active_ragdoll()));
 }

@@ -128,10 +128,13 @@ public:
                                     const Fvector& anchor, 
                                     const Fvector& axis0, const Fvector& axis1, const Fvector& axis2, 
                                     const Fvector& limits_lo, const Fvector& limits_hi) = 0;
+    virtual JointHandle CreateCaptureJoint(BodyHandle body, const Fvector& anchor, float max_force) = 0;
     virtual void DestroyJoint(JointHandle joint) = 0;
 
     virtual void SetJointLimits(JointHandle joint, int axis_num, float lo, float hi) = 0;
     virtual void SetJointMotor(JointHandle joint, int axis_num, float force, float velocity) = 0;
+    virtual void SetJointTargetPosition(JointHandle joint, const Fvector& target_pos) = 0;
+    virtual void SetJointTargetTransform(JointHandle joint, const Fmatrix& target_transform) = 0;
     virtual void SetJointSpringDamping(JointHandle joint, int axis_num, float erp, float cfm) = 0;
     virtual void SetJointAxisDir(JointHandle joint, int axis_num, const Fvector& axis) = 0;
     virtual void SetJointFudgeFactor(JointHandle joint, float factor) = 0;
@@ -166,7 +169,13 @@ public:
     virtual void SetBodyIgnoreStatic(BodyHandle body) = 0;
 
     virtual void SetBodyCollideWithStatics(BodyHandle body_handle, bool collide) = 0;
+    virtual void SetBodyCCD(BodyHandle body_handle, bool enable) = 0;
     virtual void SetBodyObjectLayer(BodyHandle body_handle, u32 layer) = 0;
+
+    virtual void SetBodyFriction(BodyHandle body, float friction) = 0;
+    virtual float GetBodyFriction(BodyHandle body) const = 0;
+    virtual void SetBodyRestitution(BodyHandle body, float restitution) = 0;
+    virtual float GetBodyRestitution(BodyHandle body) const = 0;
     
     virtual void GetBodyPosition(BodyHandle body, Fvector& position) const = 0;
     virtual void SetBodyPosition(BodyHandle body, const Fvector& position) = 0;
@@ -181,6 +190,7 @@ public:
 
     virtual void SetBodyFixedRotation(BodyHandle body_handle) = 0;
     virtual void SetBodyMotionType(BodyHandle body_handle, int motion_type) = 0;
+    virtual void SetBodyShape(BodyHandle body, PhysicsShapeHandle shape, bool update_mass = true) = 0;
     virtual BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) = 0;
 
     virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) = 0;
@@ -278,6 +288,8 @@ public:
 
     typedef void (*BodyActivationCallbackFun)(BodyHandle body, void* user_data, bool activated);
     virtual void SetBodyActivationCallback(BodyActivationCallbackFun callback) = 0;
+
+    virtual void SetRagdollVelocity(RagdollHandle handle, const Fvector& linear_vel, const Fvector& angular_vel) = 0;
 };
 
 extern "C" PHYSICS_CORE_API IPhysicsCore* GetPhysicsCore();

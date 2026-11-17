@@ -99,6 +99,7 @@ public:
     virtual float getRadius();
     virtual void GetPointVel(Fvector& res_vel, const Fvector& point) const;
     void SetCollideWithStatics(bool collide);
+    void SetCCD(bool enable);
     ////////////////////////////////////////////////////Mass/////////////////////////////////////////////////////////////////////////////////////////////////
 private:
     void calculate_it_data(const Fvector& mc, float mass); 
@@ -236,6 +237,7 @@ public:
     virtual CPHFracture& Fracture(u16 num); 
     void SplitProcess(ELEMENT_PAIR_VECTOR& new_elements); 
     void PassEndGeoms(u16 from, u16 to, CPHElement* dest); 
+    void RebuildShapeFromGeoms(); 
 
     ////////////////////////////////////////////////////Build/Activate////////////////////////////////////////////////////////////////////////////
     virtual void Activate(const Fmatrix& m0, float dt01, const Fmatrix& m2, bool disable = false); 

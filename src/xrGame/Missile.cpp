@@ -623,10 +623,14 @@ void CMissile::activate_physic_shell()
     if (!smart_cast<CMissile*>(H_Parent()))
     {
         inherited::activate_physic_shell();
-        if (m_pPhysicsShell && m_pPhysicsShell->isActive() && !IsGameTypeSingle())
+        if (m_pPhysicsShell && m_pPhysicsShell->isActive())
         {
-            m_pPhysicsShell->add_ObjectContactCallback(ExitContactCallback);
-            m_pPhysicsShell->set_CallbackData(smart_cast<CPhysicsShellHolder*>(H_Root()));
+            m_pPhysicsShell->SetCCD(true);
+            if (!IsGameTypeSingle())
+            {
+                m_pPhysicsShell->add_ObjectContactCallback(ExitContactCallback);
+                m_pPhysicsShell->set_CallbackData(smart_cast<CPhysicsShellHolder*>(H_Root()));
+            }
         }
         return;
     }
@@ -670,6 +674,7 @@ void CMissile::activate_physic_shell()
     //	m_pPhysicsShell->remove_ObjectContactCallback	(ExitContactCallback);
     m_pPhysicsShell->SetAirResistance(0.f, 0.f);
     m_pPhysicsShell->set_DynamicScales(1.f, 1.f);
+    m_pPhysicsShell->SetCCD(true);
 
     IKinematics* kinematics = smart_cast<IKinematics*>(Visual());
     VERIFY(kinematics);

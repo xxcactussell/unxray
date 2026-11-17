@@ -971,6 +971,8 @@ void CPHMovementControl::SetPosition(const Fvector& P)
     }
 #endif
     vPosition.set(P);
+    vPathPoint.set(P);
+    b_exect_position = true;
     VERIFY(m_character);
     m_character->SetPosition(vPosition);
 }
@@ -1499,52 +1501,6 @@ void CPHMovementControl::VirtualMoveTo(const Fvector& in_pos, Fvector& out_pos)
     VERIFY(_valid(out_pos));
 }
 
-// static void	non_interactive_collide_callback( bool& do_collide, bool bo1, dContact& c, SGameMtl* material_1,
-// SGameMtl* material_2 )
-//{
-//	if( !do_collide )
-//		return;
-//
-//	SGameMtl* oposite_matrial	= bo1 ? material_1 : material_2 ;
-//	if(oposite_matrial->Flags.test(SGameMtl::flPassable))
-//		return;
-//
-//	dxGeomUserData	*my_data			=	PHRetrieveGeomUserData(	bo1 ? c.geom.g1 : c.geom.g2 );
-//	//dxGeomUserData	*oposite_data		=	PHRetrieveGeomUserData( bo1 ? c.geom.g2 : c.geom.g1 ) ;
-//	VERIFY( my_data );
-//
-//	dBodyID b_oposite = bo1 ? dGeomGetBody(c.geom.g2) : dGeomGetBody(c.geom.g1);
-//	//dBodyID b_mine = bo1 ? dGeomGetBody(c.geom.g2) : dGeomGetBody(c.geom.g1);
-//	if(!b_oposite)
-//	{
-//		do_collide = false;
-//		return;
-//	}
-//	if(bo1)
-//		dGeomSetBody(c.geom.g1,0);
-//	else
-//		dGeomSetBody(c.geom.g2,0);
-//
-//	//c.surface.mu = 0;
-//	//c.surface.soft_cfm =0.01f;
-//	/*
-//	dJointID contact_joint	=dJointCreateContactSpecial(0, ContactGroup, &c);// dJointCreateContact(0, ContactGroup,
-//&c);//
-//	CPHObject* obj = (CPHObject*)my_data->ph_object;
-//	VERIFY( obj );
-//	VERIFY( obj->Island().DActiveIsland() != &(obj->Island()) );
-//	VERIFY( !obj->Island().IsActive() );
-//	obj->Island().DActiveIsland()->ConnectJoint(contact_joint);
-//
-//	obj->EnableObject(0);
-//	if(bo1)
-//		dJointAttach			(contact_joint, 0, b );
-//	else
-//		dJointAttach			(contact_joint, b , 0);
-//
-//	*/
-//}
-
 void CPHMovementControl::SetNonInteractive(bool v)
 {
     VERIFY(m_character);
@@ -1555,21 +1511,14 @@ void CPHMovementControl::SetNonInteractive(bool v)
     if (v)
     {
         m_character->SetNonInteractive(v);
-        // m_character->SetObjectContactCallback( non_interactive_collide_callback );
         m_character->Disable();
     }
     else
     {
-        // m_character->SetObjectContactCallback( 0 );
         m_character->SetNonInteractive(v);
     }
     bNonInteractiveMode = v;
 }
-
-// dBodyID		CPHMovementControl::	GetBody						( )
-//{
-//	if(m_character) return m_character->get_body(); else return NULL;
-//}
 
 void CPHMovementControl::GetCharacterVelocity(Fvector& velocity)
 {

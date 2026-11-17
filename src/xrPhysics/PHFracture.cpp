@@ -45,6 +45,7 @@ element_fracture CPHFracturesHolder::SplitFromEnd(CPHElement* element, u16 fract
     new_element->m_SelfID = fract_i->m_bone_id;
     new_element->mXFORM.set(element->mXFORM);
     element->PassEndGeoms(geom_num, end_geom_num, new_element);
+    element->RebuildShapeFromGeoms();
     
     IKinematics* pKinematics = element->m_shell->PKinematics();
     const CBoneInstance& new_bi = pKinematics->LL_GetBoneInstance(new_element->m_SelfID);
@@ -145,10 +146,11 @@ void CPHFracturesHolder::InitNewElement(CPHElement* element, const Fmatrix& shif
 {
     element->CreateSimulBase();
     element->ReInitDynamics(shift_pivot, density);
-    VERIFY(element->get_body() != INVALID_CHARACTER_VIRTUAL_HANDLE);
+    element->RebuildShapeFromGeoms();
+    VERIFY(element->get_body() != INVALID_BODY_HANDLE);
 }
 
-void CPHFracturesHolder::PhTune(CharacterVirtualHandle body)
+void CPHFracturesHolder::PhTune(BodyHandle body)
 {
     // Обратная связь суставов в Jolt обрабатывается автоматически на уровне Constraints.
 }
@@ -248,8 +250,8 @@ CPHFracture::CPHFracture()
 
 bool CPHFracture::Update(CPHElement* element)
 {
-    CharacterVirtualHandle body = element->get_body();
-    if (body == INVALID_CHARACTER_VIRTUAL_HANDLE) return false;
+    BodyHandle body = element->get_body();
+    if (body == INVALID_BODY_HANDLE) return false;
 
     CPHFracturesHolder* holder = element->FracturesHolder();
     PH_IMPACT_STORAGE& impacts = holder->Impacts();

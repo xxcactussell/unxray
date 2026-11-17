@@ -1043,6 +1043,33 @@ void CPHElement::SplitProcess(ELEMENT_PAIR_VECTOR& new_elements)
 
 void CPHElement::DeleteFracturesHolder() { xr_delete(m_fratures_holder); }
 
+void CPHElement::RebuildShapeFromGeoms()
+{
+    if (m_char_handle == INVALID_BODY_HANDLE) return;
+
+    xr_vector<PhysicsShapeHandle> shapes;
+    xr_vector<Fmatrix> local_transforms;
+
+    for (u16 i = 0; i < numberOfGeoms(); ++i)
+    {
+        CPhysicsGeom* geom = Geom(i);
+        if (geom && geom->m_geom_shape)
+        {
+            shapes.push_back(geom->m_geom_shape);
+            Fmatrix local_xform;
+            geom->get_local_form_bt(local_xform);
+            local_xform.c.sub(m_mass_center);
+            local_transforms.push_back(local_xform);
+        }
+    }
+
+    if (!shapes.empty())
+    {
+        PhysicsShapeHandle compound = GetPhysicsCore()->CreateCompoundShape(shapes.data(), local_transforms.data(), shapes.size());
+        GetPhysicsCore()->SetBodyShape(m_char_handle, compound, true);
+    }
+}
+
 void CPHElement::CreateSimulBase()
 {
     Fvector half_extents = {0.5f, 0.5f, 0.5f};
@@ -1194,6 +1221,12 @@ void CPHElement::SetCollideWithStatics(bool collide)
 {
     if (m_char_handle != INVALID_CHARACTER_VIRTUAL_HANDLE)
         GetPhysicsCore()->SetBodyCollideWithStatics(m_char_handle, collide);
+}
+
+void CPHElement::SetCCD(bool enable)
+{
+    if (m_char_handle != INVALID_BODY_HANDLE)
+        GetPhysicsCore()->SetBodyCCD(m_char_handle, enable);
 }
 
 void CPHElement::applyGravityAccel(const Fvector& accel)

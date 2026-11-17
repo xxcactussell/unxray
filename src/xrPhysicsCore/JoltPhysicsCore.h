@@ -188,10 +188,13 @@ public:
                                     const Fvector& anchor, 
                                     const Fvector& axis0, const Fvector& axis1, const Fvector& axis2, 
                                     const Fvector& limits_lo, const Fvector& limits_hi) override;
+    JointHandle CreateCaptureJoint(BodyHandle body, const Fvector& anchor, float max_force) override;
     void DestroyJoint(JointHandle joint) override;
 
     void SetJointLimits(JointHandle joint, int axis_num, float lo, float hi) override;
     void SetJointMotor(JointHandle joint, int axis_num, float force, float velocity) override;
+    void SetJointTargetPosition(JointHandle joint, const Fvector& target_pos) override;
+    void SetJointTargetTransform(JointHandle joint, const Fmatrix& target_transform) override;
     void SetJointSpringDamping(JointHandle joint, int axis_num, float erp, float cfm) override;
     void SetJointAxisDir(JointHandle joint, int axis_num, const Fvector& axis) override;
     void SetJointFudgeFactor(JointHandle joint, float factor) override;
@@ -227,7 +230,13 @@ public:
 
     void SetBodyIgnoreStatic(BodyHandle body) override;
     void SetBodyCollideWithStatics(BodyHandle body_handle, bool collide) override;
+    void SetBodyCCD(BodyHandle body_handle, bool enable) override;
     void SetBodyObjectLayer(BodyHandle body_handle, u32 layer) override;
+
+    void SetBodyFriction(BodyHandle body, float friction) override;
+    float GetBodyFriction(BodyHandle body) const override;
+    void SetBodyRestitution(BodyHandle body, float restitution) override;
+    float GetBodyRestitution(BodyHandle body) const override;
 
     void GetBodyPosition(BodyHandle body, Fvector& position) const override;
     void SetBodyPosition(BodyHandle body, const Fvector& position) override;
@@ -242,6 +251,7 @@ public:
 
     void SetBodyFixedRotation(BodyHandle body_handle) override;
     void SetBodyMotionType(BodyHandle body_handle, int motion_type) override;
+    void SetBodyShape(BodyHandle body, PhysicsShapeHandle shape, bool update_mass = true) override;
     BodyHandle CreateStaticBody(PhysicsShapeHandle shape_handle, const Fvector& position) override;
     virtual PhysicsShapeHandle CreateCompoundShape(PhysicsShapeHandle* shapes, const Fmatrix* transforms, size_t count) override;
     virtual BodyHandle CreateBodyFromShape(PhysicsShapeHandle shape, const Fvector& initial_pos, float mass) override;
@@ -301,4 +311,5 @@ public:
     u32 GetRagdollPartCount(RagdollHandle handle) const override;
     void SetRagdollCollisionGroup(RagdollHandle handle, u32 group_id) override;
     void SetBodyActivationCallback(BodyActivationCallbackFun callback) override;
+    void SetRagdollVelocity(RagdollHandle handle, const Fvector& linear_vel, const Fvector& angular_vel) override;
 };

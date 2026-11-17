@@ -110,7 +110,7 @@ public:
     u16 AddFracture(const CPHFracture& fracture);
     CPHFracture& Fracture(u16 num);
     
-    void PhTune(CharacterVirtualHandle body); 
+    void PhTune(BodyHandle body); 
     bool PhDataUpdate(CPHElement* element); 
     void ApplyImpactsToElement(CPHElement* element);
 };

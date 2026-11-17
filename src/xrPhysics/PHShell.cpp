@@ -32,13 +32,13 @@ CPHShell::~CPHShell()
     m_pKinematics = nullptr;
     VERIFY(!isActive());
 
-    for (auto& it : elements)
-        xr_delete(it);
-    elements.clear();
-
     for (auto& it : joints)
         xr_delete(it);
     joints.clear();
+
+    for (auto& it : elements)
+        xr_delete(it);
+    elements.clear();
 
     if (m_spliter_holder)
         xr_delete(m_spliter_holder);
@@ -1249,6 +1249,12 @@ void CPHShell::SetElementsCollideWithStatics(bool collide)
 {
     for (auto& it : elements)
         it->SetCollideWithStatics(collide);
+}
+
+void CPHShell::SetCCD(bool enable)
+{
+    for (auto& it : elements)
+        it->SetCCD(enable);
 }
 
 void CPHShell::RegisterToCLGroup(CGID g) { CPHCollideValidator::RegisterObjToGroup(g, *static_cast<CPHObject*>(this)); }

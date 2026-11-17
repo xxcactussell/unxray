@@ -287,7 +287,6 @@ void CPHSimpleCharacter::PhTune(float step)
 {
     Fvector current_pos;
     GetPhysicsCore()->GetCharacterVirtualPosition(m_char_handle, current_pos);
-    m_last_move.set(current_pos);
     m_elevator_state.PhTune(step);
 
     if (!IsEnabled()) return;

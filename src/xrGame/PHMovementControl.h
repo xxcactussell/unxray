@@ -160,7 +160,6 @@ public:
 #endif
 
     void SetPLastMaterialIDX(u16* p);
-    //	dBodyID				GetBody						( )		;
     const Fvector& GetVelocity() { return vVelocity; }
     const Fvector& GetPathDir() { return _vPathDir; }
     void SetPathDir(const Fvector& v);

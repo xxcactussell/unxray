@@ -6,6 +6,7 @@ class CPHAICharacter : public CPHSimpleCharacter
     typedef CPHSimpleCharacter inherited;
 
     bool m_forced_physics_control;
+    u32 m_last_try_pos_frame;
 
 public:
     CPHAICharacter();

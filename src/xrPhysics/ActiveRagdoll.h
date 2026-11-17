@@ -105,6 +105,7 @@ private:
     xr_vector<Fmatrix> m_target_matrices;
     xr_vector<Fmatrix> m_simulated_matrices;
     xr_vector<Fmatrix> m_ramp_start_matrices;
+    xr_vector<Fmatrix> m_death_start_matrices;
     xr_vector<Fmatrix> m_anim_matrices;
     xr_vector<SPartHitReaction> m_part_reactions;
     
@@ -118,8 +119,8 @@ public:
     void Initialize(IKinematics* kinematics, IPhysicsShellHolder* holder);
     void Deactivate();
     
-    void OnDeath();
-    void KnockDown(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos);
+    void OnDeath(const Fvector& initial_velocity = Fvector().set(0.f, 0.f, 0.f));
+    void KnockDown(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos, const Fvector& initial_velocity = Fvector().set(0.f, 0.f, 0.f));
     void ApplyHit(u16 bone_id, const Fvector& dir, float impulse, const Fvector& hit_pos);
     void ApplyLinearImpulse(const Fvector& dir, float impulse);
     void ApplyRadialImpulse(const Fvector& center, float radius, float max_impulse);

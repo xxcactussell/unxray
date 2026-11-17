@@ -440,9 +440,11 @@ void CStateBurerAttackTele<Object>::SelectObjects()
         CTelekineticObject* tele_obj =
             this->object->CTelekinesis::activate(obj, this->object->m_tele_raise_speed, height, 10000, rotate);
 
-        tele_obj->set_sound(this->object->sound_tele_hold, this->object->sound_tele_throw);
-
-        this->object->StartTeleObjectParticle(obj);
+        if (tele_obj)
+        {
+            tele_obj->set_sound(this->object->sound_tele_hold, this->object->sound_tele_throw);
+            this->object->StartTeleObjectParticle(obj);
+        }
     }
 
     tele_objects.erase(tele_objects.begin(), tele_objects.begin() + max);

@@ -140,20 +140,26 @@ void CPHCapture::PullingUpdate()
         CreateBody();
         
         CPHElement* e = static_cast<CPHElement*>(m_taget_element);
-        CharacterVirtualHandle target_body = e->get_body();
+        BodyHandle target_body = e->get_body();
         
-        if (target_body == INVALID_CHARACTER_VIRTUAL_HANDLE) 
+        if (target_body == INVALID_BODY_HANDLE) 
         {
             Release();
             return;
         }
 
-        m_joint = INVALID_JOINT_HANDLE;
-        m_ajoint = INVALID_JOINT_HANDLE;
-
         m_taget_element->set_LinearVel(Fvector().set(0, 0, 0));
         m_taget_element->set_AngularVel(Fvector().set(0, 0, 0));
         m_taget_element->set_DynamicLimits();
+
+        m_joint = GetPhysicsCore()->CreateCaptureJoint(target_body, capture_bone_position, m_capture_force);
+        m_ajoint = INVALID_JOINT_HANDLE;
+
+        if (m_joint == INVALID_JOINT_HANDLE)
+        {
+            Release();
+            return;
+        }
         
         e_state = cstCaptured;
         return;
@@ -176,7 +182,7 @@ void CPHCapture::CapturedUpdate()
     }
     
     CPHElement* e = static_cast<CPHElement*>(m_taget_element);
-    CharacterVirtualHandle target_body = e->get_body();
+    BodyHandle target_body = e->get_body();
 
     // Простая проверка разрыва: если цель отдалилась от точки захвата слишком сильно
     Fvector target_pos;
@@ -207,32 +213,10 @@ void CPHCapture::CapturedUpdate()
         }
     }
 
-    // Обновляем позицию якоря (перемещаем сустав)
-    Fmatrix new_transform;
-    new_transform.identity();
-    new_transform.c = capture_bone_position;
-    
-    // В Jolt для FullControlJoint можно менять TargetPosition мотора (реализация в IPhysicsCore)
-    // Чтобы код компилировался сейчас без добавления новых методов, мы можем
-    // разрушать и пересоздавать joint, либо просто прикладывать силы.
-    // Если в IPhysicsCore появится SetJointTargetTransform, нужно будет вызвать его:
-    // GetPhysicsCore()->SetJointTargetTransform(m_joint, new_transform);
-    
-    // Пока что эмулируем удержание через пружинную силу
-    Fvector hold_dir;
-    hold_dir.sub(capture_bone_position, target_pos);
-    float dist = hold_dir.magnitude();
-    if (dist > EPS)
+    // Обновляем позицию сустава через целевую позицию мотора Jolt
+    if (m_joint != INVALID_JOINT_HANDLE)
     {
-        hold_dir.normalize();
-        float p_force = dist * m_capture_force * 0.5f;
-        GetPhysicsCore()->ApplyForce(target_body, Fvector().set(hold_dir.x * p_force, hold_dir.y * p_force, hold_dir.z * p_force));
-        
-        // Гашение скорости (демпфирование)
-        Fvector vel;
-        GetPhysicsCore()->GetBodyLinearVelocity(target_body, vel);
-        vel.mul(0.9f); // Искусственное гашение
-        GetPhysicsCore()->SetBodyLinearVelocity(target_body, vel);
+        GetPhysicsCore()->SetJointTargetPosition(m_joint, capture_bone_position);
     }
 }
 

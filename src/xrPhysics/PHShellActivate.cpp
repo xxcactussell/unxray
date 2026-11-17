@@ -146,11 +146,11 @@ void CPHShell::Deactivate()
     
     CPHObject::remove_from_recently_deactivated();
 
-    for (auto i = elements.begin(); elements.end() != i; ++i)
-        (*i)->Deactivate();
-
     for (auto j = joints.begin(); joints.end() != j; ++j)
         (*j)->Deactivate();
+
+    for (auto i = elements.begin(); elements.end() != i; ++i)
+        (*i)->Deactivate();
 
     m_flags.set(flActivating, FALSE);
     m_flags.set(flActive, FALSE);

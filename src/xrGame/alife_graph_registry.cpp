@@ -175,9 +175,21 @@ void CALifeGraphRegistry::add(CSE_ALifeDynamicObject* object, GameGraph::_GRAPH_
 #endif
     if (!object->m_bOnline && object->used_ai_locations() /**&& object->interactive()**/)
     {
-        VERIFY(ai().game_graph().valid_vertex_id(game_vertex_id));
-        m_objects[game_vertex_id].objects().add(object->ID, object);
-        object->m_tGraphID = game_vertex_id;
+        if (!ai().game_graph().valid_vertex_id(game_vertex_id) && ai().get_level_graph() && ai().get_cross_table() && ai().level_graph().valid_vertex_id(object->m_tNodeID))
+        {
+            game_vertex_id = ai().cross_table().vertex(object->m_tNodeID).game_vertex_id();
+        }
+
+        if (ai().game_graph().valid_vertex_id(game_vertex_id) && game_vertex_id < (GameGraph::_GRAPH_ID)m_objects.size())
+        {
+            m_objects[game_vertex_id].objects().add(object->ID, object);
+            object->m_tGraphID = game_vertex_id;
+        }
+        else
+        {
+            Msg("! [ALife] Warning: Cannot add offline object [%s][%d] with invalid game_vertex_id [%d]",
+                object->name_replace(), object->ID, game_vertex_id);
+        }
     }
     else if (!m_level && update)
     {
@@ -200,8 +212,9 @@ void CALifeGraphRegistry::remove(CSE_ALifeDynamicObject* object, GameGraph::_GRA
                 game_vertex_id);
         }
 #endif
-        m_objects[game_vertex_id].objects().remove(object->ID);
+        if (ai().game_graph().valid_vertex_id(game_vertex_id) && game_vertex_id < (GameGraph::_GRAPH_ID)m_objects.size())
+            m_objects[game_vertex_id].objects().remove(object->ID);
     }
-    if (update && m_level)
+    if (update && m_level && ai().game_graph().valid_vertex_id(game_vertex_id))
         level().remove(object, ai().game_graph().vertex(game_vertex_id)->level_id() != level().level_id());
 }

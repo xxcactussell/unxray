@@ -55,6 +55,7 @@ void CBolt::activate_physic_shell()
 {
     inherited::activate_physic_shell();
     m_pPhysicsShell->SetAirResistance(.0001f);
+    m_pPhysicsShell->SetCCD(true);
 }
 
 void CBolt::SetInitiator(u16 id) { m_thrower_id = id; }

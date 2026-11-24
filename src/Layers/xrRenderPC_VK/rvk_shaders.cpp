@@ -423,7 +423,21 @@ static HRESULT create_shader(DWORD const* spv_buffer, size_t const spv_size,
         return E_FAIL;
     }
 
-    if (refl_buffer && refl_size > 0 && s_dxcHelper.GetUtils())
+    if (!refl_buffer || refl_size == 0)
+    {
+        Msg("! [Vulkan] Missing reflection data for shader '%s'", file_name);
+        return E_FAIL;
+    }
+
+    if (!s_dxcHelper.GetUtils())
+        s_dxcHelper.Init();
+
+    if (!s_dxcHelper.GetUtils())
+    {
+        Msg("! [Vulkan] DXC Utils not initialized for shader '%s'", file_name);
+        return E_FAIL;
+    }
+
     {
         DxcBuffer dxcBuffer{};
         dxcBuffer.Ptr = refl_buffer;
@@ -432,7 +446,11 @@ static HRESULT create_shader(DWORD const* spv_buffer, size_t const spv_size,
 
         ID3D12ShaderReflection* pReflection = nullptr;
         _hr = s_dxcHelper.GetUtils()->CreateReflection(&dxcBuffer, IID_PPV_ARGS(&pReflection));
-        if (SUCCEEDED(_hr) && pReflection)
+        if (FAILED(_hr) || !pReflection)
+        {
+            Msg("! [Vulkan] CreateReflection failed hr=0x%08x for %s", _hr, file_name);
+            return E_FAIL;
+        }
         {
             result->constants.parse(pReflection, ShaderTypeTraits<T>::GetShaderDest());
 
@@ -559,10 +577,6 @@ static HRESULT create_shader(DWORD const* spv_buffer, size_t const spv_size,
             }
 
             pReflection->Release();
-        }
-        else
-        {
-            Msg("! [Vulkan] CreateReflection failed hr=0x%08x for %s", _hr, file_name);
         }
     }
 
@@ -799,7 +813,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     char extension[3];
     strncpy_s(extension, pTarget, 2);
 
-    pcstr renderer = "r4_vk_v4" DELIMITER;
+    pcstr renderer = "r4_vk_v7" DELIMITER;
 
     string_path filename;
     strconcat(sizeof(filename), filename, renderer, name, ".", extension);
@@ -819,40 +833,63 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     getFileCrc32(fs, shadersFolder, fileCrc);
     fs->seek(0);
 
+    xr_string optionsKey;
+    optionsKey += pTarget ? pTarget : "";
+    optionsKey += "|";
+    optionsKey += pFunctionName ? pFunctionName : "";
+    for (const auto& opt : options)
+    {
+        optionsKey += "|";
+        optionsKey += opt.name;
+        optionsKey += "=";
+        optionsKey += opt.value;
+    }
+    const u32 optionsCrc = crc32(optionsKey.data(), (u32)optionsKey.size());
+
+    constexpr u32 CACHE_MAGIC = 0x43534B56; // 'VKSC'
+    constexpr u32 CACHE_VERSION = 2;
+
+    struct VkShaderCacheHeader
+    {
+        u32 magic{ CACHE_MAGIC };
+        u32 version{ CACHE_VERSION };
+        u32 fileCrc{ 0 };
+        u32 optionsCrc{ 0 };
+        u32 bytecodeCrc{ 0 };
+        u32 bytecodeSize{ 0 };
+        u32 reflectionCrc{ 0 };
+        u32 reflectionSize{ 0 };
+    };
+
     HRESULT _result = E_FAIL;
 
     if (FS.exist(file_name))
     {
         IReader* file = FS.r_open(file_name);
-        if (file && file->length() > 16)
+        if (file && file->length() >= (int)sizeof(VkShaderCacheHeader))
         {
-            u32 savedFileCrc = file->r_u32();
-            if (savedFileCrc == fileCrc)
+            VkShaderCacheHeader hdr{};
+            file->r(&hdr, sizeof(hdr));
+            if (hdr.magic == CACHE_MAGIC &&
+                hdr.version == CACHE_VERSION &&
+                hdr.fileCrc == fileCrc &&
+                hdr.optionsCrc == optionsCrc &&
+                hdr.bytecodeSize > 0 &&
+                hdr.reflectionSize > 0 &&
+                (u32)file->elapsed() == hdr.bytecodeSize + hdr.reflectionSize)
             {
-                u32 savedBytecodeCrc = file->r_u32();
-                u32 bytecodeSize = file->r_u32();
-                if (file->elapsed() >= bytecodeSize)
+                xr_vector<u8> bytecode(hdr.bytecodeSize);
+                file->r(bytecode.data(), hdr.bytecodeSize);
+                xr_vector<u8> reflection(hdr.reflectionSize);
+                file->r(reflection.data(), hdr.reflectionSize);
+
+                if (crc32(bytecode.data(), hdr.bytecodeSize) == hdr.bytecodeCrc &&
+                    crc32(reflection.data(), hdr.reflectionSize) == hdr.reflectionCrc)
                 {
-                    xr_vector<u8> bytecode(bytecodeSize);
-                    file->r(bytecode.data(), bytecodeSize);
-                    u32 actualBytecodeCrc = crc32(bytecode.data(), bytecodeSize);
-                    if (actualBytecodeCrc == savedBytecodeCrc)
-                    {
-                        xr_vector<u8> reflection;
-                        if (file->elapsed() >= sizeof(u32))
-                        {
-                            u32 reflectionSize = file->r_u32();
-                            if (reflectionSize > 0 && file->elapsed() >= reflectionSize)
-                            {
-                                reflection.resize(reflectionSize);
-                                file->r(reflection.data(), reflectionSize);
-                            }
-                        }
-                        _result = create_shader(pTarget,
-                            (DWORD*)bytecode.data(), bytecode.size(),
-                            reflection.data(), reflection.size(),
-                            filename, result);
-                    }
+                    _result = create_shader(pTarget,
+                        (DWORD*)bytecode.data(), bytecode.size(),
+                        reflection.data(), reflection.size(),
+                        filename, result);
                 }
             }
         }
@@ -867,29 +904,36 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
         xr_string errors;
         _result = s_dxcHelper.Compile(fs->pointer(), fs->length(), pFunctionName, pTarget, options, shadersFolder, bytecode, reflection, errors);
 
-        if (SUCCEEDED(_result) && !bytecode.empty())
+        if (SUCCEEDED(_result) && !bytecode.empty() && !reflection.empty())
         {
-            IWriter* file = FS.w_open(file_name);
-            if (file)
-            {
-                file->w_u32(fileCrc);
-                u32 bytecodeCrc = crc32(bytecode.data(), (u32)bytecode.size());
-                file->w_u32(bytecodeCrc);
-                file->w_u32((u32)bytecode.size());
-                file->w(bytecode.data(), (u32)bytecode.size());
-                file->w_u32((u32)reflection.size());
-                if (!reflection.empty())
-                    file->w(reflection.data(), (u32)reflection.size());
-                FS.w_close(file);
-            }
-
             _result = create_shader(pTarget,
                 (DWORD*)bytecode.data(), bytecode.size(),
                 reflection.data(), reflection.size(),
                 filename, result);
+
+            if (SUCCEEDED(_result))
+            {
+                IWriter* file = FS.w_open(file_name);
+                if (file)
+                {
+                    VkShaderCacheHeader hdr{};
+                    hdr.fileCrc = fileCrc;
+                    hdr.optionsCrc = optionsCrc;
+                    hdr.bytecodeCrc = crc32(bytecode.data(), (u32)bytecode.size());
+                    hdr.bytecodeSize = (u32)bytecode.size();
+                    hdr.reflectionCrc = crc32(reflection.data(), (u32)reflection.size());
+                    hdr.reflectionSize = (u32)reflection.size();
+
+                    file->w(&hdr, sizeof(hdr));
+                    file->w(bytecode.data(), hdr.bytecodeSize);
+                    file->w(reflection.data(), hdr.reflectionSize);
+                    FS.w_close(file);
+                }
+            }
         }
         else
         {
+            _result = E_FAIL;
             if (errors.length() > 500)
             {
                 Msg("! [Vulkan] Failed to compile shader '%s' (%s): (tail) %s",

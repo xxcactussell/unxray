@@ -16,7 +16,9 @@ struct   vf
 #endif	//	NEED_SOFT_WATER	
 	float4	c0		: COLOR0;
 	float	fog		: FOG;
+#ifndef GBUFFER_OPTIMIZATION
 	float4	hpos	: SV_Position;
+#endif
 };
 
 Texture2D	s_nmap;

@@ -45,6 +45,8 @@ void CTexture::surface_set(VkImageView surf, VkImage img)
 {
     pSurface = surf;
     m_image = img;
+    desc_cache = VK_NULL_HANDLE;
+    desc_update();
 }
 
 VkImageView CTexture::surface_get() const
@@ -85,10 +87,18 @@ void CTexture::apply_seq(CBackend& cmd_list, u32 dwStage)
 
 void CTexture::apply_theora(CBackend& cmd_list, u32 dwStage)
 {
-    if (pTheora && m_stagingData && pTheora->Update(m_play_time != 0xFFFFFFFF ? m_play_time : Device.dwTimeContinual))
+    if (!pTheora || !m_stagingData || pSurface == VK_NULL_HANDLE)
+        return;
+
+    const bool updated = pTheora->Update(m_play_time != 0xFFFFFFFF ? m_play_time : Device.dwTimeContinual);
+    const bool needsInit = (vkTextureUtils::GetViewLayout(pSurface) == VK_IMAGE_LAYOUT_UNDEFINED);
+
+    if (updated || needsInit)
     {
+        const u32 realW = pTheora->Width(true);
+        const u32 realH = pTheora->Height(true);
         int _pos = 0;
-        pTheora->DecompressFrame(static_cast<u32*>(m_stagingData), 0, _pos);
+        pTheora->DecompressFrame(static_cast<u32*>(m_stagingData), m_width - realW, _pos);
 
         if (m_stagingAlloc && HW.m_allocator)
         {
@@ -100,8 +110,7 @@ void CTexture::apply_theora(CBackend& cmd_list, u32 dwStage)
             VkCommandBuffer cmd = HW.GetCurrentCommandBuffer();
 
             extern vkPipelineManager G_PipelineManager;
-            const bool wasInsideDynamicRendering = G_PipelineManager.IsInsideDynamicRendering();
-            if (wasInsideDynamicRendering)
+            if (G_PipelineManager.IsInsideDynamicRendering())
                 G_PipelineManager.EndDynamicRendering(cmd);
 
             vkTextureUtils::TransitionViewLayout(cmd, pSurface, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -115,7 +124,7 @@ void CTexture::apply_theora(CBackend& cmd_list, u32 dwStage)
             region.imageSubresource.baseArrayLayer = 0;
             region.imageSubresource.layerCount = 1;
             region.imageOffset = { 0, 0, 0 };
-            region.imageExtent = { m_width, m_height, 1 };
+            region.imageExtent = { realW, realH, 1 };
 
             vkCmdCopyBufferToImage(cmd, m_stagingBuffer, m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
@@ -164,6 +173,7 @@ void CTexture::Load()
             m_width = pTheora->Width(false);
             m_height = pTheora->Height(false);
             desc = VK_FORMAT_R8G8B8A8_UNORM;
+            pTheora->Play(TRUE, Device.dwTimeContinual);
 
             VkImageCreateInfo imageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
             imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -194,7 +204,8 @@ void CTexture::Load()
                 viewInfo.subresourceRange.layerCount = 1;
 
                 vkCreateImageView(HW.pDevice, &viewInfo, nullptr, &pSurface);
-                vkTextureUtils::RegisterImage(m_image, pSurface, desc, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
+                vkTextureUtils::RegisterImage(m_image, pSurface, desc, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, m_width, m_height);
+                desc_cache = pSurface;
 
                 // Create staging buffer for Theora frames
                 VkBufferCreateInfo stagingBufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
@@ -211,10 +222,11 @@ void CTexture::Load()
                 if (res == VK_SUCCESS)
                 {
                     m_stagingData = vmaInfo.pMappedData;
+                    ZeroMemory(m_stagingData, stagingBufferInfo.size);
                 }
             }
 
-            flags.MemoryUsage = m_width * m_height * 4;
+            flags.MemoryUsage = pTheora->Width(true) * pTheora->Height(true) * 4;
             PostLoad();
             return;
         }
@@ -223,6 +235,8 @@ void CTexture::Load()
     u32 msize = 0;
     pSurface = RImplementation.texture_load(cName.c_str(), msize, desc, &m_image, &m_allocation);
     flags.MemoryUsage = msize;
+
+    desc_update();
 
     PostLoad();
 }
@@ -233,6 +247,8 @@ void CTexture::Unload()
 
     if (m_stagingBuffer != VK_NULL_HANDLE && HW.m_allocator)
     {
+        if (HW.m_graphicsQueue != VK_NULL_HANDLE)
+            vkQueueWaitIdle(HW.m_graphicsQueue);
         vmaDestroyBuffer(HW.m_allocator, m_stagingBuffer, m_stagingAlloc);
         m_stagingBuffer = VK_NULL_HANDLE;
         m_stagingAlloc = VK_NULL_HANDLE;
@@ -240,6 +256,9 @@ void CTexture::Unload()
     }
 
     xr_delete(pTheora);
+
+    if (pSurface != VK_NULL_HANDLE && !flags.bUser)
+        vkTextureUtils::UnregisterImage(pSurface);
 
     if (m_allocation != VK_NULL_HANDLE && m_image != VK_NULL_HANDLE && HW.m_allocator)
     {
@@ -260,6 +279,15 @@ void CTexture::Unload()
 void CTexture::desc_update()
 {
     desc_cache = pSurface;
+    if (pSurface != VK_NULL_HANDLE)
+    {
+        u32 w = 0, h = 0;
+        if (vkTextureUtils::GetViewExtent(pSurface, w, h))
+        {
+            m_width = w;
+            m_height = h;
+        }
+    }
 }
 
 void CTexture::video_Play(BOOL looped, u32 _time)

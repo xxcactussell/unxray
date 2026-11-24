@@ -57,12 +57,14 @@ struct ImageTrackingInfo
     VkFormat format{ VK_FORMAT_UNDEFINED };
     VkImageAspectFlags aspect{ VK_IMAGE_ASPECT_COLOR_BIT };
     VkImageLayout currentLayout{ VK_IMAGE_LAYOUT_UNDEFINED };
+    u32 width{ 0 };
+    u32 height{ 0 };
 };
 
 static xr_map<VkImageView, ImageTrackingInfo> s_trackedImages;
 static Lock s_trackedImagesLock;
 
-void RegisterImage(VkImage image, VkImageView view, VkFormat format, VkImageAspectFlags aspect, VkImageLayout initialLayout)
+void RegisterImage(VkImage image, VkImageView view, VkFormat format, VkImageAspectFlags aspect, VkImageLayout initialLayout, u32 width, u32 height)
 {
     if (view == VK_NULL_HANDLE) return;
     ScopeLock lock(&s_trackedImagesLock);
@@ -71,6 +73,8 @@ void RegisterImage(VkImage image, VkImageView view, VkFormat format, VkImageAspe
     info.format = format;
     info.aspect = aspect;
     info.currentLayout = initialLayout;
+    info.width = width;
+    info.height = height;
     s_trackedImages[view] = info;
 }
 
@@ -101,6 +105,20 @@ VkFormat GetViewFormat(VkImageView view, VkFormat defaultFormat)
     if (it != s_trackedImages.end() && it->second.format != VK_FORMAT_UNDEFINED)
         return it->second.format;
     return defaultFormat;
+}
+
+bool GetViewExtent(VkImageView view, u32& width, u32& height)
+{
+    if (view == VK_NULL_HANDLE) return false;
+    ScopeLock lock(&s_trackedImagesLock);
+    auto it = s_trackedImages.find(view);
+    if (it != s_trackedImages.end() && it->second.width > 0 && it->second.height > 0)
+    {
+        width = it->second.width;
+        height = it->second.height;
+        return true;
+    }
+    return false;
 }
 
 VkImage GetViewImage(VkImageView view)

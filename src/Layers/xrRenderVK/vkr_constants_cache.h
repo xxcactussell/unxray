@@ -19,17 +19,17 @@ private:
             if (L.index + 2 * sizeof(Fvector4) <= sizeof(m_storage))
             {
                 Fvector4* it = reinterpret_cast<Fvector4*>(ptr);
-                it[0].set(A._11, A._12, A._13, A._14);
-                it[1].set(A._21, A._22, A._23, A._24);
+                it[0].set(A._11, A._21, A._31, A._41);
+                it[1].set(A._12, A._22, A._32, A._42);
             }
             break;
         case RC_3x4:
             if (L.index + 3 * sizeof(Fvector4) <= sizeof(m_storage))
             {
                 Fvector4* it = reinterpret_cast<Fvector4*>(ptr);
-                it[0].set(A._11, A._12, A._13, A._14);
-                it[1].set(A._21, A._22, A._23, A._24);
-                it[2].set(A._31, A._32, A._33, A._34);
+                it[0].set(A._11, A._21, A._31, A._41);
+                it[1].set(A._12, A._22, A._32, A._42);
+                it[2].set(A._13, A._23, A._33, A._43);
             }
             break;
         case RC_4x4:
@@ -57,12 +57,24 @@ private:
         if (offset + stride <= sizeof(m_storage))
         {
             Fvector4* it = reinterpret_cast<Fvector4*>(m_storage + offset);
-            it[0].set(A._11, A._12, A._13, A._14);
-            it[1].set(A._21, A._22, A._23, A._24);
-            if (L.cls != RC_2x4)
+            if (L.cls == RC_2x4)
+            {
+                it[0].set(A._11, A._21, A._31, A._41);
+                it[1].set(A._12, A._22, A._32, A._42);
+            }
+            else if (L.cls == RC_3x4)
+            {
+                it[0].set(A._11, A._21, A._31, A._41);
+                it[1].set(A._12, A._22, A._32, A._42);
+                it[2].set(A._13, A._23, A._33, A._43);
+            }
+            else
+            {
+                it[0].set(A._11, A._12, A._13, A._14);
+                it[1].set(A._21, A._22, A._23, A._24);
                 it[2].set(A._31, A._32, A._33, A._34);
-            if (L.cls == RC_4x4)
                 it[3].set(A._41, A._42, A._43, A._44);
+            }
         }
     }
 

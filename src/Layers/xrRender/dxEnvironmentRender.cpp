@@ -92,7 +92,9 @@ public:
 
     void Compile(CBlender_Compile& C) override
     {
-        C.r_Pass("sky2", "sky2", FALSE, TRUE, FALSE);
+        C.r_Pass("sky2", "sky2", FALSE, FALSE, FALSE);
+        C.RS.SetRS(D3DRS_CULLMODE, D3DCULL_NONE);
+        C.RS.SetRS(D3DRS_ZENABLE, FALSE);
 #if defined(USE_DX11) || defined(USE_VK)
         // C.r_Sampler_clf		("s_sky0",		"$null"			);
         // C.r_Sampler_clf		("s_sky1",		"$null"			);
@@ -257,6 +259,9 @@ void dxEnvironmentRender::RenderSky(CEnvironment& env)
     RCache.set_xform_world(mSky);
     RCache.set_Geometry(sh_2geom);
     RCache.set_Shader(sh_2sky);
+    RCache.set_CullMode(CULL_NONE);
+    RCache.set_Z(FALSE);
+    RCache.set_Stencil(FALSE);
 #if defined(USE_DX11)
     RCache.set_Textures(&sky_r_textures);
 #elif defined(USE_OGL) || defined(USE_VK)
@@ -338,6 +343,9 @@ void dxEnvironmentRender::RenderClouds(CEnvironment& env)
     RCache.set_xform_world(mXFORM);
     RCache.set_Geometry(clouds_geom);
     RCache.set_Shader(clouds_sh);
+    RCache.set_CullMode(CULL_NONE);
+    RCache.set_Z(FALSE);
+    RCache.set_Stencil(FALSE);
     RCache.set_Textures(&clouds_r_textures);
     RCache.Render(D3DPT_TRIANGLELIST, v_offset, 0, env.CloudsVerts.size(), i_offset, env.CloudsIndices.size() / 3);
 

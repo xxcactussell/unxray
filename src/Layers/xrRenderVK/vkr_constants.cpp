@@ -108,6 +108,13 @@ BOOL R_constant_table::parseConstants(ID3D12ShaderReflectionConstantBuffer* pTab
                 default: continue;
                 }
                 break;
+            case 3:
+            case 2:
+                if (TypeDesc.Columns == 4)
+                    r_type = RC_4x4; // column_major float3x4 / float2x4 occupies 4 columns (64 bytes)
+                else
+                    continue;
+                break;
             default: continue;
             }
         }

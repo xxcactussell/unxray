@@ -285,20 +285,21 @@ void CRenderTarget::phase_combine()
     if (RImplementation.o.msaa)
     {
         if (PP_Complex)
-            u_setrt(RCache, rt_Generic, nullptr, nullptr, rt_Base_Depth); // LDR RT
+            u_setrt(RCache, rt_Generic, nullptr, nullptr, nullptr); // LDR RT, no ZB needed for combine_2
         else
-            u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, get_base_zb());
+            u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, VK_NULL_HANDLE);
     }
     else
     {
         if (PP_Complex)
-            u_setrt(RCache, rt_Color, nullptr, nullptr, rt_Base_Depth); // LDR RT
+            u_setrt(RCache, rt_Color, nullptr, nullptr, nullptr); // LDR RT, no ZB needed for combine_2
         else
-            u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, get_base_zb());
+            u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, VK_NULL_HANDLE);
     }
     //. u_setrt				( Device.dwWidth,Device.dwHeight, get_base_rt(), NULL, NULL, get_base_zb());
     RCache.set_CullMode(CULL_NONE);
     RCache.set_Stencil(FALSE);
+    RCache.set_Z(FALSE);
 
     if (1)
     {
@@ -394,6 +395,10 @@ void CRenderTarget::phase_combine()
         RCache.set_c("dof_params", dof.x, dof.y, dof.z, ps_r2_dof_sky);
         //.		RCache.set_c				("dof_params",	ps_r2_dof.x, ps_r2_dof.y, ps_r2_dof.z, ps_r2_dof_sky);
         RCache.set_c("dof_kernel", vDofKernel.x, vDofKernel.y, ps_r2_dof_kernel_size, 0.f);
+
+        RCache.set_CullMode(CULL_NONE);
+        RCache.set_Stencil(FALSE);
+        RCache.set_Z(FALSE);
 
         RCache.set_Geometry(g_aa_AA);
         RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);

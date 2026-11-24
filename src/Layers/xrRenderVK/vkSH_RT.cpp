@@ -103,13 +103,13 @@ void CRT::create(LPCSTR Name, u32 w, u32 h, D3DFORMAT f, u32 SampleCount, u32 sl
     {
         res = vkCreateImageView(HW.pDevice, &viewInfo, nullptr, &pZRT);
         if (res == VK_SUCCESS)
-            vkTextureUtils::RegisterImage(pSurface, pZRT, vkFmt, viewInfo.subresourceRange.aspectMask, VK_IMAGE_LAYOUT_UNDEFINED);
+            vkTextureUtils::RegisterImage(pSurface, pZRT, vkFmt, viewInfo.subresourceRange.aspectMask, VK_IMAGE_LAYOUT_UNDEFINED, w, h);
     }
     else
     {
         res = vkCreateImageView(HW.pDevice, &viewInfo, nullptr, &pRT);
         if (res == VK_SUCCESS)
-            vkTextureUtils::RegisterImage(pSurface, pRT, vkFmt, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
+            vkTextureUtils::RegisterImage(pSurface, pRT, vkFmt, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, w, h);
     }
 
     if (res != VK_SUCCESS)

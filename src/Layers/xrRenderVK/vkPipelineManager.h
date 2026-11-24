@@ -31,9 +31,12 @@ public:
     VkDescriptorSet AllocateDescriptorSet(u32 frameIndex);
     void ResetDescriptorPool(u32 frameIndex);
     bool AllocateConstantBufferSlice(u32 frameIndex, const void* data, size_t size, VkDescriptorBufferInfo& outBufferInfo);
+    bool AllocateConstantBufferRaw(u32 frameIndex, size_t size, VkBuffer& outBuffer, VkDeviceSize& outOffset, u8*& outMappedPtr);
+    void FlushConstantBufferRange(u32 frameIndex, VkDeviceSize offset, size_t size);
     bool GetOrAllocateConstantBufferSlice(u32 frameIndex, u32 version, const void* data, size_t size, VkDescriptorBufferInfo& outBufferInfo);
     VkSampler GetDefaultSampler() const { return m_defaultSampler; }
     VkImageView GetDummyImageView() const { return m_dummyImageView; }
+    VkImageView GetDummyCubeImageView() const { return m_dummyCubeImageView; }
 
     VkPipeline GetOrCreatePipeline(
         VkShaderModule vs,
@@ -55,7 +58,8 @@ public:
         bool clearColor = false,
         bool clearDepth = false,
         const VkClearColorValue* clearColorValue = nullptr,
-        float clearDepthValue = 1.0f);
+        float clearDepthValue = 1.0f,
+        const VkViewport* customViewport = nullptr);
 
     void EndDynamicRendering(VkCommandBuffer cmd);
     bool IsInsideDynamicRendering() const { return m_insideDynamicRendering; }
@@ -118,6 +122,9 @@ private:
     VkImage m_dummyImage{ VK_NULL_HANDLE };
     VmaAllocation m_dummyAllocation{ VK_NULL_HANDLE };
     VkImageView m_dummyImageView{ VK_NULL_HANDLE };
+    VkImage m_dummyCubeImage{ VK_NULL_HANDLE };
+    VmaAllocation m_dummyCubeAllocation{ VK_NULL_HANDLE };
+    VkImageView m_dummyCubeImageView{ VK_NULL_HANDLE };
     xr_map<PipelineKey, VkPipeline> m_pipelines;
     VkPipelineCache m_pipelineCache{ VK_NULL_HANDLE };
 

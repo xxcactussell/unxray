@@ -197,12 +197,12 @@ float	calc_ssao( float3 P, float3 N, float2 tc, float2 tcJ, uint iSample)
 		float	z	= s_half_depth.SampleLevel(smp_nofilter,tap, 0);
 		float3	tap_pos	= uv_to_eye(tap, z);
 #endif // SSAO_OPT_DATA
-		float3 	dir 	= tap_pos-P.xyz;
-		float	dist	= length(dir);
-				dir 	= normalize(dir);
+		float3 	tap_dir 	= tap_pos-P.xyz;
+		float	dist	= length(tap_dir);
+				tap_dir 	= normalize(tap_dir);
 
 
-		float 	infl 	= saturate(dot( dir, N.xyz));
+		float 	infl 	= saturate(dot( tap_dir, N.xyz));
 		float 	occ_factor = saturate(dist);
 //		float	range_att = 1/(occ_factor+0.1);
 		float	range_att = saturate(1-dist*0.5);

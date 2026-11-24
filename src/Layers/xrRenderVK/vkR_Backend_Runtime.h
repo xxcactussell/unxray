@@ -7,6 +7,8 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+inline VkViewport s_currentVkViewport{};
+inline bool s_hasCustomVkViewport = false;
 IC void CBackend::set_xform(u32 ID, const Fmatrix& M)
 {
     stat.xforms++;
@@ -341,7 +343,9 @@ IC bool CBackend::ApplyPipelineAndDynamicRendering(D3DPRIMITIVETYPE T)
                 vkTextureUtils::TransitionViewLayout(cmd, pZB, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
             G_PipelineManager.BeginDynamicRendering(cmd, width, height,
-                targetRT0, pRT[1], pRT[2], pRT[3], pZB);
+                targetRT0, pRT[1], pRT[2], pRT[3], pZB,
+                false, false, nullptr, 1.0f,
+                s_hasCustomVkViewport ? &s_currentVkViewport : nullptr);
         }
         else
         {
@@ -378,15 +382,25 @@ IC bool CBackend::ApplyPipelineAndDynamicRendering(D3DPRIMITIVETYPE T)
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
     const bool hasDepth = (pZB != VK_NULL_HANDLE);
-    u32 effective_cull = state ? state->rasterizerCullMode : cull_mode;
-    vkCmdSetCullMode(cmd, vkStateUtils::ConvertCullMode(effective_cull));
+    vkCmdSetCullMode(cmd, vkStateUtils::ConvertCullMode(cull_mode));
     vkCmdSetFrontFace(cmd, VK_FRONT_FACE_CLOCKWISE);
-    if (state && hasDepth)
+    if (hasDepth)
     {
-        vkCmdSetDepthTestEnable(cmd, state->m_pDepthStencilState.DepthEnable ? VK_TRUE : VK_FALSE);
-        vkCmdSetDepthWriteEnable(cmd, state->m_pDepthStencilState.DepthWriteMask ? VK_TRUE : VK_FALSE);
-        vkCmdSetDepthCompareOp(cmd, vkStateUtils::ConvertCmpFunction(state->m_pDepthStencilState.DepthFunc));
-        vkCmdSetStencilTestEnable(cmd, state->m_pDepthStencilState.StencilEnable ? VK_TRUE : VK_FALSE);
+        vkCmdSetDepthTestEnable(cmd, z_enable ? VK_TRUE : VK_FALSE);
+        vkCmdSetDepthWriteEnable(cmd, (state && !state->m_pDepthStencilState.DepthWriteMask) ? VK_FALSE : (z_enable ? VK_TRUE : VK_FALSE));
+        vkCmdSetDepthCompareOp(cmd, vkStateUtils::ConvertCmpFunction(z_func));
+        vkCmdSetStencilTestEnable(cmd, stencil_enable ? VK_TRUE : VK_FALSE);
+        if (stencil_enable)
+        {
+            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, stencil_ref);
+            vkCmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, stencil_mask);
+            vkCmdSetStencilWriteMask(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, stencil_writemask);
+            vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_AND_BACK,
+                vkStateUtils::ConvertStencilOp(stencil_fail),
+                vkStateUtils::ConvertStencilOp(stencil_pass),
+                vkStateUtils::ConvertStencilOp(stencil_zfail),
+                vkStateUtils::ConvertCmpFunction(stencil_func));
+        }
     }
     else
     {
@@ -435,7 +449,10 @@ IC bool CBackend::ApplyPipelineAndDynamicRendering(D3DPRIMITIVETYPE T)
 
                 VkImageView view = tex ? tex->surface_get() : VK_NULL_HANDLE;
                 if (view == VK_NULL_HANDLE)
-                    view = G_PipelineManager.GetDummyImageView();
+                {
+                    const bool isCube = (rec.name == "s_sky0" || rec.name == "s_sky1" || strstr(rec.name.c_str(), "sky") != nullptr);
+                    view = isCube ? G_PipelineManager.GetDummyCubeImageView() : G_PipelineManager.GetDummyImageView();
+                }
 
                 if (view != VK_NULL_HANDLE)
                 {
@@ -565,19 +582,45 @@ IC bool CBackend::ApplyPipelineAndDynamicRendering(D3DPRIMITIVETYPE T)
         }
 
         // Constant buffers (using real SPIR-V bindings from reflection)
-        VkDescriptorBufferInfo uboBufferInfo{};
         if (constants.GetData() && constants.GetSize() > 0)
         {
-            if (G_PipelineManager.GetOrAllocateConstantBufferSlice(HW.m_currentFrame, constants.GetVersion(), constants.GetData(), constants.GetSize(), uboBufferInfo))
+            if (ctable && !ctable->m_cb_records.empty())
             {
-                if (ctable && !ctable->m_cb_records.empty())
+                u32 slotToLocal[16];
+                for (u32 i = 0; i < 16; ++i) slotToLocal[i] = u32(-1);
+                u32 uniqueSlots[16]{};
+                u32 uniqueCount = 0;
+
+                for (const auto& rec : ctable->m_cb_records)
                 {
+                    u32 slot = rec.slot < 16 ? rec.slot : 0;
+                    if (slotToLocal[slot] == u32(-1))
+                    {
+                        slotToLocal[slot] = uniqueCount;
+                        uniqueSlots[uniqueCount++] = slot;
+                    }
+                }
+
+                VkBuffer uboBuf = VK_NULL_HANDLE;
+                VkDeviceSize uboBaseOffset = 0;
+                u8* uboMapped = nullptr;
+                const size_t allocSize = uniqueCount * 4096;
+                if (uniqueCount > 0 && G_PipelineManager.AllocateConstantBufferRaw(HW.m_currentFrame, allocSize, uboBuf, uboBaseOffset, uboMapped))
+                {
+                    const u8* srcData = static_cast<const u8*>(constants.GetData());
+                    for (u32 i = 0; i < uniqueCount; ++i)
+                    {
+                        CopyMemory(uboMapped + i * 4096, srcData + uniqueSlots[i] * 4096, 4096);
+                    }
+                    G_PipelineManager.FlushConstantBufferRange(HW.m_currentFrame, uboBaseOffset, allocSize);
+
                     for (const auto& rec : ctable->m_cb_records)
                     {
                         if (writeCount >= 128 || uboWriteCount >= 64) break;
                         u32 slot = rec.slot < 16 ? rec.slot : 0;
-                        slotInfos[uboWriteCount].buffer = uboBufferInfo.buffer;
-                        slotInfos[uboWriteCount].offset = uboBufferInfo.offset + slot * 4096;
+                        u32 localIdx = slotToLocal[slot];
+                        slotInfos[uboWriteCount].buffer = uboBuf;
+                        slotInfos[uboWriteCount].offset = uboBaseOffset + localIdx * 4096;
                         slotInfos[uboWriteCount].range = 4096;
 
                         writes[writeCount] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
@@ -591,7 +634,11 @@ IC bool CBackend::ApplyPipelineAndDynamicRendering(D3DPRIMITIVETYPE T)
                         uboWriteCount++;
                     }
                 }
-                else
+            }
+            else
+            {
+                VkDescriptorBufferInfo uboBufferInfo{};
+                if (G_PipelineManager.GetOrAllocateConstantBufferSlice(HW.m_currentFrame, constants.GetVersion(), constants.GetData(), constants.GetSize(), uboBufferInfo))
                 {
                     for (u32 b = 0; b < 16; ++b)
                     {
@@ -716,15 +763,19 @@ IC void CBackend::set_Scissor(const Irect* R)
 
 IC void CBackend::SetViewport(const D3D_VIEWPORT& viewport) const
 {
+    VkViewport vp{};
+    vp.x = viewport.TopLeftX;
+    vp.y = viewport.TopLeftY + viewport.Height;   // bottom of screen (flipped Y)
+    vp.width = viewport.Width;
+    vp.height = -viewport.Height;                  // invert Y axis
+    vp.minDepth = viewport.MinDepth;
+    vp.maxDepth = viewport.MaxDepth;
+
+    s_currentVkViewport = vp;
+    s_hasCustomVkViewport = true;
+
     if (HW.m_frameStarted)
     {
-        VkViewport vp{};
-        vp.x = viewport.TopLeftX;
-        vp.y = viewport.TopLeftY + viewport.Height;   // bottom of screen (flipped Y)
-        vp.width = viewport.Width;
-        vp.height = -viewport.Height;                  // invert Y axis
-        vp.minDepth = viewport.MinDepth;
-        vp.maxDepth = viewport.MaxDepth;
         vkCmdSetViewport(HW.GetCurrentCommandBuffer(), 0, 1, &vp);
 
         if (viewport.Width > 0 && viewport.Height > 0)

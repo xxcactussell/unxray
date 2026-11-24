@@ -318,6 +318,9 @@ VkImageView CRender::texture_load(LPCSTR fRName, u32& ret_msize, VkFormat& ret_d
     if (out_image) *out_image = image;
     if (out_alloc) *out_alloc = allocation;
 
+    vkTextureUtils::RegisterImage(image, imageView, vkFmt, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        static_cast<u32>(tex_extent.x), static_cast<u32>(tex_extent.y));
+
     return imageView;
 }
 } // namespace xray::render::RENDER_NAMESPACE

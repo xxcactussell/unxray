@@ -117,6 +117,8 @@ void CBlender_Tree::Compile(CBlender_Compile& C)
         uber_deffer(C, true, tvs, "base", oBlend.value, 0, true);
         C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
         C.r_StencilRef(0x01);
+        if (oBlend.value)
+            C.r_CullMode(D3DCULL_NONE);
         // Need only for ATOC to emulate stencil test
         if (bUseATOC)
             C.RS.SetRS(D3DRS_ZFUNC, D3DCMP_EQUAL);
@@ -130,6 +132,8 @@ void CBlender_Tree::Compile(CBlender_Compile& C)
             C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
             C.r_StencilRef(0x01);
             C.r_ColorWriteEnable(false, false, false, false);
+            if (oBlend.value)
+                C.r_CullMode(D3DCULL_NONE);
             //	Alpha to coverage.
             C.RS.SetRS(XRDX11RS_ALPHATOCOVERAGE, TRUE);
             C.r_End();
@@ -138,6 +142,8 @@ void CBlender_Tree::Compile(CBlender_Compile& C)
         uber_deffer(C, false, tvs, "base", oBlend.value, 0, true);
         C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
         C.r_StencilRef(0x01);
+        if (oBlend.value)
+            C.r_CullMode(D3DCULL_NONE);
         // Need only for ATOC to emulate stencil test
         if (bUseATOC)
             C.RS.SetRS(D3DRS_ZFUNC, D3DCMP_EQUAL);

@@ -146,11 +146,18 @@ void CRenderTarget::phase_pp()
     RCache.set_Z(FALSE);
 
     // combination/postprocess
+#if defined(USE_VK)
+    u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, VK_NULL_HANDLE);
+#else
     u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, get_base_zb());
+#endif
     //	Element 0 for for normal post-process
     //	Element 4 for color map post-process
     bool bCMap = u_need_CM();
     RCache.set_Element(s_postprocess_msaa->E[bCMap ? 4 : 0]);
+    RCache.set_CullMode(CULL_NONE);
+    RCache.set_Stencil(FALSE);
+    RCache.set_Z(FALSE);
 
     int gblend = clampr(iFloor((1 - param_gray) * 255.f), 0, 255);
     int nblend = clampr(iFloor((1 - param_noise) * 255.f), 0, 255);

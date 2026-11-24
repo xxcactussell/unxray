@@ -330,6 +330,122 @@ bool vkPipelineManager::Init()
         }
     }
 
+    // Dummy 1x1 Cube texture (white) for unbound cube texture descriptor slots
+    {
+        VkImageCreateInfo imageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+        imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = 1;
+        imageInfo.extent.height = 1;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 6;
+        imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+        res = vmaCreateImage(HW.m_allocator, &imageInfo, &allocInfo, &m_dummyCubeImage, &m_dummyCubeAllocation, nullptr);
+        if (res == VK_SUCCESS)
+        {
+            VkBufferCreateInfo stagingBufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+            stagingBufferInfo.size = 4 * 6;
+            stagingBufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            stagingBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+            VmaAllocationCreateInfo stagingAllocInfo{};
+            stagingAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            stagingAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+            VkBuffer stagingBuffer = VK_NULL_HANDLE;
+            VmaAllocation stagingAlloc = VK_NULL_HANDLE;
+            VmaAllocationInfo stagingVmaInfo{};
+            if (vmaCreateBuffer(HW.m_allocator, &stagingBufferInfo, &stagingAllocInfo, &stagingBuffer, &stagingAlloc, &stagingVmaInfo) == VK_SUCCESS && stagingVmaInfo.pMappedData)
+            {
+                u32 whitePixels[6] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
+                CopyMemory(stagingVmaInfo.pMappedData, whitePixels, sizeof(whitePixels));
+                vmaFlushAllocation(HW.m_allocator, stagingAlloc, 0, sizeof(whitePixels));
+
+                VkCommandBufferAllocateInfo cmdAllocInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+                cmdAllocInfo.commandPool = HW.m_cmdPool;
+                cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+                cmdAllocInfo.commandBufferCount = 1;
+
+                VkCommandBuffer transferCmd = VK_NULL_HANDLE;
+                vkAllocateCommandBuffers(HW.pDevice, &cmdAllocInfo, &transferCmd);
+
+                VkCommandBufferBeginInfo beginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+                beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+                vkBeginCommandBuffer(transferCmd, &beginInfo);
+
+                VkImageMemoryBarrier barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+                barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = m_dummyCubeImage;
+                barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barrier.subresourceRange.baseMipLevel = 0;
+                barrier.subresourceRange.levelCount = 1;
+                barrier.subresourceRange.baseArrayLayer = 0;
+                barrier.subresourceRange.layerCount = 6;
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+                vkCmdPipelineBarrier(transferCmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+                VkBufferImageCopy regions[6]{};
+                for (u32 face = 0; face < 6; ++face)
+                {
+                    regions[face].bufferOffset = face * 4;
+                    regions[face].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    regions[face].imageSubresource.baseArrayLayer = face;
+                    regions[face].imageSubresource.layerCount = 1;
+                    regions[face].imageExtent = { 1, 1, 1 };
+                }
+
+                vkCmdCopyBufferToImage(transferCmd, stagingBuffer, m_dummyCubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 6, regions);
+
+                barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+                vkCmdPipelineBarrier(transferCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+                vkEndCommandBuffer(transferCmd);
+
+                VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+                submitInfo.commandBufferCount = 1;
+                submitInfo.pCommandBuffers = &transferCmd;
+                vkQueueSubmit(HW.m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+                vkQueueWaitIdle(HW.m_graphicsQueue);
+
+                vkFreeCommandBuffers(HW.pDevice, HW.m_cmdPool, 1, &transferCmd);
+                vmaDestroyBuffer(HW.m_allocator, stagingBuffer, stagingAlloc);
+            }
+
+            VkImageViewCreateInfo viewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+            viewInfo.image = m_dummyCubeImage;
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+            viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            viewInfo.subresourceRange.baseMipLevel = 0;
+            viewInfo.subresourceRange.levelCount = 1;
+            viewInfo.subresourceRange.baseArrayLayer = 0;
+            viewInfo.subresourceRange.layerCount = 6;
+
+            vkCreateImageView(HW.pDevice, &viewInfo, nullptr, &m_dummyCubeImageView);
+        }
+    }
+
     // Dynamic descriptor pools per frame in flight (32k sets to handle all frame draw calls)
     VkDescriptorPoolSize poolSizes[4]{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -481,6 +597,19 @@ void vkPipelineManager::Destroy()
             m_dummyAllocation = VK_NULL_HANDLE;
         }
 
+        if (m_dummyCubeImageView != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(HW.pDevice, m_dummyCubeImageView, nullptr);
+            m_dummyCubeImageView = VK_NULL_HANDLE;
+        }
+
+        if (m_dummyCubeImage != VK_NULL_HANDLE && HW.m_allocator != VK_NULL_HANDLE)
+        {
+            vmaDestroyImage(HW.m_allocator, m_dummyCubeImage, m_dummyCubeAllocation);
+            m_dummyCubeImage = VK_NULL_HANDLE;
+            m_dummyCubeAllocation = VK_NULL_HANDLE;
+        }
+
         if (m_pipelineLayout != VK_NULL_HANDLE)
         {
             vkDestroyPipelineLayout(HW.pDevice, m_pipelineLayout, nullptr);
@@ -545,7 +674,7 @@ bool vkPipelineManager::GetOrAllocateConstantBufferSlice(u32 frameIndex, u32 ver
     return false;
 }
 
-bool vkPipelineManager::AllocateConstantBufferSlice(u32 frameIndex, const void* data, size_t size, VkDescriptorBufferInfo& outBufferInfo)
+bool vkPipelineManager::AllocateConstantBufferRaw(u32 frameIndex, size_t size, VkBuffer& outBuffer, VkDeviceSize& outOffset, u8*& outMappedPtr)
 {
     u32 idx = frameIndex % MAX_POOLS;
     if (!m_uboMappedData[idx] || size == 0)
@@ -559,15 +688,35 @@ bool vkPipelineManager::AllocateConstantBufferSlice(u32 frameIndex, const void* 
         return false;
     }
 
-    CopyMemory(m_uboMappedData[idx] + alignedOffset, data, size);
-    if (HW.m_allocator && m_uboAllocations[idx])
-    {
-        vmaFlushAllocation(HW.m_allocator, m_uboAllocations[idx], alignedOffset, size);
-    }
     m_uboOffset[idx] = alignedOffset + size;
+    outBuffer = m_uboBuffers[idx];
+    outOffset = alignedOffset;
+    outMappedPtr = m_uboMappedData[idx] + alignedOffset;
+    return true;
+}
 
-    outBufferInfo.buffer = m_uboBuffers[idx];
-    outBufferInfo.offset = alignedOffset;
+void vkPipelineManager::FlushConstantBufferRange(u32 frameIndex, VkDeviceSize offset, size_t size)
+{
+    u32 idx = frameIndex % MAX_POOLS;
+    if (HW.m_allocator && m_uboAllocations[idx] && size > 0)
+    {
+        vmaFlushAllocation(HW.m_allocator, m_uboAllocations[idx], offset, size);
+    }
+}
+
+bool vkPipelineManager::AllocateConstantBufferSlice(u32 frameIndex, const void* data, size_t size, VkDescriptorBufferInfo& outBufferInfo)
+{
+    VkBuffer buf = VK_NULL_HANDLE;
+    VkDeviceSize offset = 0;
+    u8* mapped = nullptr;
+    if (!AllocateConstantBufferRaw(frameIndex, size, buf, offset, mapped))
+        return false;
+
+    CopyMemory(mapped, data, size);
+    FlushConstantBufferRange(frameIndex, offset, size);
+
+    outBufferInfo.buffer = buf;
+    outBufferInfo.offset = offset;
     outBufferInfo.range = size;
     return true;
 }
@@ -732,6 +881,23 @@ VkPipeline vkPipelineManager::GetOrCreatePipeline(
         // Color: location 3, offset 16
         attributes.push_back({ 3, 0, VK_FORMAT_R8G8B8A8_UNORM, 16 });
     }
+    else if (vbStride == 40) // v_skybox fallback (xyz:12, diffuse:4, tc0:12, tc1:12)
+    {
+        VkVertexInputBindingDescription bindDesc{};
+        bindDesc.binding = 0;
+        bindDesc.stride = 40;
+        bindDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        bindings.push_back(bindDesc);
+
+        // Position: location 0, offset 0 (float3)
+        attributes.push_back({ 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 });
+        // Color: location 1, offset 12 (D3DCOLOR -> rgba8)
+        attributes.push_back({ 1, 0, VK_FORMAT_R8G8B8A8_UNORM, 12 });
+        // Tex0: location 2, offset 16 (float3)
+        attributes.push_back({ 2, 0, VK_FORMAT_R32G32B32_SFLOAT, 16 });
+        // Tex1: location 3, offset 28 (float3)
+        attributes.push_back({ 3, 0, VK_FORMAT_R32G32B32_SFLOAT, 28 });
+    }
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
     vertexInputInfo.vertexBindingDescriptionCount = static_cast<u32>(bindings.size());
@@ -748,7 +914,7 @@ VkPipeline vkPipelineManager::GetOrCreatePipeline(
     viewportState.scissorCount = 1;
 
     VkPipelineRasterizationStateCreateInfo rasterizer{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.depthClampEnable = VK_TRUE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
@@ -842,6 +1008,7 @@ VkPipeline vkPipelineManager::GetOrCreatePipeline(
     if (depthFormat != VK_FORMAT_UNDEFINED)
     {
         renderingCreateInfo.depthAttachmentFormat = depthFormat;
+        renderingCreateInfo.stencilAttachmentFormat = depthFormat;
     }
 
     VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
@@ -878,7 +1045,8 @@ void vkPipelineManager::BeginDynamicRendering(
     bool clearColor,
     bool clearDepth,
     const VkClearColorValue* clearColorValue,
-    float clearDepthValue)
+    float clearDepthValue,
+    const VkViewport* customViewport)
 {
     if (m_insideDynamicRendering)
         EndDynamicRendering(cmd);
@@ -929,12 +1097,19 @@ void vkPipelineManager::BeginDynamicRendering(
     m_insideDynamicRendering = true;
 
     VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = static_cast<float>(height);        // bottom of screen (flipped Y)
-    viewport.width = static_cast<float>(width);
-    viewport.height = -static_cast<float>(height);  // invert Y axis
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
+    if (customViewport)
+    {
+        viewport = *customViewport;
+    }
+    else
+    {
+        viewport.x = 0.0f;
+        viewport.y = static_cast<float>(height);        // bottom of screen (flipped Y)
+        viewport.width = static_cast<float>(width);
+        viewport.height = -static_cast<float>(height);  // invert Y axis
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+    }
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
     VkRect2D scissor{};

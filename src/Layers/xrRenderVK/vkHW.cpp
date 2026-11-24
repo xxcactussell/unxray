@@ -326,6 +326,7 @@ bool CHW::CreateLogicalDevice()
 
     VkPhysicalDeviceFeatures2 deviceFeatures2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
     deviceFeatures2.pNext = &indexingFeatures;
+    deviceFeatures2.features.depthClamp = VK_TRUE;
     deviceFeatures2.features.shaderClipDistance = VK_TRUE;
     deviceFeatures2.features.fillModeNonSolid = VK_TRUE;
     deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
@@ -467,7 +468,7 @@ bool CHW::CreateSwapChain()
             Msg("! [Vulkan] Failed to create swapchain image view %zu! Result = %d", i, res);
             return false;
         }
-        vkTextureUtils::RegisterImage(m_swapchainImages[i], m_swapchainImageViews[i], m_swapchainFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED);
+        vkTextureUtils::RegisterImage(m_swapchainImages[i], m_swapchainImageViews[i], m_swapchainFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, m_swapchainExtent.width, m_swapchainExtent.height);
     }
 
     BackBufferCount = imageCount;

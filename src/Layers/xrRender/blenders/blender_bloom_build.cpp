@@ -40,7 +40,7 @@ void CBlender_bloom_build::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case 0: // transfer into bloom-target
@@ -120,7 +120,7 @@ void CBlender_bloom_build_msaa::Compile(CBlender_Compile& C)
 {
     IBlender::Compile(C);
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case 0: // transfer into bloom-target
@@ -199,7 +199,7 @@ void CBlender_postprocess_msaa::Compile(CBlender_Compile& C)
 {
     IBlender::Compile(C);
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case 0: // transfer into bloom-target

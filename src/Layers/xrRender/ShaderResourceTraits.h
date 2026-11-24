@@ -182,6 +182,11 @@ struct ShaderTypeTraits<SVS>
     using HWShaderType = ID3DVertexShader*;
     using BufferType = DWORD const*;
     using ResultType = HRESULT;
+#elif defined(USE_VK)
+    using LinkageType = void*;
+    using HWShaderType = VkShaderModule;
+    using BufferType = DWORD const*;
+    using ResultType = HRESULT;
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -228,6 +233,12 @@ struct ShaderTypeTraits<SVS>
             res = GLUseBinary(buffer, size, linkage, name);
         else
             res = GLCompileShader<GL_VERTEX_SHADER>(buffer, size, name);
+#elif defined(USE_VK)
+        VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+        ci.codeSize = size;
+        ci.pCode = (const uint32_t*)buffer;
+        VkResult vkRes = vkCreateShaderModule(HW.pDevice, &ci, nullptr, &sh);
+        res = (vkRes == VK_SUCCESS) ? S_OK : E_FAIL;
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -251,6 +262,11 @@ struct ShaderTypeTraits<SPS>
 #elif defined(USE_DX11)
     using LinkageType = ID3D11ClassLinkage*;
     using HWShaderType = ID3DPixelShader*;
+    using BufferType = DWORD const*;
+    using ResultType = HRESULT;
+#elif defined(USE_VK)
+    using LinkageType = void*;
+    using HWShaderType = VkShaderModule;
     using BufferType = DWORD const*;
     using ResultType = HRESULT;
 #else
@@ -313,6 +329,12 @@ struct ShaderTypeTraits<SPS>
             res = GLUseBinary(buffer, size, linkage, name);
         else
             res = GLCompileShader<GL_FRAGMENT_SHADER>(buffer, size, name);
+#elif defined(USE_VK)
+        VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+        ci.codeSize = size;
+        ci.pCode = (const uint32_t*)buffer;
+        VkResult vkRes = vkCreateShaderModule(HW.pDevice, &ci, nullptr, &sh);
+        res = (vkRes == VK_SUCCESS) ? S_OK : E_FAIL;
 #else
 #       error No graphics API selected or enabled!
 #endif
@@ -338,6 +360,11 @@ struct ShaderTypeTraits<SGS>
     using HWShaderType = GLuint;
     using BufferType = pcstr*;
     using ResultType = std::pair<char, GLuint>;
+#   elif defined(USE_VK)
+    using LinkageType = void*;
+    using HWShaderType = VkShaderModule;
+    using BufferType = DWORD const*;
+    using ResultType = HRESULT;
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -385,6 +412,12 @@ struct ShaderTypeTraits<SGS>
             res = GLUseBinary(buffer, size, linkage, name);
         else
             res = GLCompileShader<GL_GEOMETRY_SHADER>(buffer, size, name);
+#   elif defined(USE_VK)
+        VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+        ci.codeSize = size;
+        ci.pCode = (const uint32_t*)buffer;
+        VkResult vkRes = vkCreateShaderModule(HW.pDevice, &ci, nullptr, &sh);
+        res = (vkRes == VK_SUCCESS) ? S_OK : E_FAIL;
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -410,6 +443,11 @@ struct ShaderTypeTraits<SHS>
     using HWShaderType = GLuint;
     using BufferType = pcstr*;
     using ResultType = std::pair<char, GLuint>;
+#   elif defined(USE_VK)
+    using LinkageType = void*;
+    using HWShaderType = VkShaderModule;
+    using BufferType = DWORD const*;
+    using ResultType = HRESULT;
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -440,6 +478,12 @@ struct ShaderTypeTraits<SHS>
             res = GLUseBinary(buffer, size, linkage, name);
         else
             res = GLCompileShader<GL_TESS_CONTROL_SHADER>(buffer, size, name);
+#   elif defined(USE_VK)
+        VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+        ci.codeSize = size;
+        ci.pCode = (const uint32_t*)buffer;
+        VkResult vkRes = vkCreateShaderModule(HW.pDevice, &ci, nullptr, &sh);
+        res = (vkRes == VK_SUCCESS) ? S_OK : E_FAIL;
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -465,6 +509,11 @@ struct ShaderTypeTraits<SDS>
     using HWShaderType = GLuint;
     using BufferType = pcstr*;
     using ResultType = std::pair<char, GLuint>;
+#elif defined(USE_VK)
+    using LinkageType = void*;
+    using HWShaderType = VkShaderModule;
+    using BufferType = DWORD const*;
+    using ResultType = HRESULT;
 #   else
 #       error No graphics API selected or enabled!
 #endif
@@ -495,6 +544,12 @@ struct ShaderTypeTraits<SDS>
             res = GLUseBinary(buffer, size, linkage, name);
         else
             res = GLCompileShader<GL_TESS_EVALUATION_SHADER>(buffer, size, name);
+#   elif defined(USE_VK)
+        VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+        ci.codeSize = size;
+        ci.pCode = (const uint32_t*)buffer;
+        VkResult vkRes = vkCreateShaderModule(HW.pDevice, &ci, nullptr, &sh);
+        res = (vkRes == VK_SUCCESS) ? S_OK : E_FAIL;
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -520,6 +575,11 @@ struct ShaderTypeTraits<SCS>
     using HWShaderType = GLuint;
     using BufferType = pcstr*;
     using ResultType = std::pair<char, GLuint>;
+#   elif defined(USE_VK)
+    using LinkageType = void*;
+    using HWShaderType = VkShaderModule;
+    using BufferType = DWORD const*;
+    using ResultType = HRESULT;
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -567,6 +627,12 @@ struct ShaderTypeTraits<SCS>
             res = GLUseBinary(buffer, size, linkage, name);
         else
             res = GLCompileShader<GL_COMPUTE_SHADER>(buffer, size, name);
+#elif defined(USE_VK)
+        VkShaderModuleCreateInfo ci{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+        ci.codeSize = size;
+        ci.pCode = (const uint32_t*)buffer;
+        VkResult vkRes = vkCreateShaderModule(HW.pDevice, &ci, nullptr, &sh);
+        res = (vkRes == VK_SUCCESS) ? S_OK : E_FAIL;
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -688,7 +754,7 @@ T* CResourceManager::CreateShader(cpcstr name, pcstr filename /*= nullptr*/, u32
 #   else
         flags |= D3DXSHADER_PACKMATRIX_ROWMAJOR | (xrDebug::DebuggerIsPresent() ? D3DXSHADER_DEBUG : 0);
 #   endif
-#elif !defined(USE_OGL)
+#elif !defined(USE_OGL) && !defined(USE_VK)
 #   ifdef NDEBUG
         flags |= D3DCOMPILE_PACK_MATRIX_ROW_MAJOR | D3DCOMPILE_OPTIMIZATION_LEVEL3;
 #   else

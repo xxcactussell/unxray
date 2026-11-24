@@ -4,6 +4,14 @@
 #include "SH_Atomic.h"
 #include "ResourceManager.h"
 
+#if defined(USE_DX11)
+#include "Layers/xrRenderDX11/dx11StateUtils.h"
+#elif defined(USE_OGL)
+#include "../xrRenderGL/glState.h"
+#elif defined(USE_VK)
+#include "../xrRenderVK/vkHW.h"
+#endif
+
 namespace xray::render::RENDER_NAMESPACE
 {
 // Atomic
@@ -53,6 +61,13 @@ SVS::~SVS()
         CHK_GL(glDeleteProgram(sh));
     else
         CHK_GL(glDeleteShader(sh));
+#elif defined(USE_VK)
+    if (sh != VK_NULL_HANDLE && HW.pDevice != VK_NULL_HANDLE)
+    {
+        UnregisterVSInputs(sh);
+        vkDestroyShaderModule(HW.pDevice, sh, nullptr);
+        sh = VK_NULL_HANDLE;
+    }
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -69,6 +84,13 @@ SPS::~SPS()
         CHK_GL(glDeleteProgram(sh));
     else
         CHK_GL(glDeleteShader(sh));
+#elif defined(USE_VK)
+    if (sh != VK_NULL_HANDLE && HW.pDevice != VK_NULL_HANDLE)
+    {
+        UnregisterVSInputs(sh);
+        vkDestroyShaderModule(HW.pDevice, sh, nullptr);
+        sh = VK_NULL_HANDLE;
+    }
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -87,6 +109,12 @@ SGS::~SGS()
         CHK_GL(glDeleteProgram(sh));
     else
         CHK_GL(glDeleteShader(sh));
+#   elif defined(USE_VK)
+    if (sh != VK_NULL_HANDLE && HW.pDevice != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(HW.pDevice, sh, nullptr);
+        sh = VK_NULL_HANDLE;
+    }
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -103,6 +131,12 @@ SHS::~SHS()
         CHK_GL(glDeleteProgram(sh));
     else
         CHK_GL(glDeleteShader(sh));
+#   elif defined(USE_VK)
+    if (sh != VK_NULL_HANDLE && HW.pDevice != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(HW.pDevice, sh, nullptr);
+        sh = VK_NULL_HANDLE;
+    }
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -119,6 +153,12 @@ SDS::~SDS()
         CHK_GL(glDeleteProgram(sh));
     else
         CHK_GL(glDeleteShader(sh));
+#   elif defined(USE_VK)
+    if (sh != VK_NULL_HANDLE && HW.pDevice != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(HW.pDevice, sh, nullptr);
+        sh = VK_NULL_HANDLE;
+    }
 #   endif
 
     RImplementation.Resources->_DeleteDS(this);
@@ -133,6 +173,12 @@ SCS::~SCS()
         CHK_GL(glDeleteProgram(sh));
     else
         CHK_GL(glDeleteShader(sh));
+#   elif defined(USE_VK)
+    if (sh != VK_NULL_HANDLE && HW.pDevice != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(HW.pDevice, sh, nullptr);
+        sh = VK_NULL_HANDLE;
+    }
 #   else
 #       error No graphics API selected or enabled!
 #   endif
@@ -194,6 +240,8 @@ SDeclaration::~SDeclaration()
     }
 #elif defined(USE_OGL)
     glDeleteVertexArrays(1, &dcl);
+#elif defined(USE_VK)
+    // No layout object to destroy in Vulkan directly
 #else
 #   error No graphics API selected or enabled!
 #endif

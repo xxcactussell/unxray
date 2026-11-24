@@ -37,7 +37,9 @@ void CheckAndSetupRenderer()
         return;
     }
 
-    if (strstr(Core.Params, "-rgl"))
+    if (strstr(Core.Params, "-rvk"))
+        Console->Execute("renderer renderer_vk");
+    else if (strstr(Core.Params, "-rgl"))
         Console->Execute("renderer renderer_rgl");
     else if (strstr(Core.Params, "-r4"))
         Console->Execute("renderer renderer_r4");
@@ -61,7 +63,7 @@ void CheckAndSetupRenderer()
 
 extern void msCreate(pcstr name);
 
-void CEngine::Initialize(GameModule* game, const std::array<RendererModule*, 2>& modules)
+void CEngine::Initialize(GameModule* game, std::span<RendererModule* const> modules)
 {
     ZoneScoped;
 #ifdef DEBUG

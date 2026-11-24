@@ -80,7 +80,7 @@ static class cl_pos_decompress_params : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
         const float VertTan = -1.0f * tanf(deg2rad(Device.fFOV / 2.0f));
         const float HorzTan = -VertTan / Device.fASPECT;
 #elif defined(USE_OGL)
@@ -199,6 +199,7 @@ void CRender::create()
 {
     ZoneScoped;
 
+    Device.seqFrame.Remove(this);
     Device.seqFrame.Add(this, REG_PRIORITY_HIGH + 0x12345678);
 
     m_skinning = -1;
@@ -363,7 +364,7 @@ void CRender::create()
     o.advancedpp = ps_r2_advanced_pp;
 #if defined(USE_DX11)
     o.volumetricfog = ps_r2_ls_flags.test(R3FLAG_VOLUMETRIC_SMOKE);
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     // TODO: OGL: temporary disabled, need to fix it
     o.volumetricfog = false;
 #endif
@@ -385,7 +386,7 @@ void CRender::create()
     o.ssao_hdao = ps_r2_ls_flags_ext.test(R2FLAGEXT_SSAO_HDAO) && (ps_r_ssao != 0);
     o.ssao_ultra = HW.ComputeShadersSupported && ssao_hdao_cs_shaders_exist();
     o.ssao_hbao = !o.ssao_hdao && ps_r2_ls_flags_ext.test(R2FLAGEXT_SSAO_HBAO) && (ps_r_ssao != 0);
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     // TODO: OGL: temporary disabled HBAO/HDAO, need to fix it
     o.ssao_hbao = false;
     o.ssao_hdao = false;
@@ -402,7 +403,7 @@ void CRender::create()
 #if defined(USE_DX11)
     o.dx11_sm4_1 = ps_r2_ls_flags.test((u32)R3FLAG_USE_DX10_1);
     o.dx11_sm4_1 = o.dx11_sm4_1 && (HW.FeatureLevel >= D3D_FEATURE_LEVEL_10_1);
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     o.dx11_sm4_1 = true;
 #else
 #   error No graphics API selected or enabled!
@@ -420,7 +421,7 @@ void CRender::create()
     // o.msaa_hybrid	= ps_r2_ls_flags.test(R3FLAG_MSAA_HYBRID);
     o.msaa_hybrid = ps_r2_ls_flags.test((u32)R3FLAG_USE_DX10_1);
     o.msaa_hybrid &= !o.msaa_opt && o.msaa && (HW.FeatureLevel >= D3D_FEATURE_LEVEL_10_1);
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     // TODO: OGL: temporary disabled, need to fix it
     o.msaa = false;
     o.msaa_samples = 0;
@@ -506,14 +507,21 @@ void CRender::create()
     Resources->RegisterConstantSetup("triLOD", &binder_LOD);
 #endif
 
+    Msg("* [Debug-CRender] Before Target = xr_new<CRenderTarget>()");
     Target = xr_new<CRenderTarget>(); // Main target
+    Msg("* [Debug-CRender] After Target = xr_new<CRenderTarget>()");
 
     Models = xr_new<CModelPool>();
+    Msg("* [Debug-CRender] Models done");
     PSLibrary.OnCreate();
+    Msg("* [Debug-CRender] PSLibrary done");
     HWOCC.occq_create(occq_size);
+    Msg("* [Debug-CRender] HWOCC done");
 
     rmNormal(RCache);
+    Msg("* [Debug-CRender] rmNormal done");
     q_sync_point.Create();
+    Msg("* [Debug-CRender] q_sync_point done");
 
     //	TODO: OGL: Implement FluidManager.
 #if defined(USE_DX11)
@@ -521,6 +529,7 @@ void CRender::create()
     //	FluidManager.Initialize( 100, 100, 100 );
     FluidManager.SetScreenSize(Device.dwWidth, Device.dwHeight);
 #endif
+    Msg("* [Debug-CRender] create() finished");
 }
 
 void CRender::destroy()

@@ -133,7 +133,7 @@ void CEngineAPI::MarkRendererFailed(pcstr mode)
         renderModes.erase(it);
 }
 
-void CEngineAPI::CreateRendererList(const std::array<RendererModule*, 2>& modules)
+void CEngineAPI::CreateRendererList(std::span<RendererModule* const> modules)
 {
     if (!VidQualityToken.empty())
         return;

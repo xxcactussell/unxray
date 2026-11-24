@@ -45,7 +45,7 @@ void CBlender_accum_direct_mask::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case SE_MASK_SPOT: // spot or omni-part
@@ -168,7 +168,7 @@ void CBlender_accum_direct_mask_msaa::Compile(CBlender_Compile& C)
     else
         RImplementation.m_MSAASample = -1;
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case SE_MASK_SPOT: // spot or omni-part

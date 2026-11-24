@@ -80,7 +80,7 @@ void CRenderTarget::phase_smap_spot_tsh(CBackend& cmd_list, light* L)
         pv++;
         pv->set(float(_w + EPS), EPS, d_Z, d_W, C, p1.x, p0.y);
         pv++;
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
         pv->set(EPS, EPS, d_Z, d_W, C, p0.x, p0.y);
         pv++;
         pv->set(EPS, float(_h + EPS), d_Z, d_W, C, p0.x, p1.y);

@@ -66,7 +66,7 @@ void CBlender_deffer_flat::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     // codepath is the same, only the shaders differ
     switch (C.iElement)
     {

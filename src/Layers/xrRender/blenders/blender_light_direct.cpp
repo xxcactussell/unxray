@@ -76,7 +76,7 @@ void CBlender_accum_direct::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     //	BOOL	b_HW_smap		= RImplementation.o.HW_smap;
     //	BOOL	b_HW_PCF		= RImplementation.o.HW_smap_PCF;
     BOOL blend = FALSE; //RImplementation.o.fp16_blend;
@@ -353,7 +353,7 @@ void CBlender_accum_direct_msaa::Compile(CBlender_Compile& C)
     else
         RImplementation.m_MSAASample = -1;
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
     //	BOOL	b_HW_smap		= RImplementation.o.HW_smap;
     //	BOOL	b_HW_PCF		= RImplementation.o.HW_smap_PCF;
     BOOL blend = FALSE; //RImplementation.o.fp16_blend;
@@ -607,7 +607,7 @@ void CBlender_accum_direct_volumetric_msaa::Compile(CBlender_Compile& C)
     switch (C.iElement)
     {
     case 0: // near pass - enable Z-test to perform depth-clipping
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
         C.r_Pass("accum_sun", "accum_volumetric_sun_msaa", false, TRUE, FALSE, blend, D3DBLEND_ONE, dest);
         C.r_Sampler("s_lmap", C.L_textures[0]);
         C.r_Sampler_cmp("s_smap", r2_RT_smap_depth);
@@ -648,7 +648,7 @@ void CBlender_accum_direct_volumetric_sun_msaa::Compile(CBlender_Compile& C)
     switch (C.iElement)
     {
     case 0: // near pass - enable Z-test to perform depth-clipping
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
         C.r_Pass("accum_sun", "accum_volumetric_sun_msaa", false, false, false, true, D3DBLEND_ONE, D3DBLEND_ONE, false,
                  0);
         C.r_Sampler_cmp("s_smap", r2_RT_smap_depth);

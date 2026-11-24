@@ -2,6 +2,8 @@
 
 #if defined(USE_OGL)
 #include "../xrRenderGL/glState.h"
+#elif defined(USE_VK)
+#include "../xrRenderVK/vkState.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE

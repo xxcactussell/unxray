@@ -93,7 +93,7 @@ public:
     void Compile(CBlender_Compile& C) override
     {
         C.r_Pass("sky2", "sky2", FALSE, TRUE, FALSE);
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
         // C.r_Sampler_clf		("s_sky0",		"$null"			);
         // C.r_Sampler_clf		("s_sky1",		"$null"			);
         C.r_dx11Texture("s_sky0", "$null");
@@ -187,6 +187,9 @@ void dxEnvironmentRender::lerp(CEnvDescriptorMixer& currentEnv, IEnvDescriptorRe
 #ifdef USE_OGL
     tsky0->surface_set(GL_TEXTURE_CUBE_MAP, e0);
     tsky1->surface_set(GL_TEXTURE_CUBE_MAP, e1);
+#elif defined(USE_VK)
+    tsky0->surface_set(e0);
+    tsky1->surface_set(e1);
 #else // USE_OGL
     tsky0->surface_set(e0);
     _RELEASE(e0);
@@ -200,6 +203,9 @@ void dxEnvironmentRender::lerp(CEnvDescriptorMixer& currentEnv, IEnvDescriptorRe
 #   ifdef USE_OGL
     t_envmap_0->surface_set(GL_TEXTURE_CUBE_MAP, e0);
     t_envmap_1->surface_set(GL_TEXTURE_CUBE_MAP, e1);
+#   elif defined(USE_VK)
+    t_envmap_0->surface_set(e0);
+    t_envmap_1->surface_set(e1);
 #   else // USE_OGL
     t_envmap_0->surface_set(e0);
     _RELEASE(e0);
@@ -253,7 +259,7 @@ void dxEnvironmentRender::RenderSky(CEnvironment& env)
     RCache.set_Shader(sh_2sky);
 #if defined(USE_DX11)
     RCache.set_Textures(&sky_r_textures);
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     if (HW.Caps.geometry.bVTF)
         RCache.set_Textures(&sky_r_textures);
 #else
@@ -261,7 +267,7 @@ void dxEnvironmentRender::RenderSky(CEnvironment& env)
 #endif
     RCache.Render(D3DPT_TRIANGLELIST, v_offset, 0, 12, i_offset, 20);
 
-#ifdef USE_OGL
+#if defined(USE_OGL) || defined(USE_VK)
     // Sun must be rendered to generic0 only as it is done in DX
     if (!RImplementation.o.msaa)
         RImplementation.Target->u_setrt(RCache, RImplementation.Target->rt_Generic_0, nullptr, nullptr, RImplementation.Target->rt_Base_Depth);
@@ -285,7 +291,7 @@ void dxEnvironmentRender::RenderSky(CEnvironment& env)
     env.eff_LensFlare->Render(TRUE, FALSE, FALSE);
 #endif // RENDER != R_R1
 
-#ifdef USE_OGL
+#if defined(USE_OGL) || defined(USE_VK)
     // set low/hi RTs for clouds
     if (!RImplementation.o.msaa)
         RImplementation.Target->u_setrt(RCache, RImplementation.Target->rt_Generic_0, RImplementation.Target->rt_Generic_1, nullptr, RImplementation.Target->rt_Base_Depth);
@@ -381,8 +387,8 @@ void dxEnvironmentRender::OnDeviceCreate()
     }
 
     const bool r2 = RImplementation.GenerationIsR2OrHigher();
-    tonemap_tstage_2sky = sh_2sky->E[0]->passes[0]->T->find_texture_stage(r2_RT_luminance_cur, r2);
-    tonemap_tstage_clouds = clouds_sh->E[0]->passes[0]->T->find_texture_stage(r2_RT_luminance_cur, r2);
+    tonemap_tstage_2sky = sh_2sky->E[0]->passes[0]->T->find_texture_stage(r2_RT_luminance_cur, false);
+    tonemap_tstage_clouds = clouds_sh->E[0]->passes[0]->T->find_texture_stage(r2_RT_luminance_cur, false);
 }
 
 void dxEnvironmentRender::OnDeviceDestroy()
@@ -390,7 +396,7 @@ void dxEnvironmentRender::OnDeviceDestroy()
     sky_r_textures.clear();
     clouds_r_textures.clear();
 
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
     tsky0->surface_set(nullptr);
     tsky1->surface_set(nullptr);
     t_envmap_0->surface_set(nullptr);

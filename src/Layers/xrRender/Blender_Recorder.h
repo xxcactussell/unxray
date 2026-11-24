@@ -144,14 +144,14 @@ public:
     void r_StencilRef(u32 Ref);
     void r_CullMode(D3DCULL Mode);
 
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
     void r_dx11Texture(LPCSTR ResourceName, LPCSTR texture, bool recursive = false);
     void r_dx11Texture(LPCSTR ResourceName, shared_str texture, bool recursive = false)
     {
         return r_dx11Texture(ResourceName, texture.c_str(), recursive);
     };
     u32 r_dx11Sampler(LPCSTR ResourceName);
-#endif // USE_DX11
+#endif // USE_DX11 || USE_VK
 
     u32 r_Sampler(LPCSTR name, LPCSTR texture, bool b_ps1x_ProjectiveDivide = false, u32 address = D3DTADDRESS_WRAP,
         u32 fmin = D3DTEXF_LINEAR, u32 fmip = D3DTEXF_LINEAR, u32 fmag = D3DTEXF_LINEAR);
@@ -164,10 +164,10 @@ public:
     void r_Sampler_clf(LPCSTR name, LPCSTR texture, bool b_ps1x_ProjectiveDivide = false);
     void r_Sampler_clw(LPCSTR name, LPCSTR texture, bool b_ps1x_ProjectiveDivide = false);
 
-#ifdef USE_OGL
+#if defined(USE_OGL) || defined(USE_VK)
     void i_Comparison(u32 s, u32 func);
     void r_Sampler_cmp(pcstr name, pcstr texture, bool b_ps1x_ProjectiveDivide = false);
-#endif // USE_OGL
+#endif
 
     void r_ColorWriteEnable(bool cR = true, bool cG = true, bool cB = true, bool cA = true);
     void r_End();

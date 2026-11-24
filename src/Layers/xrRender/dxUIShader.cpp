@@ -14,7 +14,7 @@ bool dxUIShader::operator==(const IUIShader& other) const
 
 CTexture* dxUIShader::GetBaseTexture() const
 {
-    if (!hShader)
+    if (!hShader || !hShader->E[0] || hShader->E[0]->passes.empty() || !hShader->E[0]->passes[0])
         return nullptr;
 
     const SPass& pass = *hShader->E[0]->passes[0];
@@ -25,9 +25,23 @@ CTexture* dxUIShader::GetBaseTexture() const
     if (textures.empty())
         return nullptr;
 
-    const R_constant* sbase = pass.constants->get(baseTexture)._get();
+    ref_constant sbase = pass.constants ? pass.constants->get(baseTexture) : nullptr;
+    if (sbase)
+    {
+        for (const auto& [stage, tex] : textures)
+        {
+            if (stage == sbase->samp.index && tex)
+                return tex._get();
+        }
+    }
 
-    return textures[sbase ? sbase->samp.index : 0].second._get();
+    for (const auto& [stage, tex] : textures)
+    {
+        if (tex)
+            return tex._get();
+    }
+
+    return nullptr;
 }
 
 xrImTextureData dxUIShader::GetImGuiTextureId()
@@ -35,6 +49,9 @@ xrImTextureData dxUIShader::GetImGuiTextureId()
     const auto texture = GetBaseTexture();
     if (!texture)
         return {};
+
+    if (!texture->flags.bLoaded)
+        texture->Load();
 
     return
     {
@@ -54,6 +71,9 @@ bool dxUIShader::GetBaseTextureResolution(Fvector2& res)
         res = {};
         return false;
     }
+
+    if (!texture->flags.bLoaded)
+        texture->Load();
 
     res = { float(texture->get_Width()), float(texture->get_Height()) };
     return true;

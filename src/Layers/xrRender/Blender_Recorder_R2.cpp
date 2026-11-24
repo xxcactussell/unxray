@@ -40,7 +40,7 @@ void CBlender_Compile::r_Pass(LPCSTR _vs, LPCSTR _ps, bool bFog, BOOL bZtest, BO
         dest.vs = RImplementation.Resources->_CreateVS(_vs, flags);
         ctable.merge(&dest.vs->constants);
         dest.gs = RImplementation.Resources->_CreateGS("null");
-#ifdef USE_DX11
+#if defined(USE_DX11) || defined(USE_VK)
         dest.hs = RImplementation.Resources->_CreateHS("null");
         dest.ds = RImplementation.Resources->_CreateDS("null");
         dest.cs = RImplementation.Resources->_CreateCS("null");
@@ -88,15 +88,11 @@ u32 CBlender_Compile::i_Sampler(LPCSTR _name) const
     fix_texture_name(name);
 
     // Find index
-    ref_constant C = ctable.get(name, ctable.dx9compatibility ? RC_sampler : u16(-1));
-    if (!C)
+    ref_constant C = ctable.get(name, RC_sampler);
+    if (!C || C->type != RC_sampler)
         return u32(-1);
 
-    R_ASSERT(C->type == RC_sampler);
     u32 stage = C->samp.index;
-
-    // Create texture
-    // while (stage>=passTextures.size())	passTextures.push_back		(NULL);
     return stage;
 }
 
@@ -139,15 +135,15 @@ void CBlender_Compile::i_Filter(u32 s, u32 _min, u32 _mip, u32 _mag)
 u32 CBlender_Compile::r_Sampler(
     LPCSTR _name, LPCSTR texture, bool b_ps1x_ProjectiveDivide, u32 address, u32 fmin, u32 fmip, u32 fmag)
 {
+#if defined(USE_DX11) || defined(USE_VK)
+    r_dx11Texture(_name, texture, true);
+#endif
+
     dwStage = i_Sampler(_name);
     if (u32(-1) != dwStage)
     {
-#if defined(USE_DX11)
-        r_dx11Texture(_name, texture, true);
-#elif defined(USE_OGL)
+#if defined(USE_OGL)
         i_Texture(dwStage, texture);
-#else
-#   error No graphics API selected or enabled!
 #endif
 
         // force ANISO-TF for "s_base"

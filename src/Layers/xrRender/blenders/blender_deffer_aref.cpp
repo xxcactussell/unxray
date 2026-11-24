@@ -91,7 +91,7 @@ void CBlender_deffer_aref::Compile(CBlender_Compile& C)
             break;
         }
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     if (oBlend.value)
     {
         switch (C.iElement)

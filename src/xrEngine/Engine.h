@@ -17,6 +17,8 @@
 #include "xrSound/Sound.h"
 
 // TODO: this should be in render configuration
+#include <span>
+
 #define R__NUM_SUN_CASCADES         (3u) // csm/s.ligts
 #define R__NUM_AUX_CONTEXTS         (1u) // rain/s.lights
 #define R__NUM_PARALLEL_CONTEXTS    (R__NUM_SUN_CASCADES + R__NUM_AUX_CONTEXTS)
@@ -33,7 +35,7 @@ public:
     CSheduler Sheduler;
     CSoundManager Sound;
 
-    void Initialize(GameModule* game, const std::array<RendererModule*, 2>& modules);
+    void Initialize(GameModule* game, std::span<RendererModule* const> modules);
     void Destroy();
 
     void OnEvent(EVENT E, u64 P1, u64 P2) override;

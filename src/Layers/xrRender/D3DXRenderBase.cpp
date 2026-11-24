@@ -152,15 +152,23 @@ void D3DXRenderBase::OnDeviceCreate(const char* shName)
     Resources->OnDeviceCreate(shName);
     Resources->CompatibilityCheck();
     create();
+    Msg("* [Debug-D3DXRenderBase] create() completed");
     if (!GEnv.isDedicatedServer)
     {
+        Msg("* [Debug-D3DXRenderBase] creating m_WireShader...");
         m_WireShader.create("editor" DELIMITER "wire");
+        Msg("* [Debug-D3DXRenderBase] creating m_SelectionShader...");
         m_SelectionShader.create("editor" DELIMITER "selection");
+        Msg("* [Debug-D3DXRenderBase] creating m_PortalFadeShader...");
         m_PortalFadeShader.create("portal");
+        Msg("* [Debug-D3DXRenderBase] creating m_PortalFadeGeom...");
         m_PortalFadeGeom.create(FVF::F_L, RImplementation.Vertex.Buffer(), 0);
+        Msg("* [Debug-D3DXRenderBase] DUImpl.OnDeviceCreate...");
         DUImpl.OnDeviceCreate();
+        Msg("* [Debug-D3DXRenderBase] UIRenderImpl.CreateUIGeom...");
         UIRenderImpl.CreateUIGeom();
     }
+    Msg("* [Debug-D3DXRenderBase] OnDeviceCreate fully finished");
 }
 
 bool D3DXRenderBase::Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float& fWidth_2, float& fHeight_2)

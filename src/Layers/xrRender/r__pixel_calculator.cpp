@@ -19,7 +19,7 @@ void r_pixel_calculator::begin()
     RCache.set_RT(rt->pRT);
 #ifdef USE_DX11
     RCache.set_ZB(zb->pZRT[RCache.context_id]);
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     RCache.set_ZB(zb->pRT);
 #endif
 
@@ -94,7 +94,7 @@ r_aabb_ssa r_pixel_calculator::calculate(dxRender_Visual* V)
     }
 
     return result;
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     VERIFY(!"Not implemented!");
     return {};
 #else

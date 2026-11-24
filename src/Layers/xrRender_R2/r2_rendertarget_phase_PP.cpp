@@ -7,7 +7,7 @@ void CRenderTarget::u_calc_tc_noise(Fvector2& p0, Fvector2& p1)
     R_constant* C = RCache.get_c(c_snoise)._get(); // get texture
     VERIFY2(C, "s_noise texture in noise shader should be set");
     VERIFY(RC_dest_sampler == C->destination);
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
     VERIFY(RC_dx11texture == C->type);
 #elif defined(USE_OGL)
     VERIFY(RC_sampler == C->type);
@@ -15,11 +15,21 @@ void CRenderTarget::u_calc_tc_noise(Fvector2& p0, Fvector2& p1)
 #   error Select correct check for your graphics API
 #endif
 
-    CTexture* T = RCache.get_ActiveTexture(u32(C->samp.index));
-    VERIFY2(T, "s_noise texture in noise shader should be set");
-    u32 tw = iCeil(float(T->get_Width()) * param_noise_scale + EPS_S);
-    u32 th = iCeil(float(T->get_Height()) * param_noise_scale + EPS_S);
-    VERIFY2(tw && th, "Noise scale can't be zero in any way");
+    CTexture* T = C ? RCache.get_ActiveTexture(u32(C->samp.index)) : nullptr;
+    if (!T)
+    {
+        for (u32 i = 0; i < CTexture::mtMaxPixelShaderTextures; ++i)
+        {
+            T = RCache.get_ActiveTexture(i);
+            if (T) break;
+        }
+    }
+    float texW = T ? float(T->get_Width()) : 256.f;
+    float texH = T ? float(T->get_Height()) : 256.f;
+    u32 tw = iCeil(texW * param_noise_scale + EPS_S);
+    u32 th = iCeil(texH * param_noise_scale + EPS_S);
+    if (!tw) tw = 256;
+    if (!th) th = 256;
 
     // calculate shift from FPSes
     im_noise_time -= Device.fTimeDelta;
@@ -130,6 +140,11 @@ struct TL_2c3uv
 
 void CRenderTarget::phase_pp()
 {
+    // Reset rasterizer and depth/stencil states so fullscreen quad is never culled or depth-rejected
+    RCache.set_CullMode(CULL_NONE);
+    RCache.set_Stencil(FALSE);
+    RCache.set_Z(FALSE);
+
     // combination/postprocess
     u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, get_base_zb());
     //	Element 0 for for normal post-process
@@ -159,7 +174,7 @@ void CRenderTarget::phase_pp()
     // Fill vertex buffer
     float du = ps_r1_pps_u, dv = ps_r1_pps_v;
     TL_2c3uv* pv = (TL_2c3uv*)RImplementation.Vertex.Lock(4, g_postprocess.stride(), Offset);
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
     pv->set(du + 0, dv + float(_h), p_color, p_gray, r0.x, r1.y, l0.x, l1.y, n0.x, n1.y);
     pv++;
     pv->set(du + 0, dv + 0, p_color, p_gray, r0.x, r0.y, l0.x, l0.y, n0.x, n0.y);

@@ -57,7 +57,7 @@ void CRenderTarget::u_stencil_optimize(CBackend& cmd_list, eStencilOptimizeMode 
 
     cmd_list.set_Geometry(g_combine);
     cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     //	TODO: OGL: should we implement stencil optimization?
     VERIFY(RImplementation.o.nvstencil);
     VERIFY(!"CRenderTarget::u_stencil_optimize no implemented");
@@ -70,14 +70,14 @@ void CRenderTarget::u_stencil_optimize(CBackend& cmd_list, eStencilOptimizeMode 
 // 2D texgen (texture adjustment matrix)
 void CRenderTarget::u_compute_texgen_screen(CBackend& cmd_list, Fmatrix& m_Texgen)
 {
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
     Fmatrix m_TexelAdjust =
     {
         0.5f, 0.0f, 0.0f, 0.0f,
         0.0f, -0.5f, 0.0f, 0.0f,
         0.0f, 0.0f, 1.0f, 0.0f,
         0.5f, 0.5f, 0.0f, 1.0f
-};
+    };
 #elif defined(USE_OGL)
     Fmatrix m_TexelAdjust =
     {
@@ -100,7 +100,7 @@ void CRenderTarget::u_compute_texgen_jitter(CBackend& cmd_list, Fmatrix& m_Texge
     Fmatrix m_TexelAdjust =
     {
         0.5f, 0.0f, 0.0f, 0.0f,
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
         0.0f, -0.5f, 0.0f, 0.0f,
 #elif defined(USE_OGL)
         0.0f, 0.5f, 0.0f, 0.0f,
@@ -200,6 +200,7 @@ void manually_assign_texture(ref_shader& shader, pcstr textureName, pcstr render
 CRenderTarget::CRenderTarget()
 {
     ZoneScoped;
+    Msg("* [Debug-CRenderTarget] Entering constructor");
 
     static constexpr pcstr SAMPLE_DEFS[] = { "0", "1", "2", "3", "4", "5", "6", "7" };
 
@@ -727,6 +728,40 @@ CRenderTarget::~CRenderTarget()
 
     t_noise_mipped->surface_set(GL_TEXTURE_2D, 0);
     glDeleteTextures(1, &t_noise_surf_mipped);
+#elif defined(USE_VK)
+    if (t_material)
+    {
+        t_material->surface_set(VK_NULL_HANDLE);
+        t_material.destroy();
+    }
+    if (t_material_surf != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(HW.pDevice, t_material_surf, nullptr);
+        t_material_surf = VK_NULL_HANDLE;
+    }
+    for (u32 it = 0; it < TEX_jitter_count; it++)
+    {
+        if (t_noise[it])
+        {
+            t_noise[it]->surface_set(VK_NULL_HANDLE);
+            t_noise[it].destroy();
+        }
+        if (t_noise_surf[it] != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(HW.pDevice, t_noise_surf[it], nullptr);
+            t_noise_surf[it] = VK_NULL_HANDLE;
+        }
+    }
+    if (t_noise_mipped)
+    {
+        t_noise_mipped->surface_set(VK_NULL_HANDLE);
+        t_noise_mipped.destroy();
+    }
+    if (t_noise_surf_mipped != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(HW.pDevice, t_noise_surf_mipped, nullptr);
+        t_noise_surf_mipped = VK_NULL_HANDLE;
+    }
 #else
 #   error No graphics API selected or enabled!
 #endif

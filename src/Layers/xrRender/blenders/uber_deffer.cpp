@@ -8,6 +8,17 @@ void fix_texture_name(pstr fn);
 void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOOL _aref, LPCSTR _detail_replace,
     bool DO_NOT_FINISH)
 {
+    if (C.L_textures.empty())
+    {
+        string256 vs, ps;
+        strconcat(sizeof(vs), vs, "deffer_", _vspec);
+        strconcat(sizeof(ps), ps, "deffer_", _pspec);
+        C.r_Pass(vs, ps, FALSE);
+        if (!DO_NOT_FINISH)
+            C.r_End();
+        return;
+    }
+
     // Uber-parse
     string256 fname, fnameA, fnameB;
     xr_strcpy(fname, C.L_textures[0].c_str()); //. andy if (strext(fname)) *strext(fname)=0;
@@ -208,7 +219,7 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
         C.r_dx11Texture("s_hemi", C.L_textures[2]);
         C.r_dx11Sampler("smp_rtlinear");
     }
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     C.r_Pass(vs, ps, FALSE);
     VERIFY(C.L_textures[0].size());
     if (bump)
@@ -248,6 +259,9 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
 #if defined(USE_DX11)
 void uber_shadow(CBlender_Compile& C, LPCSTR _vspec)
 {
+    if (C.L_textures.empty())
+        return;
+
     // Uber-parse
     string256 fname, fnameA, fnameB;
     xr_strcpy(fname, C.L_textures[0].c_str()); //. andy if (strext(fname)) *strext(fname)=0;

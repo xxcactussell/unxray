@@ -60,6 +60,8 @@ public:
     virtual void ClearEnv() = 0;
 };
 
+#include <span>
+
 class ENGINE_API CEngineAPI
 {
     xr_map<cpcstr, RendererModule*> renderModes;
@@ -78,7 +80,7 @@ public:
     ~CEngineAPI();
 
     // Call it in the main thread
-    void CreateRendererList(const std::array<RendererModule*, 2>& modules);
+    void CreateRendererList(std::span<RendererModule* const> modules);
     void Initialize(GameModule* game = nullptr);
     void Destroy();
     void MarkRendererFailed(pcstr mode);

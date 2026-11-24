@@ -10,7 +10,7 @@ void light_Package::clear()
     v_shadowed.clear();
 }
 
-#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4)  || (RENDER == R_GL)
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4)  || (RENDER == R_GL) || (RENDER == R_VK)
 void light_Package::sort()
 {
     const auto pred_light_cmp = [](const light* l1, const light* l2)

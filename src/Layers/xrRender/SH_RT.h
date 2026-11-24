@@ -39,6 +39,11 @@ public:
     GLuint pRT{};
     GLuint pZRT{};
     GLenum target{};
+#elif defined(USE_VK)
+    VkImage pSurface{};
+    VmaAllocation allocation{};
+    VkImageView pRT{};
+    VkImageView pZRT{};
 #else
 #   error No graphics API selected or enabled!
 #endif

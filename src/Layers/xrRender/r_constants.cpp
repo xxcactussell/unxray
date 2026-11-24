@@ -92,7 +92,7 @@ void R_constant_table::merge(R_constant_table* T)
             C->ps = src->ps;
             C->vs = src->vs;
             C->gs = src->gs;
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
             C->hs = src->hs;
             C->ds = src->ds;
             C->cs = src->cs;
@@ -107,6 +107,8 @@ void R_constant_table::merge(R_constant_table* T)
         {
             C->destination |= src->destination;
             VERIFY(C->type == src->type);
+            if (!C->handler && src->handler)
+                C->handler = src->handler;
             R_constant_load& sL = src->get_load(src->destination);
             R_constant_load& dL = C->get_load(src->destination);
             dL.index = sL.index;
@@ -138,6 +140,84 @@ void R_constant_table::merge(R_constant_table* T)
         for (u32 i = 0; i < T->m_CBTable[id].size(); ++i)
             m_CBTable[id].push_back((T->m_CBTable[id])[i]);
     }
+#elif defined(USE_VK)
+    for (const auto& rec : T->m_cb_records)
+    {
+        bool found = false;
+        for (const auto& existing : m_cb_records)
+        {
+            if (existing.binding == rec.binding)
+            {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            m_cb_records.push_back(rec);
+    }
+    for (const auto& rec : T->m_tex_records)
+    {
+        // Ensure no cross-resource binding collisions
+        bool conflict = false;
+        for (const auto& existingCb : m_cb_records)
+        {
+            if (existingCb.binding == rec.binding)
+            {
+                conflict = true;
+                break;
+            }
+        }
+        if (conflict) continue;
+
+        bool found = false;
+        for (const auto& existing : m_tex_records)
+        {
+            if (existing.binding == rec.binding)
+            {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            m_tex_records.push_back(rec);
+    }
+    for (const auto& rec : T->m_smp_records)
+    {
+        // Ensure no cross-resource binding collisions
+        bool conflict = false;
+        for (const auto& existingCb : m_cb_records)
+        {
+            if (existingCb.binding == rec.binding)
+            {
+                conflict = true;
+                break;
+            }
+        }
+        if (!conflict)
+        {
+            for (const auto& existingTex : m_tex_records)
+            {
+                if (existingTex.binding == rec.binding)
+                {
+                    conflict = true;
+                    break;
+                }
+            }
+        }
+        if (conflict) continue;
+
+        bool found = false;
+        for (const auto& existing : m_smp_records)
+        {
+            if (existing.binding == rec.binding)
+            {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            m_smp_records.push_back(rec);
+    }
 #endif
 }
 
@@ -152,6 +232,10 @@ void R_constant_table::clear()
     {
         m_CBTable[id].clear();
     }
+#elif defined(USE_VK)
+    m_cb_records.clear();
+    m_tex_records.clear();
+    m_smp_records.clear();
 #endif
 }
 
@@ -159,6 +243,18 @@ BOOL R_constant_table::equal(R_constant_table& C)
 {
     if (table.size() != C.table.size())
         return FALSE;
+#if defined(USE_VK)
+    if (m_cb_records.size() != C.m_cb_records.size() ||
+        m_tex_records.size() != C.m_tex_records.size() ||
+        m_smp_records.size() != C.m_smp_records.size())
+        return FALSE;
+    for (size_t i = 0; i < m_cb_records.size(); ++i)
+    {
+        if (m_cb_records[i].slot != C.m_cb_records[i].slot ||
+            m_cb_records[i].binding != C.m_cb_records[i].binding)
+            return FALSE;
+    }
+#endif
     const size_t size = table.size();
     for (size_t it = 0; it < size; it++)
     {

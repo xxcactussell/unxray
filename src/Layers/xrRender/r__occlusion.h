@@ -24,6 +24,8 @@ private:
         ID3DQuery* Q;
 #elif defined(USE_OGL)
         GLuint Q;
+#elif defined(USE_VK)
+        u32 Q;
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -41,8 +43,8 @@ private:
 public:
 #if defined(USE_DX11)
     typedef u64 occq_result;
-#elif defined(USE_OGL)
-    typedef u32 occq_result;
+#elif defined(USE_OGL) || defined(USE_VK)
+    typedef u64 occq_result;
 #else
 #   error No graphics API selected or enabled!
 #endif

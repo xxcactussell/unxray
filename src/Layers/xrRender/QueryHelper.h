@@ -15,6 +15,12 @@ IC HRESULT GetData(GLuint query, void* pData, u32 DataSize);
 IC HRESULT BeginQuery(GLuint query);
 IC HRESULT EndQuery(GLuint query);
 IC HRESULT ReleaseQuery(GLuint pQuery);
+#elif defined(USE_VK)
+IC HRESULT CreateQuery(u32* pQuery, D3D_QUERY type);
+IC HRESULT GetData(u32 query, void* pData, u32 DataSize);
+IC HRESULT BeginQuery(u32 query);
+IC HRESULT EndQuery(u32 query);
+IC HRESULT ReleaseQuery(u32 pQuery);
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -90,7 +96,17 @@ IC HRESULT ReleaseQuery(GLuint query)
     CHK_GL(glDeleteQueries(1, &query));
     return S_OK;
 }
-
+#elif defined(USE_VK)
+IC HRESULT CreateQuery(u32* pQuery, D3D_QUERY type) { if (pQuery) *pQuery = 1; return S_OK; }
+IC HRESULT GetData(u32 query, void* pData, u32 DataSize)
+{
+    if (pData && DataSize >= sizeof(u64)) *(u64*)pData = 1000;
+    else if (pData && DataSize >= sizeof(u32)) *(u32*)pData = 1000;
+    return S_OK;
+}
+IC HRESULT BeginQuery(u32 query) { return S_OK; }
+IC HRESULT EndQuery(u32 query) { return S_OK; }
+IC HRESULT ReleaseQuery(u32 query) { return S_OK; }
 #else
 #   error No graphics API selected or enabled!
 #endif

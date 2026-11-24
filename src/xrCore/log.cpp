@@ -17,7 +17,7 @@ Lock logCS;
 xr_vector<xr_string> LogFile;
 LogCallback LogCB = nullptr;
 
-bool ForceFlushLog = false;
+bool ForceFlushLog = true;
 IWriter* LogWriter = nullptr;
 
 void FlushLog()

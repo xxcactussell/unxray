@@ -68,7 +68,7 @@ class cl_texgen : public R_constant_setup
     {
         Fmatrix mTexgen;
 
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
         Fmatrix mTexelAdjust =
         {
             0.5f, 0.0f, 0.0f, 0.0f,
@@ -100,7 +100,7 @@ class cl_VPtexgen : public R_constant_setup
     {
         Fmatrix mTexgen;
 
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
         Fmatrix mTexelAdjust =
         {
             0.5f, 0.0f, 0.0f, 0.0f,

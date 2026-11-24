@@ -53,7 +53,7 @@ bool SPass::equal(const SPass& other) const
         return false;
     if (gs != other.gs)
         return false;
-#ifdef USE_DX11
+#if defined(USE_DX11) || defined(USE_VK)
     if (hs != other.hs)
         return false;
     if (ds != other.ds)

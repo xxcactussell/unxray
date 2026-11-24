@@ -4,6 +4,9 @@
 
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/dx11ConstantBuffer.h"
+#elif defined(USE_VK)
+struct ID3D12ShaderReflectionConstantBuffer;
+struct ID3D12ShaderReflection;
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -76,7 +79,7 @@ struct ECORE_API R_constant_load
     u16 index; // linear index (pixel)
     u16 cls; // element class
 
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
     R_constant_load() : index(u16(-1)), cls(u16(-1)) {};
 #elif defined(USE_OGL)
     GLuint location;
@@ -89,7 +92,7 @@ struct ECORE_API R_constant_load
 
     BOOL equal(R_constant_load& C)
     {
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
         return (index == C.index) && (cls == C.cls);
 #elif defined(USE_OGL)
         return (index == C.index) && (cls == C.cls) && (location == C.location) && (program == C.program);
@@ -108,7 +111,7 @@ struct ECORE_API R_constant : public xr_resource
     R_constant_load ps;
     R_constant_load vs;
     R_constant_load gs;
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
     R_constant_load hs;
     R_constant_load ds;
     R_constant_load cs;
@@ -130,7 +133,7 @@ struct ECORE_API R_constant : public xr_resource
         case RC_dest_pixel: return ps;
         case RC_dest_sampler: return samp;
         case RC_dest_geometry: return gs;
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
         case RC_dest_hull: return hs;
         case RC_dest_domain: return ds;
         case RC_dest_compute: return cs;
@@ -150,7 +153,7 @@ struct ECORE_API R_constant : public xr_resource
             && ps.equal(C.ps)
             && vs.equal(C.vs)
             && gs.equal(C.gs)
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
             && hs.equal(C.hs)
             && ds.equal(C.ds)
             && cs.equal(C.cs)
@@ -184,6 +187,22 @@ public:
     typedef std::pair<u32, ref_cbuffer> cb_table_record;
     typedef xr_vector<cb_table_record> cb_table;
     cb_table m_CBTable[R__NUM_CONTEXTS];
+#elif defined(USE_VK)
+    struct vk_cb_record
+    {
+        u32 slot;     // 0..15 cbSlot
+        u32 binding;  // real Vulkan binding from SPIRV-Reflect
+    };
+    struct vk_res_record
+    {
+        u32 slot;     // stage index or DXIL bind point
+        u32 binding;  // real Vulkan binding from SPIRV-Reflect
+        u32 type;     // RC_dx11texture or RC_sampler
+        shared_str name;
+    };
+    xr_vector<vk_cb_record> m_cb_records;
+    xr_vector<vk_res_record> m_tex_records;
+    xr_vector<vk_res_record> m_smp_records;
 #endif
 
 private:
@@ -192,6 +211,9 @@ private:
 #if defined(USE_DX11)
     BOOL parseConstants(ID3DShaderReflectionConstantBuffer* pTable, u32 destination);
     BOOL parseResources(ID3DShaderReflection* pReflection, int ResNum, u32 destination);
+#elif defined(USE_VK)
+    BOOL parseConstants(::ID3D12ShaderReflectionConstantBuffer* pTable, u32 destination);
+    BOOL parseResources(::ID3D12ShaderReflection* pReflection, int ResNum, u32 destination);
 #endif
 
 public:

@@ -46,8 +46,8 @@ public:
         rstCompute = rstDomain + 256,
         rstInvalid = rstCompute + 256
     };
-#elif defined(USE_OGL)
-    //	Since OGL doesn't differentiate between stages,
+#elif defined(USE_OGL) || defined(USE_VK)
+    //	Since OGL/VK doesn't differentiate between stages,
     //	distance between enum values should be the max for that stage.
     enum ResourceShaderType
     {
@@ -80,6 +80,9 @@ public:
 #elif defined(USE_OGL)
     void surface_set(GLenum target, GLuint surf);
     [[nodiscard]] GLuint surface_get() const;
+#elif defined(USE_VK)
+    void surface_set(VkImageView surf, VkImage img = VK_NULL_HANDLE);
+    [[nodiscard]] VkImageView surface_get() const;
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -121,12 +124,12 @@ public:
             Load();
         return reinterpret_cast<ImTextureID>(m_pSRView);
     }
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
     ImTextureID GetImTextureID()
     {
         if (!flags.bLoaded)
             Load();
-        return static_cast<ImTextureID>(pSurface);
+        return (ImTextureID)(intptr_t)pSurface;
     }
 #else
 #   error No graphics API selected or enabled!
@@ -198,6 +201,20 @@ private:
     GLint m_height;
     GLuint desc_cache;
     GLenum desc;
+#elif defined(USE_VK)
+    VkImageView pSurface{};
+    VkImage m_image{};
+    VmaAllocation m_allocation{};
+    VkBuffer m_stagingBuffer{};
+    VmaAllocation m_stagingAlloc{};
+    void* m_stagingData{};
+    // Sequence data
+    xr_vector<VkImageView> seqDATA;
+    // Description
+    u32 m_width{};
+    u32 m_height{};
+    VkImageView desc_cache{};
+    VkFormat desc{};
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -215,8 +232,8 @@ struct resptrcode_texture : public resptr_base<CTexture>
 {
     void create(LPCSTR _name);
     void destroy() { _set(nullptr); }
-    shared_str bump_get() { return _get()->m_bumpmap; }
-    bool bump_exist() { return 0 != bump_get().size(); }
+    shared_str bump_get() { return _get() ? _get()->m_bumpmap : shared_str(); }
+    bool bump_exist() { return _get() && 0 != bump_get().size(); }
 };
 
 typedef resptr_core<CTexture, resptrcode_texture> ref_texture;

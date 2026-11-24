@@ -49,9 +49,13 @@ bool CRenderDevice::Create()
     string_path fname;
     FS.update_path(fname, "$game_data$", "shaders.xr");
     GEnv.Render->OnDeviceCreate(fname);
+    Msg("* [Debug-Device] GEnv.Render->OnDeviceCreate completed");
     m_imgui_render = GEnv.RenderFactory->CreateImGuiRender();
+    Msg("* [Debug-Device] CreateImGuiRender completed");
     m_imgui_render->OnDeviceCreate(GetImGuiContext());
+    Msg("* [Debug-Device] m_imgui_render->OnDeviceCreate completed");
     Statistic->OnDeviceCreate();
+    Msg("* [Debug-Device] Statistic->OnDeviceCreate completed");
     dwFrame = 0;
     return true;
 }

@@ -29,7 +29,7 @@ light::light() : SpatialBase(g_pGamePersistent->SpatialSpace)
 
     frame_render = 0;
 
-#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL) || (RENDER == R_VK)
     ZeroMemory(omnipart, sizeof(omnipart));
     s_spot = nullptr;
     s_point = nullptr;
@@ -45,21 +45,21 @@ light::light() : SpatialBase(g_pGamePersistent->SpatialSpace)
 
 light::~light()
 {
-#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL) || (RENDER == R_VK)
     for (auto& f : omnipart)
         xr_delete(f);
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER==R_GL)
     set_active(false);
 
 // remove from Lights_LastFrame
-#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL) || (RENDER == R_VK)
     for (auto& p_light : RImplementation.Lights_LastFrame)
         if (this == p_light)
             p_light = nullptr;
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER==R_GL)
 }
 
-#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL) || (RENDER == R_VK)
 void light::set_texture(LPCSTR name)
 {
     if ((nullptr == name) || (0 == name[0]))
@@ -211,12 +211,12 @@ void light::spatial_move()
     // update spatial DB
     SpatialBase::spatial_move();
 
-#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL) || (RENDER == R_VK)
     if (flags.bActive)
         gi_generate();
     for (u32 id = 0; id < R__NUM_CONTEXTS; ++id)
         svis[id].invalidate();
-#endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER == R_GL)
+#endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER == R_GL) || (RENDER == R_VK)
 }
 
 vis_data& light::get_homdata()
@@ -230,7 +230,7 @@ vis_data& light::get_homdata()
 
 Fvector light::spatial_sector_point() { return position; }
 //////////////////////////////////////////////////////////////////////////
-#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL) || (RENDER == R_VK)
 // Xforms
 void light::xform_calc()
 {
@@ -352,7 +352,7 @@ void light::Export(light_Package& package)
                 L->s_point = s_point;
 
 // Holger - do we need to export msaa stuff as well ?
-#if (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL) || (RENDER == R_VK)
                 if (RImplementation.o.msaa)
                 {
                     int bound = 1;

@@ -49,7 +49,7 @@ void CRender::RenderMenu()
     p1.set((_w + .5f) / _w, (_h + .5f) / _h);
 
     FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, Target->g_menu->vb_stride, Offset);
-#if defined(USE_DX11)
+#if defined(USE_DX11) || defined(USE_VK)
     pv->set(EPS, float(_h + EPS), d_Z, d_W, C, p0.x, p1.y);
     pv++;
     pv->set(EPS, EPS, d_Z, d_W, C, p0.x, p0.y);
@@ -206,7 +206,7 @@ void CRender::Render()
     {
 #if defined(USE_DX11)
         dsgraph.cmd_list.set_ZB(Target->rt_MSAADepth->pZRT[dsgraph.cmd_list.context_id]);
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
         dsgraph.cmd_list.set_ZB(Target->rt_MSAADepth->pZRT);
 #endif
     }

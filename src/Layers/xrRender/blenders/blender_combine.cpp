@@ -73,7 +73,7 @@ void CBlender_combine::Compile(CBlender_Compile& C)
     case 5: // post-processing
         break;
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case 0: // combine
@@ -271,7 +271,7 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
     else
         RImplementation.m_MSAASample = -1;
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case 0: // combine

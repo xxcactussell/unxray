@@ -31,7 +31,7 @@ void CBlender_luminance::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case 0: // 256x256	=> 64x64

@@ -90,7 +90,7 @@ void CBlender_accum_point::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     //BOOL	b_HW_smap		= RImplementation.o.HW_smap;
     //BOOL	b_HW_PCF		= RImplementation.o.HW_smap_PCF;
     BOOL blend = RImplementation.o.fp16_blend;
@@ -279,7 +279,7 @@ void CBlender_accum_point_msaa::Compile(CBlender_Compile& C)
     // BOOL	b_HW_PCF		= RImplementation.o.HW_smap_PCF;
     BOOL blend = RImplementation.o.fp16_blend;
     D3DBLEND dest = blend ? D3DBLEND_ONE : D3DBLEND_ZERO;
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case SE_L_FILL: // fill projective

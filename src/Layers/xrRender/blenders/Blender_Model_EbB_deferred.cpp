@@ -86,7 +86,7 @@ void CBlender_Model_EbB::Compile(CBlender_Compile& C)
         }
     }
 }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
 void CBlender_Model_EbB::Compile(CBlender_Compile& C)
 {
     IBlender::Compile(C);

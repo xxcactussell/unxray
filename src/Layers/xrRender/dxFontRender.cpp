@@ -33,10 +33,34 @@ void dxFontRender::OnRender(CGameFont& owner)
         R_ASSERT(pShader);
         R_constant* C = RCache.get_c(c_sbase)._get(); // get sampler
         CTexture* T = RCache.get_ActiveTexture(C ? C->samp.index : 0);
-        R_ASSERT(T);
-        owner.vTS.set((int)T->get_Width(), (int)T->get_Height());
-        owner.fTCHeight = owner.fHeight / float(owner.vTS.y);
-        owner.uFlags |= CGameFont::fsValid;
+        if (!T && pShader && pShader->E[0] && !pShader->E[0]->passes.empty() && pShader->E[0]->passes[0]->T)
+        {
+            for (auto& pair : *pShader->E[0]->passes[0]->T)
+            {
+                if (pair.second)
+                {
+                    T = pair.second._get();
+                    break;
+                }
+            }
+        }
+        if (!T)
+        {
+            for (u32 i = 0; i < CTexture::mtMaxPixelShaderTextures; ++i)
+            {
+                T = RCache.get_ActiveTexture(i);
+                if (T) break;
+            }
+        }
+        if (T)
+        {
+            if (!T->flags.bLoaded)
+                T->Load();
+            owner.vTS.set((int)T->get_Width(), (int)T->get_Height());
+            if (owner.vTS.y == 0) owner.vTS.set(1024, 1024);
+            owner.fTCHeight = owner.fHeight / float(owner.vTS.y);
+            owner.uFlags |= CGameFont::fsValid;
+        }
     }
 
     for (u32 i = 0; i < owner.strings.size();)

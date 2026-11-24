@@ -21,7 +21,7 @@ public:
     }
     ~dxPixEventWrapper() { cmd_list.gpu_mark_end(); }
 };
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
 #   define PIX_EVENT(Name) dxPixEventWrapper pixEvent##Name(#Name)
 #   define PIX_EVENT_CTX(C,Name) dxPixEventWrapper pixEvent##Name(#Name)
 

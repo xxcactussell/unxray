@@ -91,7 +91,7 @@ void CBlender_accum_spot::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     BOOL blend = RImplementation.o.fp16_blend;
     D3DBLEND dest = blend ? D3DBLEND_ONE : D3DBLEND_ZERO;
 
@@ -280,7 +280,7 @@ void CBlender_accum_spot_msaa::Compile(CBlender_Compile& C)
     else
         RImplementation.m_MSAASample = -1;
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
     switch (C.iElement)
     {
     case SE_L_FILL: // masking
@@ -461,7 +461,7 @@ void CBlender_accum_volumetric_msaa::Compile(CBlender_Compile& C)
     case 0: // masking
         C.r_Pass("accum_volumetric", "accum_volumetric_msaa", false, FALSE, FALSE);
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
         C.r_Sampler("s_lmap", C.L_textures[0]);
         C.r_Sampler_cmp("s_smap", r2_RT_smap_depth);
         C.r_Sampler("s_noise", "fx" DELIMITER "fx_noise");

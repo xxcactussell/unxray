@@ -1,6 +1,6 @@
 #pragma once
 
-#if !defined(USE_OGL)
+#if !defined(USE_OGL) && !defined(USE_VK)
 #include <DirectXMath.h>
 
 using namespace DirectX;
@@ -324,7 +324,7 @@ inline XMFLOAT2 BuildTSMProjectionMatrix_caster_depth_bounds(FXMMATRIX lightSpac
     }
     return XMFLOAT2(min_z, max_z);
 }
-#elif defined(USE_OGL)
+#elif defined(USE_OGL) || defined(USE_VK)
 struct BoundingBox
 {
     glm::vec3 minPt;

@@ -127,7 +127,7 @@ void CBlender_deffer_model::Compile(CBlender_Compile& C)
             }
         }
     }
-#elif RENDER == R_GL
+#elif (RENDER == R_GL || RENDER == R_VK)
     BOOL bForward = FALSE;
     if (oBlend.value && oAREF.value < 16) bForward = TRUE;
     if (oStrictSorting.value) bForward = TRUE;

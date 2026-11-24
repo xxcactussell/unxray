@@ -81,6 +81,8 @@ void dxImGuiRender::OnDeviceCreate(ImGuiContext* context)
     ImGui_ImplDX11_Init(HW.pDevice, HW.get_context(CHW::IMM_CTX_ID));
 #elif defined(USE_OGL)
     ImGui_ImplOpenGL3_Init();
+#elif defined(USE_VK)
+    io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 #endif
 }
 void dxImGuiRender::OnDeviceDestroy()

@@ -47,7 +47,7 @@ void CBlender_SSAO_noMSAA::Compile(CBlender_Compile& C)
         C.r_StencilRef(0x01);
         C.r_CullMode(D3DCULL_NONE);
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
         C.r_Sampler_rtf("s_position", r2_RT_P);
         C.r_Sampler_rtf("s_normal", r2_RT_N);
         C.r_Sampler_rtf("s_tonemap", r2_RT_luminance_cur);
@@ -74,7 +74,7 @@ void CBlender_SSAO_noMSAA::Compile(CBlender_Compile& C)
         //		C.r_StencilRef		(0x01);
         C.r_CullMode(D3DCULL_NONE);
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
         C.r_Sampler_rtf("s_position", r2_RT_P);
         C.r_Sampler_rtf("s_normal", r2_RT_N);
         C.r_Sampler_rtf("s_tonemap", r2_RT_luminance_cur);
@@ -109,7 +109,7 @@ void CBlender_SSAO_MSAA::Compile(CBlender_Compile& C)
         C.r_StencilRef(0x81);
         C.r_CullMode(D3DCULL_NONE);
 
-#if RENDER == R_GL
+#if (RENDER == R_GL || RENDER == R_VK)
         C.r_Sampler_rtf("s_position", r2_RT_P);
         C.r_Sampler_rtf("s_normal", r2_RT_N);
 

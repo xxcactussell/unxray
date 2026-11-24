@@ -34,3 +34,6 @@
 [submodule "Externals/JoltPhysics"]
 	path = Externals/JoltPhysics
 	url = https://github.com/jrouwe/JoltPhysics.git
+[submodule "Externals/SPIRV-Reflect"]
+	path = Externals/SPIRV-Reflect
+	url = https://github.com/KhronosGroup/SPIRV-Reflect.git
